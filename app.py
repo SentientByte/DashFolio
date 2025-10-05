@@ -1,9 +1,21 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    jsonify,
+)
 import json
+import math
 import subprocess
 import sys
 import os
+from datetime import datetime
+from typing import Any, Dict, List
+
 import pandas as pd
+import yfinance as yf
 
 # ------------------------------
 # Paths & constants
@@ -17,6 +29,7 @@ if not os.path.exists(VENV_PYTHON):
 
 MAIN_SCRIPT = os.path.join(BASE_DIR, 'main.py')
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
+PORTFOLIO_FILE = os.path.join(BASE_DIR, 'portfolio.json')
 
 app = Flask(__name__)
 log_output_raw = []   # raw stdout lines from main.py
@@ -39,6 +52,36 @@ if not os.path.exists(CONFIG_FILE):
         json.dump(default_config, f, indent=4)
     print(f"Created default config file: {CONFIG_FILE}")
 
+if not os.path.exists(PORTFOLIO_FILE):
+    default_portfolio = {
+        "holdings": [
+            {
+                "ticker": "AAPL",
+                "name": "Apple Inc.",
+                "quantity": 25,
+                "average_cost": 142.35,
+                "logo_url": "https://logo.clearbit.com/apple.com"
+            },
+            {
+                "ticker": "MSFT",
+                "name": "Microsoft Corp.",
+                "quantity": 18,
+                "average_cost": 265.40,
+                "logo_url": "https://logo.clearbit.com/microsoft.com"
+            },
+            {
+                "ticker": "GOOGL",
+                "name": "Alphabet Inc.",
+                "quantity": 12,
+                "average_cost": 125.15,
+                "logo_url": "https://logo.clearbit.com/abc.xyz"
+            }
+        ]
+    }
+    with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
+        json.dump(default_portfolio, f, indent=4)
+    print(f"Created default portfolio file: {PORTFOLIO_FILE}")
+
 # ------------------------------
 # Helper functions
 # ------------------------------
@@ -46,9 +89,236 @@ def load_config():
     with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+
 def save_config(config):
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=4)
+
+
+def load_portfolio_state() -> Dict[str, Any]:
+    with open(PORTFOLIO_FILE, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def save_portfolio_state(data: Dict[str, Any]) -> None:
+    with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _reference_close(series: pd.Series, steps_back: int) -> float | None:
+    if series.empty:
+        return None
+    if len(series) > steps_back:
+        return float(series.iloc[-(steps_back + 1)])
+    return float(series.iloc[0])
+
+
+def _get_market_snapshot(ticker: str) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "current_price": None,
+        "previous_close": None,
+        "week_close": None,
+        "month_close": None,
+    }
+    try:
+        ticker_obj = yf.Ticker(ticker)
+        fast_info = getattr(ticker_obj, "fast_info", None)
+        if fast_info:
+            result["current_price"] = fast_info.get("last_price") or fast_info.get("lastPrice")
+            result["previous_close"] = fast_info.get("previous_close") or fast_info.get("previousClose")
+
+        history = ticker_obj.history(period="3mo", interval="1d")
+        if not history.empty:
+            closes = history.get("Close")
+            if closes is not None:
+                closes = closes.dropna()
+                if not closes.empty:
+                    if result["current_price"] is None:
+                        result["current_price"] = float(closes.iloc[-1])
+                    if result["previous_close"] is None:
+                        if len(closes) > 1:
+                            result["previous_close"] = float(closes.iloc[-2])
+                        else:
+                            result["previous_close"] = float(closes.iloc[-1])
+                    result["week_close"] = _reference_close(closes, 5)
+                    result["month_close"] = _reference_close(closes, 21)
+    except Exception as exc:
+        print(f"Warning: failed to fetch market data for {ticker}: {exc}")
+
+    return result
+
+
+def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    computed_holdings: List[Dict[str, Any]] = []
+    total_cost = 0.0
+    total_prev_value = 0.0
+    total_current_value = 0.0
+    top_mover: Dict[str, Any] | None = None
+
+    for holding in holdings:
+        ticker = str(holding.get("ticker", "")).upper().strip()
+        quantity = _safe_float(holding.get("quantity"))
+        avg_cost = _safe_float(holding.get("average_cost"))
+
+        if not ticker or quantity <= 0:
+            continue
+
+        market = _get_market_snapshot(ticker)
+        current_price = _safe_float(market.get("current_price"), default=0.0)
+        previous_close = _safe_float(market.get("previous_close"), default=current_price)
+        week_close = _safe_float(market.get("week_close"), default=previous_close)
+        month_close = _safe_float(market.get("month_close"), default=previous_close)
+
+        logo_url = holding.get("logo_url") or None
+        name = holding.get("name") or ticker
+
+        total_cost_value = quantity * avg_cost
+        current_value = quantity * current_price
+        prev_value = quantity * previous_close if previous_close else 0.0
+        todays_gain = current_value - prev_value
+        todays_gain_pct = (todays_gain / prev_value * 100) if prev_value else 0.0
+
+        weekly_value = quantity * week_close if week_close else 0.0
+        weekly_gain = current_value - weekly_value
+        weekly_gain_pct = (weekly_gain / weekly_value * 100) if weekly_value else 0.0
+
+        monthly_value = quantity * month_close if month_close else 0.0
+        monthly_gain = current_value - monthly_value
+        monthly_gain_pct = (monthly_gain / monthly_value * 100) if monthly_value else 0.0
+
+        computed_holdings.append(
+            {
+                "ticker": ticker,
+                "name": name,
+                "logo_url": logo_url,
+                "quantity": quantity,
+                "average_cost": avg_cost,
+                "current_price": current_price,
+                "total_cost": total_cost_value,
+                "current_value": current_value,
+                "todays_gain": todays_gain,
+                "todays_gain_pct": todays_gain_pct,
+                "weekly_gain": weekly_gain,
+                "weekly_gain_pct": weekly_gain_pct,
+                "monthly_gain": monthly_gain,
+                "monthly_gain_pct": monthly_gain_pct,
+            }
+        )
+
+        total_cost += total_cost_value
+        total_prev_value += prev_value
+        total_current_value += current_value
+
+        change_value = todays_gain
+        change_pct = ((current_price - previous_close) / previous_close * 100) if previous_close else 0.0
+        mover_metric = abs(change_value)
+        if top_mover is None or mover_metric > top_mover.get("metric", 0):
+            top_mover = {
+                "ticker": ticker,
+                "name": name,
+                "change_value": change_value,
+                "change_pct": change_pct,
+                "metric": mover_metric,
+            }
+
+    allocation_denominator = total_current_value if total_current_value else 1
+    for holding in computed_holdings:
+        holding["allocation_pct"] = (
+            holding["current_value"] / allocation_denominator * 100 if allocation_denominator else 0.0
+        )
+
+    dod_value = total_current_value - total_prev_value
+    dod_pct = (dod_value / total_prev_value * 100) if total_prev_value else 0.0
+
+    summary = {
+        "total_cost": total_cost,
+        "current_value": total_current_value,
+        "dod_value": dod_value,
+        "dod_pct": dod_pct,
+        "top_mover": None,
+    }
+
+    if top_mover:
+        summary["top_mover"] = {
+            "ticker": top_mover.get("ticker"),
+            "name": top_mover.get("name"),
+            "change_value": top_mover.get("change_value"),
+            "change_pct": top_mover.get("change_pct"),
+        }
+
+    return {
+        "summary": summary,
+        "holdings": computed_holdings,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+# ------------------------------
+# Portfolio routes & APIs
+# ------------------------------
+@app.route('/')
+def portfolio_analysis():
+    portfolio_state = load_portfolio_state()
+    holdings = portfolio_state.get('holdings', [])
+    snapshot = build_portfolio_snapshot(holdings)
+    return render_template(
+        'portfolio_analysis.html',
+        snapshot=snapshot,
+        holdings_raw=holdings,
+    )
+
+
+@app.route('/api/portfolio', methods=['GET'])
+def api_get_portfolio():
+    portfolio_state = load_portfolio_state()
+    snapshot = build_portfolio_snapshot(portfolio_state.get('holdings', []))
+    return jsonify(snapshot)
+
+
+@app.route('/api/portfolio', methods=['POST'])
+def api_update_portfolio():
+    payload = request.get_json(silent=True)
+    if not payload or 'holdings' not in payload:
+        return jsonify({'error': 'Invalid payload'}), 400
+
+    normalized_holdings: List[Dict[str, Any]] = []
+    for entry in payload.get('holdings', []):
+        ticker = str(entry.get('ticker', '')).upper().strip()
+        quantity = _safe_float(entry.get('quantity'))
+        avg_cost = _safe_float(entry.get('average_cost'))
+        name = entry.get('name')
+        logo_url = entry.get('logo_url')
+
+        if not ticker or quantity <= 0:
+            continue
+
+        holding_record: Dict[str, Any] = {
+            'ticker': ticker,
+            'quantity': quantity,
+            'average_cost': avg_cost,
+        }
+        if name:
+            holding_record['name'] = name
+        if logo_url:
+            holding_record['logo_url'] = logo_url
+        # Preserve explicit current price if client provides it
+        if entry.get('current_price') is not None:
+            holding_record['current_price'] = _safe_float(entry.get('current_price'))
+
+        normalized_holdings.append(holding_record)
+
+    save_portfolio_state({'holdings': normalized_holdings})
+    snapshot = build_portfolio_snapshot(normalized_holdings)
+    return jsonify({'status': 'ok', 'snapshot': snapshot})
 
 def run_main_script():
     """
@@ -103,8 +373,8 @@ def run_main_script():
 # ------------------------------
 # Routes
 # ------------------------------
-@app.route('/', methods=['GET', 'POST'])
-def index():
+@app.route('/risk-analysis', methods=['GET', 'POST'])
+def risk_analysis():
     config = load_config()
     if request.method == 'POST':
         # update config from form
@@ -141,13 +411,15 @@ def index():
             pass
 
         save_config(config)
-        return redirect(url_for('index'))
+        return redirect(url_for('risk_analysis'))
 
     # GET
-    return render_template('index.html',
-                           config=config,
-                           log_output_raw=log_output_raw,
-                           log_output_table=log_output_table)
+    return render_template(
+        'risk_analysis.html',
+        config=config,
+        log_output_raw=log_output_raw,
+        log_output_table=log_output_table,
+    )
 
 @app.route('/run', methods=['POST'])
 def run():
@@ -156,7 +428,7 @@ def run():
     log_output_raw = ["Starting calculations..."]
     # Run synchronously (Option 1). Will block until main.py completes.
     run_main_script()
-    return redirect(url_for('index'))
+    return redirect(url_for('risk_analysis'))
 
 # ------------------------------
 # Run app
