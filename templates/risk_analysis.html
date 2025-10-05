@@ -1,193 +1,142 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Portfolio Risk Analysis</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { padding: 22px; background: #f7f9fb; }
-        .card { box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
-        #log-box { display: none; max-height: 320px; overflow-y: auto; background: #0b1220; color: #dbeafe; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 13px; }
-        .table-container { margin-top: 20px; }
-        .muted-note { color: #6c757d; font-size: 0.9rem; }
+{% extends "base.html" %}
 
-        /* Small bottom-left status box */
-        #status-pill {
-            position: fixed;
-            bottom: 12px;
-            left: 12px;
-            display: none; /* show only when busy */
-            background: rgba(0,0,0,0.95);
-            color: #ffffff;
-            border-radius: 8px;
-            padding: 4px 8px;
-            z-index: 9999;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.35);
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-            font-size: 11px; /* user requested ~11px height */
-            line-height: 16px; /* ensures the box is slightly taller than font */
-            height: auto;
-            white-space: nowrap; /* keep message in one line, expand width */
-        }
-        #status-pill img {
-            display: inline-block;
-            height: 16px; /* fit the box height */
-            width: auto;
-            vertical-align: middle;
-            border-radius: 2px;
-        }
-        #status-pill .status-text {
-            color: #ffffff;
-            margin-left: 4px;
-            vertical-align: middle;
-        }
+{% block title %}Portfolio Risk Analysis{% endblock %}
 
-        /* Make sure the pill resizes to the text length but not exceed viewport width */
-        @media (max-width: 420px) {
-            #status-pill { left: 8px; right: 8px; max-width: calc(100% - 16px); white-space: normal; }
-        }
-    </style>
-</head>
-<body>
-<div class="container">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
-        <div>
-            <h2 class="mb-0">Portfolio Risk Analysis</h2>
-            <p class="text-muted mb-0">Configure trailing stop simulations and review risk outputs.</p>
-        </div>
-        <div>
-            <a class="btn btn-outline-primary" href="{{ url_for('portfolio_analysis') }}">&larr; Back to Portfolio Analysis</a>
-        </div>
+{% block content %}
+<div class="page-header">
+    <div class="page-heading">
+        <h1 class="fw-semibold mb-0">Portfolio Risk Analysis</h1>
+        <p>Configure trailing stop simulations and review risk outputs.</p>
     </div>
+    <div class="page-actions">
+        <a class="btn btn-outline-primary" href="{{ url_for('portfolio_analysis') }}">&larr; Back to Portfolio Analysis</a>
+    </div>
+</div>
 
-    <!-- CONFIG FORM -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <form method="POST" action="{{ url_for('risk_analysis') }}" id="config-form" onsubmit="onConfigSubmit(event)">
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <label for="DATA_PERIOD" class="form-label">Data Period</label>
-                        <select id="DATA_PERIOD" name="DATA_PERIOD" class="form-select" onchange="toggleCustomDate()">
-                            <option value="YTD" {% if config['DATA_PERIOD']=='YTD' %}selected{% endif %}>YTD</option>
-                            <option value="1y" {% if config['DATA_PERIOD']=='1y' %}selected{% endif %}>1 Year</option>
-                            <option value="1.5y" {% if config['DATA_PERIOD']=='1.5y' %}selected{% endif %}>1.5 Years</option>
-                            <option value="2y" {% if config['DATA_PERIOD']=='2y' %}selected{% endif %}>2 Years</option>
-                            <option value="custom" {% if config['DATA_PERIOD']=='custom' %}selected{% endif %}>Custom</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-3" id="custom-date-div" style="display:none;">
-                        <label for="CUSTOM_START_DATE" class="form-label">Custom Start Date</label>
-                        <input type="date" id="CUSTOM_START_DATE" name="CUSTOM_START_DATE" class="form-control" value="{{ config['CUSTOM_START_DATE'] }}">
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">Stop Loss Min (%)</label>
-                        <input type="number" step="0.1" name="STOP_LOSS_MIN" class="form-control" value="{{ config['STOP_LOSS_PERCENTAGE_RANGE'][0] }}">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Stop Loss Max (%)</label>
-                        <input type="number" step="0.1" name="STOP_LOSS_MAX" class="form-control" value="{{ config['STOP_LOSS_PERCENTAGE_RANGE'][1] }}">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Stop Loss Step (%)</label>
-                        <input type="number" step="0.1" name="STOP_LOSS_STEP" class="form-control" value="{{ config['STOP_LOSS_STEP'] }}">
-                    </div>
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('risk_analysis') }}" id="config-form" onsubmit="onConfigSubmit(event)">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="DATA_PERIOD" class="form-label">Data Period</label>
+                    <select id="DATA_PERIOD" name="DATA_PERIOD" class="form-select" onchange="toggleCustomDate()">
+                        <option value="YTD" {% if config['DATA_PERIOD']=='YTD' %}selected{% endif %}>YTD</option>
+                        <option value="1y" {% if config['DATA_PERIOD']=='1y' %}selected{% endif %}>1 Year</option>
+                        <option value="1.5y" {% if config['DATA_PERIOD']=='1.5y' %}selected{% endif %}>1.5 Years</option>
+                        <option value="2y" {% if config['DATA_PERIOD']=='2y' %}selected{% endif %}>2 Years</option>
+                        <option value="custom" {% if config['DATA_PERIOD']=='custom' %}selected{% endif %}>Custom</option>
+                    </select>
                 </div>
 
-                <div class="row g-3 mt-2">
-                    <div class="col-md-3">
-                        <label class="form-label">Num Simulations</label>
-                        <input type="number" name="NUM_SIMULATIONS" class="form-control" value="{{ config['NUM_SIMULATIONS'] }}">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Confidence Level</label>
-                        <input type="number" step="0.01" name="CONFIDENCE_LEVEL" class="form-control" value="{{ config['CONFIDENCE_LEVEL'] }}">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">EWMA Span</label>
-                        <input type="number" name="SPAN_EWMA" class="form-control" value="{{ config['SPAN_EWMA'] }}">
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end justify-content-end">
-                        <button class="btn btn-primary me-2" type="submit">Save Configuration</button>
-                    </div>
+                <div class="col-md-3" id="custom-date-div" style="display:none;">
+                    <label for="CUSTOM_START_DATE" class="form-label">Custom Start Date</label>
+                    <input type="date" id="CUSTOM_START_DATE" name="CUSTOM_START_DATE" class="form-control" value="{{ config['CUSTOM_START_DATE'] }}">
                 </div>
 
-                <p class="mt-3 muted-note">Tip: selecting <strong>Custom</strong> in Data Period will show the start date field.</p>
-            </form>
-        </div>
-    </div>
+                <div class="col-md-2">
+                    <label class="form-label">Stop Loss Min (%)</label>
+                    <input type="number" step="0.1" name="STOP_LOSS_MIN" class="form-control" value="{{ config['STOP_LOSS_PERCENTAGE_RANGE'][0] }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Stop Loss Max (%)</label>
+                    <input type="number" step="0.1" name="STOP_LOSS_MAX" class="form-control" value="{{ config['STOP_LOSS_PERCENTAGE_RANGE'][1] }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Stop Loss Step (%)</label>
+                    <input type="number" step="0.1" name="STOP_LOSS_STEP" class="form-control" value="{{ config['STOP_LOSS_STEP'] }}">
+                </div>
+            </div>
 
-    <!-- RUN FORM (moved OUTSIDE config form to avoid nested forms) -->
-    <div class="mb-3">
-        <form method="POST" action="{{ url_for('run') }}" id="run-form" onsubmit="onRunSubmit(event)">
-            <button id="run-btn" class="btn btn-success">Run / Re-run Calculations</button>
+            <div class="row g-3 mt-2">
+                <div class="col-md-3">
+                    <label class="form-label">Num Simulations</label>
+                    <input type="number" name="NUM_SIMULATIONS" class="form-control" value="{{ config['NUM_SIMULATIONS'] }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Confidence Level</label>
+                    <input type="number" step="0.01" name="CONFIDENCE_LEVEL" class="form-control" value="{{ config['CONFIDENCE_LEVEL'] }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">EWMA Span</label>
+                    <input type="number" name="SPAN_EWMA" class="form-control" value="{{ config['SPAN_EWMA'] }}">
+                </div>
+                <div class="col-md-4 d-flex align-items-end justify-content-end">
+                    <button class="btn btn-primary me-2" type="submit">Save Configuration</button>
+                </div>
+            </div>
+
+            <p class="mt-3 muted-note">Tip: selecting <strong>Custom</strong> in Data Period will show the start date field.</p>
         </form>
     </div>
+</div>
 
-    <!-- Results table -->
-    <div class="card table-container mb-3">
-        <div class="card-body">
-            <h5>Trailing Stop & Risk Analysis</h5>
-            {% if log_output_table and log_output_table|length > 0 %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered table-striped">
-                        <thead>
+<div class="mb-3">
+    <form method="POST" action="{{ url_for('run') }}" id="run-form" onsubmit="onRunSubmit(event)">
+        <button id="run-btn" class="btn btn-success">Run / Re-run Calculations</button>
+    </form>
+</div>
+
+<div class="card table-card table-container mb-3">
+    <div class="card-body">
+        <h5>Trailing Stop &amp; Risk Analysis</h5>
+        {% if log_output_table and log_output_table|length > 0 %}
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            {% for col in log_output_table[0].keys() %}
+                                <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in log_output_table %}
                             <tr>
-                                {% for col in log_output_table[0].keys() %}
-                                    <th>{{ col }}</th>
+                                {% for col in row.keys() %}
+                                    <td>
+                                        {% if row[col] is number %}
+                                            {{ "%.2f"|format(row[col]) }}
+                                        {% else %}
+                                            {{ row[col] }}
+                                        {% endif %}
+                                    </td>
                                 {% endfor %}
                             </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in log_output_table %}
-                                <tr>
-                                    {% for col in row.keys() %}
-                                        <td>
-                                            {% if row[col] is number %}
-                                                {{ "%.2f"|format(row[col]) }}
-                                            {% else %}
-                                                {{ row[col] }}
-                                            {% endif %}
-                                        </td>
-                                    {% endfor %}
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="muted-note">No results file found yet. Run calculations to generate trailing stop analysis.</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <button class="btn btn-outline-secondary mb-3" onclick="toggleLogs()">Show / Hide Full Log</button>
+        <div id="log-box" aria-hidden="true">
+            {% if log_output_raw %}
+                {% for line in log_output_raw %}
+                    {{ line }}<br>
+                {% endfor %}
             {% else %}
-                <div class="muted-note">No results file found yet. Run calculations to generate trailing stop analysis.</div>
+                <div class="muted-note">No logs yet. Run the calculations to see output here.</div>
             {% endif %}
         </div>
     </div>
-
-    <!-- Toggleable raw log -->
-    <div class="card">
-        <div class="card-body">
-            <button class="btn btn-outline-secondary mb-3" onclick="toggleLogs()">Show / Hide Full Log</button>
-            <div id="log-box" aria-hidden="true">
-                {% if log_output_raw %}
-                    {% for line in log_output_raw %}
-                        {{ line }}<br>
-                    {% endfor %}
-                {% else %}
-                    <div class="muted-note">No logs yet. Run the calculations to see output here.</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
 </div>
+{% endblock %}
 
-<!-- Status pill (bottom-left black box) -->
+{% block after_main %}
 <div id="status-pill" role="status" aria-live="polite" aria-atomic="true">
     <img id="status-gif" src="https://upload.wikimedia.org/wikipedia/commons/a/ad/YouTube_loading_symbol_3_%28transparent%29.gif" alt="loading">
     <span class="status-text" id="status-text">Working...</span>
 </div>
+{% endblock %}
 
+{% block scripts %}
+{{ super() }}
 <script>
     function toggleLogs() {
         const logBox = document.getElementById('log-box');
@@ -200,53 +149,69 @@
         document.getElementById('custom-date-div').style.display = (dataPeriod === 'custom') ? 'block' : 'none';
     }
 
-    // initialize custom date visibility on load
-    document.addEventListener('DOMContentLoaded', function() {
-        toggleCustomDate();
-    });
-
-    // status pill helpers
-    function showStatus(message) {
+    function setStatus(message, isWorking = true) {
         const pill = document.getElementById('status-pill');
         const text = document.getElementById('status-text');
+        if (!pill || !text) return;
+
         text.textContent = message;
-        // Ensure pill width fits message naturally
-        pill.style.display = 'inline-flex';
-        // Optionally adjust GIF size if message is very short/long
-        // keep it small; already sized via CSS
+        pill.style.display = isWorking ? 'flex' : 'none';
     }
 
-    function hideStatus() {
-        const pill = document.getElementById('status-pill');
-        pill.style.display = 'none';
+    async function onConfigSubmit(event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const formData = new FormData(form);
+        const payload = Object.fromEntries(formData.entries());
+
+        payload.STOP_LOSS_PERCENTAGE_RANGE = [
+            parseFloat(payload.STOP_LOSS_MIN || '0') || 0,
+            parseFloat(payload.STOP_LOSS_MAX || '0') || 0,
+        ];
+        payload.STOP_LOSS_STEP = parseFloat(payload.STOP_LOSS_STEP || '0') || 0;
+        payload.NUM_SIMULATIONS = parseInt(payload.NUM_SIMULATIONS || '0', 10) || 0;
+        payload.CONFIDENCE_LEVEL = parseFloat(payload.CONFIDENCE_LEVEL || '0') || 0;
+        payload.SPAN_EWMA = parseInt(payload.SPAN_EWMA || '0', 10) || 0;
+
+        delete payload.STOP_LOSS_MIN;
+        delete payload.STOP_LOSS_MAX;
+
+        try {
+            const response = await fetch('{{ url_for('update_config') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) {
+                throw new Error('Failed to save configuration');
+            }
+            setStatus('Configuration saved', false);
+        } catch (error) {
+            console.error('Error saving configuration', error);
+            setStatus('Failed to save configuration', false);
+        }
     }
 
-    // Hook form submits to show status; hide when page unloads or reloads occurs
-    function onRunSubmit(event) {
-        // disable button to prevent double submits (keep your previous behavior)
-        document.getElementById('run-btn').disabled = true;
-        // show status
-        showStatus('Running calculations...');
-        // allow form to submit normally (page will reload when server completes, hiding the pill)
-        return true;
+    async function onRunSubmit(event) {
+        event.preventDefault();
+        setStatus('Running calculations...');
+
+        try {
+            const response = await fetch('{{ url_for('run') }}', { method: 'POST' });
+            if (!response.ok) {
+                throw new Error('Failed to run calculations');
+            }
+            setStatus('Run completed', false);
+            window.location.reload();
+        } catch (error) {
+            console.error('Error running calculations', error);
+            setStatus('Run failed', false);
+        }
     }
 
-    function onConfigSubmit(event) {
-        // show saving configuration status
-        showStatus('Saving configuration...');
-        // allow normal submit
-        return true;
-    }
+    document.getElementById('config-form')?.addEventListener('submit', onConfigSubmit);
+    document.getElementById('run-form')?.addEventListener('submit', onRunSubmit);
 
-    // If user navigates away or the page reloads, the pill will disappear naturally.
-    // Also hide pill on DOMContentLoaded (in case it remained from previous JS state)
-    window.addEventListener('load', function() {
-        hideStatus();
-    });
-
-    // Optional: if you perform AJAX calls and want to show status during those operations,
-    // call showStatus('...') before starting the AJAX and hideStatus() on completion.
+    toggleCustomDate();
 </script>
-</body>
-</html>
-
+{% endblock %}
