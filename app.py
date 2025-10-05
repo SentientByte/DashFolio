@@ -114,11 +114,32 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _reference_close(series: pd.Series, steps_back: int) -> float | None:
+def _normalize_index(series: pd.Series) -> pd.Series:
+    """Ensure the index is a timezone-naive DatetimeIndex for comparisons."""
+    idx = series.index
+    if not isinstance(idx, pd.DatetimeIndex):
+        return series
+    if idx.tz is not None:
+        series.index = idx.tz_localize(None)
+    return series
+
+
+def _historical_close(series: pd.Series, days_back: int) -> float | None:
+    """Return the closing price from *approximately* days_back calendar days ago."""
     if series.empty:
         return None
-    if len(series) > steps_back:
-        return float(series.iloc[-(steps_back + 1)])
+
+    series = _normalize_index(series)
+    last_idx = series.index[-1] if isinstance(series.index, pd.DatetimeIndex) else None
+    if last_idx is None:
+        # Fallback to positional lookup
+        pos = max(len(series) - (days_back + 1), 0)
+        return float(series.iloc[pos])
+
+    target_date = last_idx - pd.Timedelta(days=days_back)
+    historical = series.loc[series.index <= target_date]
+    if not historical.empty:
+        return float(historical.iloc[-1])
     return float(series.iloc[0])
 
 
@@ -136,12 +157,13 @@ def _get_market_snapshot(ticker: str) -> Dict[str, Any]:
             result["current_price"] = fast_info.get("last_price") or fast_info.get("lastPrice")
             result["previous_close"] = fast_info.get("previous_close") or fast_info.get("previousClose")
 
-        history = ticker_obj.history(period="3mo", interval="1d")
+        history = ticker_obj.history(period="6mo", interval="1d")
         if not history.empty:
             closes = history.get("Close")
             if closes is not None:
                 closes = closes.dropna()
                 if not closes.empty:
+                    closes = _normalize_index(closes)
                     if result["current_price"] is None:
                         result["current_price"] = float(closes.iloc[-1])
                     if result["previous_close"] is None:
@@ -149,8 +171,8 @@ def _get_market_snapshot(ticker: str) -> Dict[str, Any]:
                             result["previous_close"] = float(closes.iloc[-2])
                         else:
                             result["previous_close"] = float(closes.iloc[-1])
-                    result["week_close"] = _reference_close(closes, 5)
-                    result["month_close"] = _reference_close(closes, 21)
+                    result["week_close"] = _historical_close(closes, 7)
+                    result["month_close"] = _historical_close(closes, 30)
     except Exception as exc:
         print(f"Warning: failed to fetch market data for {ticker}: {exc}")
 
@@ -161,6 +183,8 @@ def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
     computed_holdings: List[Dict[str, Any]] = []
     total_cost = 0.0
     total_prev_value = 0.0
+    total_week_reference_value = 0.0
+    total_month_reference_value = 0.0
     total_current_value = 0.0
     top_mover: Dict[str, Any] | None = None
 
@@ -217,6 +241,8 @@ def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
         total_cost += total_cost_value
         total_prev_value += prev_value
         total_current_value += current_value
+        total_week_reference_value += weekly_value
+        total_month_reference_value += monthly_value
 
         change_value = todays_gain
         change_pct = ((current_price - previous_close) / previous_close * 100) if previous_close else 0.0
@@ -238,12 +264,36 @@ def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     dod_value = total_current_value - total_prev_value
     dod_pct = (dod_value / total_prev_value * 100) if total_prev_value else 0.0
+    weekly_change_value = (
+        total_current_value - total_week_reference_value
+        if total_week_reference_value
+        else 0.0
+    )
+    weekly_change_pct = (
+        (weekly_change_value / total_week_reference_value) * 100
+        if total_week_reference_value
+        else 0.0
+    )
+    monthly_change_value = (
+        total_current_value - total_month_reference_value
+        if total_month_reference_value
+        else 0.0
+    )
+    monthly_change_pct = (
+        (monthly_change_value / total_month_reference_value) * 100
+        if total_month_reference_value
+        else 0.0
+    )
 
     summary = {
         "total_cost": total_cost,
         "current_value": total_current_value,
         "dod_value": dod_value,
         "dod_pct": dod_pct,
+        "weekly_change_value": weekly_change_value,
+        "weekly_change_pct": weekly_change_pct,
+        "monthly_change_value": monthly_change_value,
+        "monthly_change_pct": monthly_change_pct,
         "top_mover": None,
     }
 
