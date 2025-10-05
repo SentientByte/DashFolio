@@ -219,6 +219,9 @@ def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
         monthly_gain = current_value - monthly_value
         monthly_gain_pct = (monthly_gain / monthly_value * 100) if monthly_value else 0.0
 
+        pl_value = current_value - total_cost_value
+        pl_pct = (pl_value / total_cost_value * 100) if total_cost_value else 0.0
+
         computed_holdings.append(
             {
                 "ticker": ticker,
@@ -235,6 +238,8 @@ def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "weekly_gain_pct": weekly_gain_pct,
                 "monthly_gain": monthly_gain,
                 "monthly_gain_pct": monthly_gain_pct,
+                "pl_value": pl_value,
+                "pl_pct": pl_pct,
             }
         )
 
@@ -285,6 +290,9 @@ def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
         else 0.0
     )
 
+    total_pl_value = total_current_value - total_cost
+    total_pl_pct = (total_pl_value / total_cost * 100) if total_cost else 0.0
+
     summary = {
         "total_cost": total_cost,
         "current_value": total_current_value,
@@ -294,6 +302,8 @@ def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
         "weekly_change_pct": weekly_change_pct,
         "monthly_change_value": monthly_change_value,
         "monthly_change_pct": monthly_change_pct,
+        "total_pl_value": total_pl_value,
+        "total_pl_pct": total_pl_pct,
         "top_mover": None,
     }
 
