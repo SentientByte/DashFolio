@@ -5,122 +5,509 @@
     <title>Portfolio Analysis</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background: #f5f7fb; padding: 24px; }
-        .metric-card { border: none; border-radius: 18px; box-shadow: 0 10px 30px rgba(43,89,255,0.07); background: #ffffff; }
-        .metric-label { font-size: 0.9rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.08em; }
-        .metric-value { font-size: 1.75rem; font-weight: 600; color: #1b325f; }
-        .metric-subvalue { font-size: 0.95rem; color: #495057; }
-        .metric-positive { color: #198754; }
-        .metric-negative { color: #dc3545; }
-        .table thead th { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; }
-        .logo-cell { width: 56px; }
-        .logo-cell img { max-height: 36px; max-width: 36px; border-radius: 8px; object-fit: contain; }
-        .allocation-pill { font-size: 0.85rem; padding: 0.25rem 0.75rem; border-radius: 999px; background: rgba(43,89,255,0.08); color: #2b59ff; display: inline-block; }
-        .gain-positive { color: #198754; font-weight: 600; }
-        .gain-negative { color: #dc3545; font-weight: 600; }
-        .modal-backdrop.show { opacity: 0.35; }
-        .empty-state { text-align: center; padding: 60px 20px; border-radius: 16px; background: rgba(43,89,255,0.05); color: #6c757d; }
-        .table-responsive { border-radius: 18px; box-shadow: 0 10px 30px rgba(43,89,255,0.05); }
+        :root {
+            --surface: #ffffff;
+            --surface-soft: #f3f6fb;
+            --text-strong: #102249;
+            --text-muted: #6c7a91;
+            --accent: #2b59ff;
+            --accent-soft: rgba(43, 89, 255, 0.12);
+            --shadow-card: 0 18px 40px rgba(15, 30, 78, 0.1);
+        }
+
+        body {
+            background: linear-gradient(180deg, #f7f9ff 0%, #eef2fb 100%);
+            min-height: 100vh;
+            padding: 32px 28px 48px;
+            font-family: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text-strong);
+        }
+
+        .app-shell {
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 28px;
+        }
+
+        .page-heading h1 {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .page-heading p {
+            margin: 0;
+            color: var(--text-muted);
+        }
+
+        .menu-button {
+            border: none;
+            background: var(--surface);
+            box-shadow: 0 12px 30px rgba(16, 34, 73, 0.08);
+            border-radius: 12px;
+            width: 48px;
+            height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .menu-button:focus-visible {
+            outline: 3px solid rgba(43, 89, 255, 0.35);
+            outline-offset: 3px;
+        }
+
+        .menu-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 36px rgba(16, 34, 73, 0.12);
+        }
+
+        .menu-button__icon {
+            width: 22px;
+            height: 22px;
+            object-fit: contain;
+        }
+
+        .menu-button.fallback-menu {
+            position: relative;
+        }
+
+        .menu-button.fallback-menu::before,
+        .menu-button.fallback-menu::after {
+            content: "";
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            height: 2px;
+            background: var(--text-strong);
+            border-radius: 2px;
+        }
+
+        .menu-button.fallback-menu::before {
+            top: 16px;
+        }
+
+        .menu-button.fallback-menu::after {
+            bottom: 16px;
+        }
+
+        .menu-fallback-bar {
+            display: none;
+        }
+
+        .menu-button.fallback-menu .menu-fallback-bar {
+            display: block;
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            top: calc(50% - 1px);
+            height: 2px;
+            background: var(--text-strong);
+            border-radius: 2px;
+        }
+
+        .page-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .metric-card {
+            border: none;
+            border-radius: 22px;
+            box-shadow: var(--shadow-card);
+            background: var(--surface);
+            padding: 26px 26px 22px;
+            height: 100%;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+
+        .metric-subvalue {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .metric-positive {
+            color: #17874b;
+        }
+
+        .metric-negative {
+            color: #df3e4b;
+        }
+
+        .metric-inline {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .pill {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .card-holdings {
+            border-radius: 26px;
+            border: none;
+            background: var(--surface);
+            box-shadow: 0 18px 42px rgba(15, 30, 78, 0.08);
+        }
+
+        .table-responsive {
+            border-radius: 26px;
+        }
+
+        table.table {
+            margin: 0;
+            border-radius: 26px;
+            overflow: hidden;
+        }
+
+        .table thead th {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            color: var(--text-muted);
+            border-bottom-width: 1px;
+            background: var(--surface-soft);
+        }
+
+        .table tbody tr td {
+            vertical-align: middle;
+            border-color: rgba(16, 34, 73, 0.06);
+        }
+
+        .logo-cell {
+            width: 64px;
+        }
+
+        .logo-cell img {
+            width: 42px;
+            height: 42px;
+            object-fit: cover;
+            border-radius: 12px;
+            display: block;
+            margin: 0 auto;
+            background: #f1f3f7;
+        }
+
+        .holding-name {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .gain-positive {
+            color: #17874b;
+            font-weight: 600;
+        }
+
+        .gain-negative {
+            color: #df3e4b;
+            font-weight: 600;
+        }
+
+        .allocation-pill {
+            background: rgba(23, 135, 75, 0.12);
+            color: #0d7036;
+            font-weight: 600;
+            border-radius: 999px;
+            padding: 4px 12px;
+            display: inline-block;
+        }
+
+        .empty-state {
+            padding: 64px 24px;
+            text-align: center;
+            background: var(--surface);
+            border-radius: 24px;
+            box-shadow: var(--shadow-card);
+        }
+
+        /* Side panel */
+        .side-panel {
+            position: fixed;
+            inset: 0 auto 0 0;
+            width: 280px;
+            max-width: 82vw;
+            background: #101a34;
+            color: #f3f6ff;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            z-index: 1080;
+            box-shadow: 6px 0 24px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+            padding: 24px 24px 32px;
+        }
+
+        .side-panel.open {
+            transform: translateX(0);
+        }
+
+        .side-panel__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .side-panel__title {
+            font-size: 1.05rem;
+            font-weight: 600;
+        }
+
+        .side-panel__close {
+            background: rgba(255, 255, 255, 0.12);
+            border: none;
+            color: #f7f9ff;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .side-panel__nav {
+            display: grid;
+            gap: 10px;
+        }
+
+        .side-panel__link {
+            color: #f7f9ff;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            transition: background 0.2s ease;
+        }
+
+        .side-panel__link:hover,
+        .side-panel__link:focus-visible {
+            background: rgba(43, 89, 255, 0.4);
+            color: #fff;
+        }
+
+        .side-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(16, 34, 73, 0.25);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+            z-index: 1075;
+        }
+
+        .side-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Modal adjustments */
+        .modal-content {
+            border-radius: 20px;
+            border: none;
+            box-shadow: 0 28px 60px rgba(15, 30, 78, 0.18);
+        }
+
+        .modal-header {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .modal-body {
+            padding-top: 0;
+        }
+
+        #portfolio-form-table thead th {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        #portfolio-form-table td {
+            vertical-align: middle;
+        }
+
+        .remove-row {
+            color: #df3e4b;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .modal-footer {
+            border-top: none;
+        }
+
+        @media (max-width: 992px) {
+            body {
+                padding: 24px 18px;
+            }
+            .metric-card {
+                padding: 24px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .page-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .page-actions {
+                width: 100%;
+                justify-content: flex-start;
+            }
+            .menu-button {
+                align-self: flex-start;
+            }
+        }
     </style>
 </head>
 <body>
-<div class="container-fluid">
-    <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
-        <div>
-            <h1 class="fw-semibold mb-1">Portfolio Analysis</h1>
-            <p class="text-muted mb-0">Monitor valuation changes and performance for every holding.</p>
+<div class="app-shell">
+    <aside class="side-panel" id="sidePanel" aria-hidden="true" aria-label="Site navigation">
+        <div class="side-panel__header">
+            <span class="side-panel__title">Navigate</span>
+            <button class="side-panel__close" type="button" id="sidePanelClose" aria-label="Close navigation">&times;</button>
         </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a class="btn btn-outline-primary" href="{{ url_for('risk_analysis') }}">Go to Portfolio Risk Analysis</a>
+        <nav class="side-panel__nav">
+            <a class="side-panel__link" href="{{ url_for('risk_analysis') }}">Portfolio Risk Analysis</a>
+        </nav>
+    </aside>
+    <div class="side-overlay" id="sideOverlay"></div>
+
+    <div class="page-header">
+        <button class="menu-button" type="button" id="menuToggle" aria-label="Open navigation" aria-controls="sidePanel" aria-expanded="false">
+            <img src="{{ url_for('static', filename='icons/menu.png') }}" alt="Menu" class="menu-button__icon" onerror="this.remove(); this.closest('button').classList.add('fallback-menu');">
+            <span class="menu-fallback-bar" aria-hidden="true"></span>
+        </button>
+        <div class="page-heading">
+            <h1 class="fw-semibold mb-0">Portfolio Analysis</h1>
+            <p>Monitor valuation changes and performance for every holding.</p>
+        </div>
+        <div class="page-actions">
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#portfolioModal">Update Portfolio</button>
         </div>
     </div>
 
     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-3" id="metrics-row">
         <div class="col">
-            <div class="card metric-card h-100">
-                <div class="card-body">
-                    <div class="metric-label">Total Cost</div>
-                    <div class="metric-value" id="metric-total-cost">${{ '%.2f'|format(snapshot.summary.total_cost) }}</div>
-                    <div class="metric-subvalue text-muted">Sum of invested capital</div>
-                </div>
+            <div class="metric-card h-100">
+                <div class="metric-label">Total Cost</div>
+                <div class="metric-value" id="metric-total-cost">${{ '%.2f'|format(snapshot.summary.total_cost) }}</div>
+                <div class="metric-subvalue">Total invested capital</div>
             </div>
         </div>
         <div class="col">
-            <div class="card metric-card h-100">
-                <div class="card-body">
-                    <div class="metric-label">Current Value</div>
-                    <div class="metric-value" id="metric-current-value">${{ '%.2f'|format(snapshot.summary.current_value) }}</div>
-                    <div class="metric-subvalue text-muted">Live market valuation</div>
-                </div>
+            <div class="metric-card h-100">
+                <div class="metric-label">Current Value</div>
+                <div class="metric-value" id="metric-current-value">${{ '%.2f'|format(snapshot.summary.current_value) }}</div>
+                <div class="metric-subvalue">Live market valuation</div>
             </div>
         </div>
         <div class="col">
-            <div class="card metric-card h-100">
-                <div class="card-body">
-                    <div class="metric-label">DoD Change</div>
-                    {% set dod_positive = snapshot.summary.dod_value >= 0 %}
-                    <div class="metric-value {{ 'metric-positive' if dod_positive else 'metric-negative' }}" id="metric-dod-value">
-                        {{ '+' if dod_positive else '-' }}${{ '%.2f'|format(snapshot.summary.dod_value|abs) }}
+            {% set todays_positive = snapshot.summary.dod_value >= 0 %}
+            <div class="metric-card h-100">
+                <div class="metric-label" id="metric-today-label">{{ "Todays Profit" if todays_positive else "Todays Loss" }}</div>
+                <div class="metric-inline">
+                    <div class="metric-value {{ 'metric-positive' if todays_positive else 'metric-negative' }}" id="metric-dod-value">
+                        {{ '+' if todays_positive else '-' }}${{ '%.2f'|format(snapshot.summary.dod_value|abs) }}
                     </div>
-                    <div class="metric-subvalue" id="metric-dod-pct">
-                        {{ '+' if dod_positive else '-' }}{{ '%.2f'|format(snapshot.summary.dod_pct|abs) }}%
-                    </div>
+                    <span class="pill" id="metric-dod-pct">{{ '+' if todays_positive else '-' }}{{ '%.2f'|format(snapshot.summary.dod_pct|abs) }}%</span>
+                </div>
+                <div class="metric-subvalue">Across the entire portfolio</div>
+                <div class="d-flex gap-2 mt-3 flex-wrap">
+                    <span class="pill" id="metric-week-summary">
+                        {{ '+' if snapshot.summary.weekly_change_value >= 0 else '-' }}${{ '%.2f'|format(snapshot.summary.weekly_change_value|abs) }}
+                        ({{ '+' if snapshot.summary.weekly_change_pct >= 0 else '-' }}{{ '%.2f'|format(snapshot.summary.weekly_change_pct|abs) }}%) Week
+                    </span>
+                    <span class="pill" id="metric-month-summary">
+                        {{ '+' if snapshot.summary.monthly_change_value >= 0 else '-' }}${{ '%.2f'|format(snapshot.summary.monthly_change_value|abs) }}
+                        ({{ '+' if snapshot.summary.monthly_change_pct >= 0 else '-' }}{{ '%.2f'|format(snapshot.summary.monthly_change_pct|abs) }}%) Month
+                    </span>
                 </div>
             </div>
         </div>
         <div class="col">
-            <div class="card metric-card h-100">
-                <div class="card-body">
-                    <div class="metric-label">Top DoD Mover</div>
-                    {% if snapshot.summary.top_mover %}
-                        <div class="metric-value" id="metric-top-mover-ticker">{{ snapshot.summary.top_mover.ticker }}</div>
-                        <div class="metric-subvalue" id="metric-top-mover-change">
-                            {{ '%.2f'|format(snapshot.summary.top_mover.change_value) }} USD
-                            (<span>{{ '%.2f'|format(snapshot.summary.top_mover.change_pct) }}%</span>)
-                        </div>
-                    {% else %}
-                        <div class="metric-value text-muted" id="metric-top-mover-ticker">N/A</div>
-                        <div class="metric-subvalue" id="metric-top-mover-change">No holdings available</div>
-                    {% endif %}
-                </div>
+            <div class="metric-card h-100">
+                <div class="metric-label">Top Mover today</div>
+                {% if snapshot.summary.top_mover %}
+                    <div class="metric-value" id="metric-top-mover-ticker">{{ snapshot.summary.top_mover.ticker }}</div>
+                    <div class="metric-subvalue" id="metric-top-mover-change">
+                        {{ '%.2f'|format(snapshot.summary.top_mover.change_value) }} USD
+                        (<span>{{ '%.2f'|format(snapshot.summary.top_mover.change_pct) }}%</span>)
+                    </div>
+                {% else %}
+                    <div class="metric-value text-muted" id="metric-top-mover-ticker">N/A</div>
+                    <div class="metric-subvalue" id="metric-top-mover-change">No holdings available</div>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    <div class="card mt-4 border-0" id="holdings-card">
+    <div class="card card-holdings mt-4" id="holdings-card">
         <div class="card-body p-0">
             {% if snapshot.holdings %}
                 <div class="table-responsive">
                     <table class="table align-middle mb-0">
-                        <thead class="table-light">
+                        <thead>
                         <tr>
-                            <th class="logo-cell">Logo</th>
+                            <th class="logo-cell"></th>
                             <th>Ticker</th>
                             <th>Avg Cost / Unit</th>
                             <th>Current Price</th>
                             <th>Total Cost</th>
                             <th>Current Value</th>
-                            <th>Today's Gain/Loss</th>
-                            <th>This Week</th>
-                            <th>This Month</th>
+                            <th>Todays change</th>
+                            <th>Week's change</th>
+                            <th>Month's change</th>
                             <th>Allocation</th>
                         </tr>
                         </thead>
                         <tbody id="holdings-body">
                         {% for holding in snapshot.holdings %}
                             {% set gain_class = 'gain-positive' if holding.todays_gain >= 0 else 'gain-negative' %}
+                            {% set week_class = 'gain-positive' if holding.weekly_gain >= 0 else 'gain-negative' %}
+                            {% set month_class = 'gain-positive' if holding.monthly_gain >= 0 else 'gain-negative' %}
                             <tr data-ticker="{{ holding.ticker }}">
                                 <td class="logo-cell">
                                     {% if holding.logo_url %}
-                                        <img src="{{ holding.logo_url }}" alt="{{ holding.ticker }} logo" onerror="this.src='https://via.placeholder.com/36?text=%20';">
+                                        <img src="{{ holding.logo_url }}" alt="{{ holding.ticker }} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
                                     {% else %}
-                                        <img src="https://via.placeholder.com/36?text=%20" alt="No logo">
+                                        <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
                                     {% endif %}
                                 </td>
                                 <td>
                                     <div class="fw-semibold">{{ holding.ticker }}</div>
-                                    <div class="text-muted small">{{ holding.name }}</div>
+                                    <div class="holding-name">{{ holding.name }}</div>
                                 </td>
                                 <td>${{ '%.2f'|format(holding.average_cost) }}</td>
                                 <td class="current-price">${{ '%.2f'|format(holding.current_price) }}</td>
@@ -131,12 +518,10 @@
                                     <div class="text-muted small">{{ '+' if holding.todays_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.todays_gain_pct|abs) }}%</div>
                                 </td>
                                 <td>
-                                    {% set week_class = 'gain-positive' if holding.weekly_gain >= 0 else 'gain-negative' %}
                                     <div class="{{ week_class }}">{{ '+' if holding.weekly_gain >= 0 else '-' }}${{ '%.2f'|format(holding.weekly_gain|abs) }}</div>
                                     <div class="text-muted small">{{ '+' if holding.weekly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.weekly_gain_pct|abs) }}%</div>
                                 </td>
                                 <td>
-                                    {% set month_class = 'gain-positive' if holding.monthly_gain >= 0 else 'gain-negative' %}
                                     <div class="{{ month_class }}">{{ '+' if holding.monthly_gain >= 0 else '-' }}${{ '%.2f'|format(holding.monthly_gain|abs) }}</div>
                                     <div class="text-muted small">{{ '+' if holding.monthly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.monthly_gain_pct|abs) }}%</div>
                                 </td>
@@ -158,72 +543,54 @@
 
 <!-- Update portfolio modal -->
 <div class="modal fade" id="portfolioModal" tabindex="-1" aria-labelledby="portfolioModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="portfolioModalLabel">Update Portfolio Holdings</h5>
+                <div>
+                    <h5 class="modal-title" id="portfolioModalLabel">Update Portfolio Holdings</h5>
+                    <p class="text-muted mb-0">Add, remove, or adjust positions. Tickers will be saved in uppercase.</p>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted">Add, remove, or adjust positions. Tickers will be saved in uppercase.</p>
-                <div id="portfolio-form-container">
-                    {% if holdings_raw %}
-                        {% for holding in holdings_raw %}
-                            <div class="row g-2 align-items-end holding-row mb-3">
-                                <div class="col-md-2">
-                                    <label class="form-label">Ticker</label>
-                                    <input type="text" class="form-control holding-ticker" value="{{ holding.ticker }}" placeholder="AAPL">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Name</label>
-                                    <input type="text" class="form-control holding-name" value="{{ holding.name|default('') }}" placeholder="Company name">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label">Quantity</label>
-                                    <input type="number" step="0.0001" class="form-control holding-quantity" value="{{ holding.quantity|default(0) }}">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label">Avg Cost</label>
-                                    <input type="number" step="0.01" class="form-control holding-avg-cost" value="{{ holding.average_cost|default(0) }}">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Logo URL</label>
-                                    <input type="text" class="form-control holding-logo" value="{{ holding.logo_url|default('') }}" placeholder="https://...">
-                                </div>
-                                <div class="col-12 text-end">
-                                    <button type="button" class="btn btn-link text-danger px-0 remove-row">Remove</button>
-                                </div>
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="row g-2 align-items-end holding-row mb-3">
-                            <div class="col-md-2">
-                                <label class="form-label">Ticker</label>
-                                <input type="text" class="form-control holding-ticker" placeholder="AAPL">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Name</label>
-                                <input type="text" class="form-control holding-name" placeholder="Company name">
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Quantity</label>
-                                <input type="number" step="0.0001" class="form-control holding-quantity">
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Avg Cost</label>
-                                <input type="number" step="0.01" class="form-control holding-avg-cost">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Logo URL</label>
-                                <input type="text" class="form-control holding-logo" placeholder="https://...">
-                            </div>
-                            <div class="col-12 text-end">
-                                <button type="button" class="btn btn-link text-danger px-0 remove-row">Remove</button>
-                            </div>
-                        </div>
-                    {% endif %}
+                <div class="table-responsive">
+                    <table class="table table-borderless align-middle" id="portfolio-form-table">
+                        <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Name</th>
+                            <th>Quantity</th>
+                            <th>Avg Cost</th>
+                            <th>Logo URL</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody id="portfolio-form-container">
+                        {% if holdings_raw %}
+                            {% for holding in holdings_raw %}
+                                <tr class="holding-row">
+                                    <td><input type="text" class="form-control holding-ticker" value="{{ holding.ticker }}" placeholder="AAPL"></td>
+                                    <td><input type="text" class="form-control holding-name" value="{{ holding.name|default('') }}" placeholder="Company name"></td>
+                                    <td><input type="number" step="0.0001" class="form-control holding-quantity" value="{{ holding.quantity|default(0) }}"></td>
+                                    <td><input type="number" step="0.01" class="form-control holding-avg-cost" value="{{ holding.average_cost|default(0) }}"></td>
+                                    <td><input type="text" class="form-control holding-logo" value="{{ holding.logo_url|default('') }}" placeholder="https://..."></td>
+                                    <td class="text-end"><button type="button" class="btn btn-link remove-row">Remove</button></td>
+                                </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr class="holding-row">
+                                <td><input type="text" class="form-control holding-ticker" placeholder="AAPL"></td>
+                                <td><input type="text" class="form-control holding-name" placeholder="Company name"></td>
+                                <td><input type="number" step="0.0001" class="form-control holding-quantity"></td>
+                                <td><input type="number" step="0.01" class="form-control holding-avg-cost"></td>
+                                <td><input type="text" class="form-control holding-logo" placeholder="https://..."></td>
+                                <td class="text-end"><button type="button" class="btn btn-link remove-row">Remove</button></td>
+                            </tr>
+                        {% endif %}
+                        </tbody>
+                    </table>
                 </div>
-                <button type="button" class="btn btn-outline-secondary" id="add-holding">Add Holding</button>
+                <button type="button" class="btn btn-outline-secondary mt-2" id="add-holding">Add Holding</button>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -240,69 +607,107 @@
         return formatter.format(isFinite(value) ? value : 0);
     }
 
+    function formatSignedCurrency(value) {
+        const absolute = formatCurrency(Math.abs(isFinite(value) ? value : 0));
+        if (!isFinite(value) || value === 0) {
+            return formatCurrency(0);
+        }
+        return value > 0 ? `+${absolute}` : `-${absolute}`;
+    }
+
     function formatPercent(value) {
         if (!isFinite(value)) {
             value = 0;
         }
-        return `${value >= 0 ? '+' : '-'}${Math.abs(value).toFixed(2)}%`;
+        const prefix = value > 0 ? '+' : (value < 0 ? '-' : '');
+        return `${prefix}${Math.abs(value).toFixed(2)}%`;
     }
 
     function updateMetrics(snapshot) {
-        const dodPositive = snapshot.summary.dod_value >= 0;
-        document.getElementById('metric-total-cost').textContent = formatCurrency(snapshot.summary.total_cost);
-        document.getElementById('metric-current-value').textContent = formatCurrency(snapshot.summary.current_value);
+        const summary = snapshot.summary || {};
+        const dodValue = summary.dod_value || 0;
+        const dodPositive = dodValue >= 0;
+
+        document.getElementById('metric-total-cost').textContent = formatCurrency(summary.total_cost || 0);
+        document.getElementById('metric-current-value').textContent = formatCurrency(summary.current_value || 0);
+
+        const labelEl = document.getElementById('metric-today-label');
+        if (labelEl) {
+            labelEl.textContent = dodPositive ? "Todays Profit" : "Todays Loss";
+        }
 
         const dodValueEl = document.getElementById('metric-dod-value');
-        dodValueEl.textContent = `${dodPositive ? '+' : '-'}${formatCurrency(Math.abs(snapshot.summary.dod_value))}`;
-        dodValueEl.classList.toggle('metric-positive', dodPositive);
-        dodValueEl.classList.toggle('metric-negative', !dodPositive);
+        if (dodValueEl) {
+            dodValueEl.textContent = formatSignedCurrency(dodValue);
+            dodValueEl.classList.toggle('metric-positive', dodPositive);
+            dodValueEl.classList.toggle('metric-negative', !dodPositive);
+        }
 
-        document.getElementById('metric-dod-pct').textContent = formatPercent(snapshot.summary.dod_pct);
+        const dodPctEl = document.getElementById('metric-dod-pct');
+        if (dodPctEl) {
+            dodPctEl.textContent = formatPercent(summary.dod_pct || 0);
+        }
 
-        const topMover = snapshot.summary.top_mover;
+        const weekSummaryEl = document.getElementById('metric-week-summary');
+        if (weekSummaryEl) {
+            const weekValue = summary.weekly_change_value || 0;
+            const weekPct = summary.weekly_change_pct || 0;
+            weekSummaryEl.textContent = `${formatSignedCurrency(weekValue)} (${formatPercent(weekPct)}) Week`;
+        }
+
+        const monthSummaryEl = document.getElementById('metric-month-summary');
+        if (monthSummaryEl) {
+            const monthValue = summary.monthly_change_value || 0;
+            const monthPct = summary.monthly_change_pct || 0;
+            monthSummaryEl.textContent = `${formatSignedCurrency(monthValue)} (${formatPercent(monthPct)}) Month`;
+        }
+
+        const topMover = summary.top_mover;
         const topTickerEl = document.getElementById('metric-top-mover-ticker');
         const topChangeEl = document.getElementById('metric-top-mover-change');
-        if (topMover) {
-            topTickerEl.textContent = topMover.ticker;
-            topTickerEl.classList.remove('text-muted');
-            const moverSign = topMover.change_value >= 0 ? '+' : '-';
-            topChangeEl.innerHTML = `${moverSign}${formatCurrency(Math.abs(topMover.change_value))} (<span>${topMover.change_pct.toFixed(2)}%</span>)`;
-        } else {
-            topTickerEl.textContent = 'N/A';
-            topTickerEl.classList.add('text-muted');
-            topChangeEl.textContent = 'No holdings available';
+        if (topTickerEl && topChangeEl) {
+            if (topMover) {
+                topTickerEl.textContent = topMover.ticker;
+                topTickerEl.classList.remove('text-muted');
+                const moverValue = topMover.change_value || 0;
+                const moverPct = topMover.change_pct || 0;
+                topChangeEl.innerHTML = `${formatSignedCurrency(moverValue)} (<span>${formatPercent(moverPct)}</span>)`;
+            } else {
+                topTickerEl.textContent = 'N/A';
+                topTickerEl.classList.add('text-muted');
+                topChangeEl.textContent = 'No holdings available';
+            }
         }
     }
 
     function buildGainCell(value, percent) {
         const positive = value >= 0;
         const cls = positive ? 'gain-positive' : 'gain-negative';
-        return `<div class="${cls}">${positive ? '+' : '-'}${formatCurrency(Math.abs(value))}</div>` +
+        return `<div class="${cls}">${formatSignedCurrency(value)}</div>` +
             `<div class="text-muted small">${formatPercent(percent)}</div>`;
     }
 
     function refreshTable(snapshot) {
         const tbody = document.getElementById('holdings-body');
-        const hasTable = !!tbody;
-
-        if (!snapshot.holdings || snapshot.holdings.length === 0) {
-            if (hasTable) {
-                window.location.reload();
-            }
-            return;
-        }
-
-        if (!hasTable) {
+        if (!tbody) {
             window.location.reload();
             return;
         }
+
+        const holdings = snapshot.holdings || [];
+        if (holdings.length === 0) {
+            window.location.reload();
+            return;
+        }
+
         tbody.innerHTML = '';
-        snapshot.holdings.forEach(holding => {
+        holdings.forEach(holding => {
             const row = document.createElement('tr');
             row.dataset.ticker = holding.ticker;
+            const logoSrc = holding.logo_url || 'https://via.placeholder.com/42?text=%20';
             row.innerHTML = `
-                <td class="logo-cell">${holding.logo_url ? `<img src="${holding.logo_url}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/36?text=%20';">` : `<img src="https://via.placeholder.com/36?text=%20" alt="No logo">`}</td>
-                <td><div class="fw-semibold">${holding.ticker}</div><div class="text-muted small">${holding.name || ''}</div></td>
+                <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
+                <td><div class="fw-semibold">${holding.ticker}</div><div class="holding-name">${holding.name || ''}</div></td>
                 <td>${formatCurrency(holding.average_cost)}</td>
                 <td class="current-price">${formatCurrency(holding.current_price)}</td>
                 <td>${formatCurrency(holding.total_cost)}</td>
@@ -310,7 +715,7 @@
                 <td class="todays-gain">${buildGainCell(holding.todays_gain, holding.todays_gain_pct)}</td>
                 <td>${buildGainCell(holding.weekly_gain, holding.weekly_gain_pct)}</td>
                 <td>${buildGainCell(holding.monthly_gain, holding.monthly_gain_pct)}</td>
-                <td><span class="allocation-pill">${holding.allocation_pct.toFixed(2)}%</span></td>
+                <td><span class="allocation-pill">${(holding.allocation_pct || 0).toFixed(2)}%</span></td>
             `;
             tbody.appendChild(row);
         });
@@ -333,32 +738,15 @@
 
     document.getElementById('add-holding').addEventListener('click', () => {
         const container = document.getElementById('portfolio-form-container');
-        const template = document.createElement('div');
-        template.className = 'row g-2 align-items-end holding-row mb-3';
+        const template = document.createElement('tr');
+        template.className = 'holding-row';
         template.innerHTML = `
-            <div class="col-md-2">
-                <label class="form-label">Ticker</label>
-                <input type="text" class="form-control holding-ticker" placeholder="AAPL">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Name</label>
-                <input type="text" class="form-control holding-name" placeholder="Company name">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Quantity</label>
-                <input type="number" step="0.0001" class="form-control holding-quantity">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Avg Cost</label>
-                <input type="number" step="0.01" class="form-control holding-avg-cost">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Logo URL</label>
-                <input type="text" class="form-control holding-logo" placeholder="https://...">
-            </div>
-            <div class="col-12 text-end">
-                <button type="button" class="btn btn-link text-danger px-0 remove-row">Remove</button>
-            </div>`;
+            <td><input type="text" class="form-control holding-ticker" placeholder="AAPL"></td>
+            <td><input type="text" class="form-control holding-name" placeholder="Company name"></td>
+            <td><input type="number" step="0.0001" class="form-control holding-quantity"></td>
+            <td><input type="number" step="0.01" class="form-control holding-avg-cost"></td>
+            <td><input type="text" class="form-control holding-logo" placeholder="https://..."></td>
+            <td class="text-end"><button type="button" class="btn btn-link remove-row">Remove</button></td>`;
         container.appendChild(template);
     });
 
@@ -414,6 +802,42 @@
         } catch (err) {
             console.error(err);
             alert('Unable to save portfolio. Please try again.');
+        }
+    });
+
+    const sidePanel = document.getElementById('sidePanel');
+    const sideOverlay = document.getElementById('sideOverlay');
+    const menuToggle = document.getElementById('menuToggle');
+    const sideClose = document.getElementById('sidePanelClose');
+
+    function openSidePanel() {
+        sidePanel.classList.add('open');
+        sideOverlay.classList.add('open');
+        sidePanel.setAttribute('aria-hidden', 'false');
+        menuToggle.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeSidePanel() {
+        sidePanel.classList.remove('open');
+        sideOverlay.classList.remove('open');
+        sidePanel.setAttribute('aria-hidden', 'true');
+        menuToggle.setAttribute('aria-expanded', 'false');
+    }
+
+    menuToggle.addEventListener('click', () => {
+        const isOpen = sidePanel.classList.contains('open');
+        if (isOpen) {
+            closeSidePanel();
+        } else {
+            openSidePanel();
+        }
+    });
+
+    sideOverlay.addEventListener('click', closeSidePanel);
+    sideClose.addEventListener('click', closeSidePanel);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && sidePanel.classList.contains('open')) {
+            closeSidePanel();
         }
     });
 </script>
