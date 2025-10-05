@@ -320,10 +320,16 @@ def portfolio_analysis():
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
     snapshot = build_portfolio_snapshot(holdings)
+    menu_icon_url = None
+    static_folder = app.static_folder or ''
+    menu_icon_path = os.path.join(static_folder, 'icons', 'menu.png')
+    if menu_icon_path and os.path.exists(menu_icon_path):
+        menu_icon_url = url_for('static', filename='icons/menu.png')
     return render_template(
         'portfolio_analysis.html',
         snapshot=snapshot,
         holdings_raw=holdings,
+        menu_icon_url=menu_icon_url,
     )
 
 
