@@ -116,7 +116,7 @@ body {
 
 .metric-card {
     border: none;
-    border-radius: 22px;
+    border-radius: 5px;
     box-shadow: var(--shadow-card);
     background: var(--surface);
     padding: 26px 26px 22px;
@@ -168,7 +168,7 @@ body {
 
 .card {
     border: none;
-    border-radius: 26px;
+    border-radius: 5px;
     background: var(--surface);
     box-shadow: 0 18px 42px rgba(15, 30, 78, 0.08);
 }
@@ -178,19 +178,19 @@ body {
 }
 
 .card-holdings {
-    border-radius: 26px;
+    border-radius: 5px;
     border: none;
     background: var(--surface);
     box-shadow: 0 18px 42px rgba(15, 30, 78, 0.08);
 }
 
 .table-responsive {
-    border-radius: 26px;
+    border-radius: 5px;
 }
 
 table.table {
     margin: 0;
-    border-radius: 26px;
+    border-radius: 5px;
     overflow: hidden;
 }
 
