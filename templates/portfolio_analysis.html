@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
+<button class="menu-button floating-menu" type="button" id="menuToggle" aria-label="Open navigation" aria-controls="sidePanel" aria-expanded="false">
+    <img src="{{ url_for('static', filename='icons/menu.png') }}" alt="Menu" class="menu-button__icon" onerror="this.remove(); this.closest('button').classList.add('fallback-menu');">
+    <span class="menu-fallback-bar" aria-hidden="true"></span>
+</button>
 <div class="app-shell">
     <aside class="side-panel" id="sidePanel" aria-hidden="true" aria-label="Site navigation">
         <div class="side-panel__header">
@@ -14,16 +18,13 @@
             <button class="side-panel__close" type="button" id="sidePanelClose" aria-label="Close navigation">&times;</button>
         </div>
         <nav class="side-panel__nav">
+            <a class="side-panel__link side-panel__link--active" href="{{ url_for('portfolio_analysis') }}">Portfolio Overview</a>
             <a class="side-panel__link" href="{{ url_for('risk_analysis') }}">Portfolio Risk Analysis</a>
         </nav>
     </aside>
     <div class="side-overlay" id="sideOverlay"></div>
 
     <div class="page-header">
-        <button class="menu-button" type="button" id="menuToggle" aria-label="Open navigation" aria-controls="sidePanel" aria-expanded="false">
-            <img src="{{ url_for('static', filename='icons/menu.png') }}" alt="Menu" class="menu-button__icon" onerror="this.remove(); this.closest('button').classList.add('fallback-menu');">
-            <span class="menu-fallback-bar" aria-hidden="true"></span>
-        </button>
         <div class="page-heading">
             <h1 class="fw-semibold mb-0">Portfolio Analysis</h1>
             <p>Monitor valuation changes and performance for every holding.</p>
@@ -42,10 +43,17 @@
             </div>
         </div>
         <div class="col">
+            {% set total_pl = snapshot.summary.current_value - snapshot.summary.total_cost %}
+            {% set total_pl_positive = total_pl >= 0 %}
             <div class="metric-card h-100">
                 <div class="metric-label">Current Value</div>
-                <div class="metric-value" id="metric-current-value">${{ '%.2f'|format(snapshot.summary.current_value) }}</div>
-                <div class="metric-subvalue">Live market valuation</div>
+                <div class="metric-inline metric-inline--spaced">
+                    <div class="metric-value" id="metric-current-value">${{ '%.2f'|format(snapshot.summary.current_value) }}</div>
+                    <span class="pill pill-compact {{ 'pill-positive' if total_pl_positive else 'pill-negative' }}" id="metric-total-pl">
+                        {{ '+' if total_pl_positive else '-' }}${{ '%.2f'|format(total_pl|abs) }}
+                    </span>
+                </div>
+                <div class="metric-subvalue">Live market valuation vs. invested capital</div>
             </div>
         </div>
         <div class="col">
@@ -56,29 +64,24 @@
                     <div class="metric-value {{ 'metric-positive' if todays_positive else 'metric-negative' }}" id="metric-dod-value">
                         {{ '+' if todays_positive else '-' }}${{ '%.2f'|format(snapshot.summary.dod_value|abs) }}
                     </div>
-                    <span class="pill" id="metric-dod-pct">{{ '+' if todays_positive else '-' }}{{ '%.2f'|format(snapshot.summary.dod_pct|abs) }}%</span>
+                    <span class="pill {{ 'pill-positive' if todays_positive else 'pill-negative' }}" id="metric-dod-pct">{{ '+' if todays_positive else '-' }}{{ '%.2f'|format(snapshot.summary.dod_pct|abs) }}%</span>
                 </div>
                 <div class="metric-subvalue">Across the entire portfolio</div>
-                <div class="d-flex gap-2 mt-3 flex-wrap">
-                    <span class="pill" id="metric-week-summary">
-                        {{ '+' if snapshot.summary.weekly_change_value >= 0 else '-' }}${{ '%.2f'|format(snapshot.summary.weekly_change_value|abs) }}
-                        ({{ '+' if snapshot.summary.weekly_change_pct >= 0 else '-' }}{{ '%.2f'|format(snapshot.summary.weekly_change_pct|abs) }}%) Week
-                    </span>
-                    <span class="pill" id="metric-month-summary">
-                        {{ '+' if snapshot.summary.monthly_change_value >= 0 else '-' }}${{ '%.2f'|format(snapshot.summary.monthly_change_value|abs) }}
-                        ({{ '+' if snapshot.summary.monthly_change_pct >= 0 else '-' }}{{ '%.2f'|format(snapshot.summary.monthly_change_pct|abs) }}%) Month
-                    </span>
-                </div>
             </div>
         </div>
         <div class="col">
             <div class="metric-card h-100">
                 <div class="metric-label">Top Mover today</div>
                 {% if snapshot.summary.top_mover %}
-                    <div class="metric-value" id="metric-top-mover-ticker">{{ snapshot.summary.top_mover.ticker }}</div>
-                    <div class="metric-subvalue" id="metric-top-mover-change">
-                        {{ '%.2f'|format(snapshot.summary.top_mover.change_value) }} USD
-                        (<span>{{ '%.2f'|format(snapshot.summary.top_mover.change_pct) }}%</span>)
+                    {% set mover_positive = snapshot.summary.top_mover.change_value >= 0 %}
+                    <div class="metric-value metric-trend {{ 'metric-positive' if mover_positive else 'metric-negative' }}" id="metric-top-mover-ticker">{{ snapshot.summary.top_mover.ticker }}</div>
+                    <div class="metric-subvalue metric-trend-group" id="metric-top-mover-change">
+                        <span class="metric-trend-value {{ 'metric-positive' if mover_positive else 'metric-negative' }}">
+                            {{ '+' if mover_positive else '-' }}${{ '%.2f'|format(snapshot.summary.top_mover.change_value|abs) }} USD
+                        </span>
+                        <span class="metric-trend-pct {{ 'metric-positive' if mover_positive else 'metric-negative' }}">
+                            ({{ '+' if mover_positive else '-' }}{{ '%.2f'|format(snapshot.summary.top_mover.change_pct|abs) }}%)
+                        </span>
                     </div>
                 {% else %}
                     <div class="metric-value text-muted" id="metric-top-mover-ticker">N/A</div>
@@ -104,6 +107,7 @@
                             <th>Todays change</th>
                             <th>Week's change</th>
                             <th>Month's change</th>
+                            <th>P/L</th>
                             <th>Allocation</th>
                         </tr>
                         </thead>
@@ -112,6 +116,9 @@
                             {% set gain_class = 'gain-positive' if holding.todays_gain >= 0 else 'gain-negative' %}
                             {% set week_class = 'gain-positive' if holding.weekly_gain >= 0 else 'gain-negative' %}
                             {% set month_class = 'gain-positive' if holding.monthly_gain >= 0 else 'gain-negative' %}
+                            {% set pl_value = holding.current_value - holding.total_cost %}
+                            {% set pl_class = 'gain-positive' if pl_value >= 0 else 'gain-negative' %}
+                            {% set pl_pct = (pl_value / holding.total_cost * 100) if holding.total_cost else 0.0 %}
                             <tr data-ticker="{{ holding.ticker }}">
                                 <td class="logo-cell">
                                     {% if holding.logo_url %}
@@ -139,6 +146,10 @@
                                 <td>
                                     <div class="{{ month_class }}">{{ '+' if holding.monthly_gain >= 0 else '-' }}${{ '%.2f'|format(holding.monthly_gain|abs) }}</div>
                                     <div class="text-muted small">{{ '+' if holding.monthly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.monthly_gain_pct|abs) }}%</div>
+                                </td>
+                                <td>
+                                    <div class="{{ pl_class }}">{{ '+' if pl_value >= 0 else '-' }}${{ '%.2f'|format(pl_value|abs) }}</div>
+                                    <div class="text-muted small">{{ '+' if pl_pct >= 0 else '-' }}{{ '%.2f'|format(pl_pct|abs) }}%</div>
                                 </td>
                                 <td><span class="allocation-pill">{{ '%.2f'|format(holding.allocation_pct) }}%</span></td>
                             </tr>
@@ -246,6 +257,15 @@
         document.getElementById('metric-total-cost').textContent = formatCurrency(summary.total_cost || 0);
         document.getElementById('metric-current-value').textContent = formatCurrency(summary.current_value || 0);
 
+        const totalPlEl = document.getElementById('metric-total-pl');
+        if (totalPlEl) {
+            const totalPlValue = summary.total_pl_value || 0;
+            const totalPlPositive = totalPlValue >= 0;
+            totalPlEl.textContent = formatSignedCurrency(totalPlValue);
+            totalPlEl.classList.toggle('pill-positive', totalPlPositive);
+            totalPlEl.classList.toggle('pill-negative', !totalPlPositive);
+        }
+
         const labelEl = document.getElementById('metric-today-label');
         if (labelEl) {
             labelEl.textContent = dodPositive ? "Todays Profit" : "Todays Loss";
@@ -261,20 +281,8 @@
         const dodPctEl = document.getElementById('metric-dod-pct');
         if (dodPctEl) {
             dodPctEl.textContent = formatPercent(summary.dod_pct || 0);
-        }
-
-        const weekSummaryEl = document.getElementById('metric-week-summary');
-        if (weekSummaryEl) {
-            const weekValue = summary.weekly_change_value || 0;
-            const weekPct = summary.weekly_change_pct || 0;
-            weekSummaryEl.textContent = `${formatSignedCurrency(weekValue)} (${formatPercent(weekPct)}) Week`;
-        }
-
-        const monthSummaryEl = document.getElementById('metric-month-summary');
-        if (monthSummaryEl) {
-            const monthValue = summary.monthly_change_value || 0;
-            const monthPct = summary.monthly_change_pct || 0;
-            monthSummaryEl.textContent = `${formatSignedCurrency(monthValue)} (${formatPercent(monthPct)}) Month`;
+            dodPctEl.classList.toggle('pill-positive', dodPositive);
+            dodPctEl.classList.toggle('pill-negative', !dodPositive);
         }
 
         const topMover = summary.top_mover;
@@ -282,24 +290,35 @@
         const topChangeEl = document.getElementById('metric-top-mover-change');
         if (topTickerEl && topChangeEl) {
             if (topMover) {
-                topTickerEl.textContent = topMover.ticker;
-                topTickerEl.classList.remove('text-muted');
                 const moverValue = topMover.change_value || 0;
                 const moverPct = topMover.change_pct || 0;
-                topChangeEl.innerHTML = `${formatSignedCurrency(moverValue)} (<span>${formatPercent(moverPct)}</span>)`;
+                const moverPositive = moverValue >= 0;
+
+                topTickerEl.textContent = topMover.ticker;
+                topTickerEl.classList.remove('text-muted');
+                topTickerEl.classList.toggle('metric-positive', moverPositive);
+                topTickerEl.classList.toggle('metric-negative', !moverPositive);
+
+                topChangeEl.innerHTML = `
+                    <span class="metric-trend-value ${moverPositive ? 'metric-positive' : 'metric-negative'}">${formatSignedCurrency(moverValue)} USD</span>
+                    <span class="metric-trend-pct ${moverPositive ? 'metric-positive' : 'metric-negative'}">(${formatPercent(moverPct)})</span>
+                `;
             } else {
                 topTickerEl.textContent = 'N/A';
                 topTickerEl.classList.add('text-muted');
+                topTickerEl.classList.remove('metric-positive', 'metric-negative');
                 topChangeEl.textContent = 'No holdings available';
             }
         }
     }
 
     function buildGainCell(value, percent) {
-        const positive = value >= 0;
+        const safeValue = Number.isFinite(value) ? value : 0;
+        const safePercent = Number.isFinite(percent) ? percent : 0;
+        const positive = safeValue >= 0;
         const cls = positive ? 'gain-positive' : 'gain-negative';
-        return `<div class="${cls}">${formatSignedCurrency(value)}</div>` +
-            `<div class="text-muted small">${formatPercent(percent)}</div>`;
+        return `<div class="${cls}">${formatSignedCurrency(safeValue)}</div>` +
+            `<div class="text-muted small">${formatPercent(safePercent)}</div>`;
     }
 
     function refreshTable(snapshot) {
@@ -330,6 +349,7 @@
                 <td class="todays-gain">${buildGainCell(holding.todays_gain, holding.todays_gain_pct)}</td>
                 <td>${buildGainCell(holding.weekly_gain, holding.weekly_gain_pct)}</td>
                 <td>${buildGainCell(holding.monthly_gain, holding.monthly_gain_pct)}</td>
+                <td>${buildGainCell(holding.pl_value, holding.pl_pct)}</td>
                 <td><span class="allocation-pill">${(holding.allocation_pct || 0).toFixed(2)}%</span></td>
             `;
             tbody.appendChild(row);
@@ -425,36 +445,38 @@
     const menuToggle = document.getElementById('menuToggle');
     const sideClose = document.getElementById('sidePanelClose');
 
-    function openSidePanel() {
-        sidePanel.classList.add('open');
-        sideOverlay.classList.add('open');
-        sidePanel.setAttribute('aria-hidden', 'false');
-        menuToggle.setAttribute('aria-expanded', 'true');
-    }
-
-    function closeSidePanel() {
-        sidePanel.classList.remove('open');
-        sideOverlay.classList.remove('open');
-        sidePanel.setAttribute('aria-hidden', 'true');
-        menuToggle.setAttribute('aria-expanded', 'false');
-    }
-
-    menuToggle.addEventListener('click', () => {
-        const isOpen = sidePanel.classList.contains('open');
-        if (isOpen) {
-            closeSidePanel();
-        } else {
-            openSidePanel();
+    if (sidePanel && sideOverlay && menuToggle && sideClose) {
+        function openSidePanel() {
+            sidePanel.classList.add('open');
+            sideOverlay.classList.add('open');
+            sidePanel.setAttribute('aria-hidden', 'false');
+            menuToggle.setAttribute('aria-expanded', 'true');
         }
-    });
 
-    sideOverlay.addEventListener('click', closeSidePanel);
-    sideClose.addEventListener('click', closeSidePanel);
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && sidePanel.classList.contains('open')) {
-            closeSidePanel();
+        function closeSidePanel() {
+            sidePanel.classList.remove('open');
+            sideOverlay.classList.remove('open');
+            sidePanel.setAttribute('aria-hidden', 'true');
+            menuToggle.setAttribute('aria-expanded', 'false');
         }
-    });
+
+        menuToggle.addEventListener('click', () => {
+            const isOpen = sidePanel.classList.contains('open');
+            if (isOpen) {
+                closeSidePanel();
+            } else {
+                openSidePanel();
+            }
+        });
+
+        sideOverlay.addEventListener('click', closeSidePanel);
+        sideClose.addEventListener('click', closeSidePanel);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && sidePanel.classList.contains('open')) {
+                closeSidePanel();
+            }
+        });
+    }
 </script>
 </body>
 </html>

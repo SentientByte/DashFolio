@@ -7,7 +7,23 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
+<button class="menu-button floating-menu" type="button" id="menuToggle" aria-label="Open navigation" aria-controls="sidePanel" aria-expanded="false">
+    <img src="{{ url_for('static', filename='icons/menu.png') }}" alt="Menu" class="menu-button__icon" onerror="this.remove(); this.closest('button').classList.add('fallback-menu');">
+    <span class="menu-fallback-bar" aria-hidden="true"></span>
+</button>
 <div class="app-shell">
+    <aside class="side-panel" id="sidePanel" aria-hidden="true" aria-label="Site navigation">
+        <div class="side-panel__header">
+            <span class="side-panel__title">Navigate</span>
+            <button class="side-panel__close" type="button" id="sidePanelClose" aria-label="Close navigation">&times;</button>
+        </div>
+        <nav class="side-panel__nav">
+            <a class="side-panel__link" href="{{ url_for('portfolio_analysis') }}">Portfolio Overview</a>
+            <a class="side-panel__link side-panel__link--active" href="{{ url_for('risk_analysis') }}">Portfolio Risk Analysis</a>
+        </nav>
+    </aside>
+    <div class="side-overlay" id="sideOverlay"></div>
+
     <div class="page-header">
         <div class="page-heading">
             <h1 class="fw-semibold mb-0">Portfolio Risk Analysis</h1>
@@ -140,6 +156,7 @@
         </div>
     </div>
 
+    <div class="page-footer-spacer"></div>
 </div>
 
 <!-- Status pill (bottom-left black box) -->
@@ -206,6 +223,45 @@
 
     // Optional: if you perform AJAX calls and want to show status during those operations,
     // call showStatus('...') before starting the AJAX and hideStatus() on completion.
+</script>
+<script>
+    const sidePanel = document.getElementById('sidePanel');
+    const sideOverlay = document.getElementById('sideOverlay');
+    const menuToggle = document.getElementById('menuToggle');
+    const sideClose = document.getElementById('sidePanelClose');
+
+    if (sidePanel && sideOverlay && menuToggle && sideClose) {
+        function openSidePanel() {
+            sidePanel.classList.add('open');
+            sideOverlay.classList.add('open');
+            sidePanel.setAttribute('aria-hidden', 'false');
+            menuToggle.setAttribute('aria-expanded', 'true');
+        }
+
+        function closeSidePanel() {
+            sidePanel.classList.remove('open');
+            sideOverlay.classList.remove('open');
+            sidePanel.setAttribute('aria-hidden', 'true');
+            menuToggle.setAttribute('aria-expanded', 'false');
+        }
+
+        menuToggle.addEventListener('click', () => {
+            const isOpen = sidePanel.classList.contains('open');
+            if (isOpen) {
+                closeSidePanel();
+            } else {
+                openSidePanel();
+            }
+        });
+
+        sideOverlay.addEventListener('click', closeSidePanel);
+        sideClose.addEventListener('click', closeSidePanel);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && sidePanel.classList.contains('open')) {
+                closeSidePanel();
+            }
+        });
+    }
 </script>
 </body>
 </html>
