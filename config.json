@@ -1,0 +1,12 @@
+{
+    "DATA_PERIOD": "YTD",
+    "CUSTOM_START_DATE": "2024-01-01",
+    "STOP_LOSS_PERCENTAGE_RANGE": [
+        1.0,
+        2.0
+    ],
+    "STOP_LOSS_STEP": 0.2,
+    "NUM_SIMULATIONS": 10000,
+    "CONFIDENCE_LEVEL": 0.95,
+    "SPAN_EWMA": 60
+}
