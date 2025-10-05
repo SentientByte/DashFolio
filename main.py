@@ -17,7 +17,7 @@ from Calculations import (
 
 def main() -> None:
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    excel_file = os.path.join(base_dir, "portfolio.xlsx")
+    portfolio_file = os.path.join(base_dir, "portfolio.json")
     price_folder = os.path.join(base_dir, "price_data")
     config_file = os.path.join(base_dir, "config.json")
 
@@ -38,8 +38,8 @@ def main() -> None:
         f"using start date {start_date_str} ({period_reason})"
     )
 
-    df_portfolio = load_portfolio(excel_file)
-    df_portfolio = update_portfolio_prices(df_portfolio, excel_file)
+    df_portfolio = load_portfolio(portfolio_file)
+    df_portfolio = update_portfolio_prices(df_portfolio, portfolio_file)
     tickers = df_portfolio["Ticker"].unique()
 
     all_data = load_price_data(tickers, start_date, today, price_folder)

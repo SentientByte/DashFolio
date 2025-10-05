@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Portfolio Analysis</title>
+    <title>Portfolio Risk Analysis</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { padding: 22px; background: #f7f9fb; }
@@ -52,12 +52,20 @@
 </head>
 <body>
 <div class="container">
-    <h2 class="mb-4">Portfolio Analysis Dashboard</h2>
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+        <div>
+            <h2 class="mb-0">Portfolio Risk Analysis</h2>
+            <p class="text-muted mb-0">Configure trailing stop simulations and review risk outputs.</p>
+        </div>
+        <div>
+            <a class="btn btn-outline-primary" href="{{ url_for('portfolio_analysis') }}">&larr; Back to Portfolio Analysis</a>
+        </div>
+    </div>
 
     <!-- CONFIG FORM -->
     <div class="card mb-4">
         <div class="card-body">
-            <form method="POST" action="/" id="config-form" onsubmit="onConfigSubmit(event)">
+            <form method="POST" action="{{ url_for('risk_analysis') }}" id="config-form" onsubmit="onConfigSubmit(event)">
                 <div class="row g-3">
                     <div class="col-md-3">
                         <label for="DATA_PERIOD" class="form-label">Data Period</label>
@@ -114,7 +122,7 @@
 
     <!-- RUN FORM (moved OUTSIDE config form to avoid nested forms) -->
     <div class="mb-3">
-        <form method="POST" action="/run" id="run-form" onsubmit="onRunSubmit(event)">
+        <form method="POST" action="{{ url_for('run') }}" id="run-form" onsubmit="onRunSubmit(event)">
             <button id="run-btn" class="btn btn-success">Run / Re-run Calculations</button>
         </form>
     </div>

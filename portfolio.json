@@ -1,0 +1,25 @@
+{
+  "holdings": [
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "quantity": 25,
+      "average_cost": 142.35,
+      "logo_url": "https://logo.clearbit.com/apple.com"
+    },
+    {
+      "ticker": "MSFT",
+      "name": "Microsoft Corp.",
+      "quantity": 18,
+      "average_cost": 265.40,
+      "logo_url": "https://logo.clearbit.com/microsoft.com"
+    },
+    {
+      "ticker": "GOOGL",
+      "name": "Alphabet Inc.",
+      "quantity": 12,
+      "average_cost": 125.15,
+      "logo_url": "https://logo.clearbit.com/abc.xyz"
+    }
+  ]
+}
