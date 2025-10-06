@@ -1,45 +1,21 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Portfolio Risk Analysis</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
-</head>
-<body>
-<button class="menu-button floating-menu" type="button" id="menuToggle" aria-label="Open navigation" aria-controls="sidePanel" aria-expanded="false">
-    <img src="{{ url_for('static', filename='icons/menu.png') }}" alt="Menu" class="menu-button__icon" onerror="this.remove(); this.closest('button').classList.add('fallback-menu');">
-    <span class="menu-fallback-bar" aria-hidden="true"></span>
-</button>
-<div class="app-shell">
-    <aside class="side-panel" id="sidePanel" aria-hidden="true" aria-label="Site navigation">
-        <div class="side-panel__header">
-            <span class="side-panel__title">Navigate</span>
-            <button class="side-panel__close" type="button" id="sidePanelClose" aria-label="Close navigation">&times;</button>
-        </div>
-        <nav class="side-panel__nav">
-            <a class="side-panel__link" href="{{ url_for('portfolio_analysis') }}">Portfolio Overview</a>
-            <a class="side-panel__link side-panel__link--active" href="{{ url_for('risk_analysis') }}">Portfolio Risk Analysis</a>
-        </nav>
-    </aside>
-    <div class="side-overlay" id="sideOverlay"></div>
+{% extends 'layout.html' %}
+{% block title %}Portfolio Risk Analysis{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <p class="text-muted mb-0">Configure trailing stop simulations and review historical risk distributions.</p>
+    <a class="btn btn-outline-primary d-flex align-items-center" href="{{ url_for('portfolio_analysis') }}">
+        <i class="bx bx-arrow-back me-2"></i>
+        Back to Portfolio Overview
+    </a>
+</div>
 
-    <div class="page-header">
-        <div class="page-heading">
-            <h1 class="fw-semibold mb-0">Portfolio Risk Analysis</h1>
-            <p>Configure trailing stop simulations and review risk outputs.</p>
-        </div>
-        <div class="page-actions">
-            <a class="btn btn-outline-primary" href="{{ url_for('portfolio_analysis') }}">&larr; Back to Portfolio Analysis</a>
-        </div>
-    </div>
-
-    <div class="content-stack">
-        <!-- CONFIG FORM -->
+<div class="row g-4 content-stack">
+    <div class="col-12">
         <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Simulation configuration</h5>
+                <small class="text-muted">Tweak the ranges used for stop-loss optimisation.</small>
+            </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('risk_analysis') }}" id="config-form" onsubmit="onConfigSubmit(event)">
                     <div class="row g-3">
@@ -53,12 +29,10 @@
                                 <option value="custom" {% if config['DATA_PERIOD']=='custom' %}selected{% endif %}>Custom</option>
                             </select>
                         </div>
-
                         <div class="col-md-3" id="custom-date-div" style="display:none;">
                             <label for="CUSTOM_START_DATE" class="form-label">Custom Start Date</label>
                             <input type="date" id="CUSTOM_START_DATE" name="CUSTOM_START_DATE" class="form-control" value="{{ config['CUSTOM_START_DATE'] }}">
                         </div>
-
                         <div class="col-md-2">
                             <label class="form-label">Stop Loss Min (%)</label>
                             <input type="number" step="0.1" name="STOP_LOSS_MIN" class="form-control" value="{{ config['STOP_LOSS_PERCENTAGE_RANGE'][0] }}">
@@ -72,8 +46,7 @@
                             <input type="number" step="0.1" name="STOP_LOSS_STEP" class="form-control" value="{{ config['STOP_LOSS_STEP'] }}">
                         </div>
                     </div>
-
-                    <div class="row g-3 mt-2">
+                    <div class="row g-3 mt-1">
                         <div class="col-md-3">
                             <label class="form-label">Num Simulations</label>
                             <input type="number" name="NUM_SIMULATIONS" class="form-control" value="{{ config['NUM_SIMULATIONS'] }}">
@@ -87,32 +60,46 @@
                             <input type="number" name="SPAN_EWMA" class="form-control" value="{{ config['SPAN_EWMA'] }}">
                         </div>
                         <div class="col-md-4 d-flex align-items-end justify-content-end">
-                            <button class="btn btn-primary me-2" type="submit">Save Configuration</button>
+                            <button class="btn btn-primary" type="submit">
+                                <i class="bx bx-save me-2"></i>
+                                Save configuration
+                            </button>
                         </div>
                     </div>
-
-                    <p class="mt-3 muted-note">Tip: selecting <strong>Custom</strong> in Data Period will show the start date field.</p>
+                    <p class="mt-3 muted-note mb-0">Tip: selecting <strong>Custom</strong> in Data Period will show the start date field.</p>
                 </form>
             </div>
         </div>
+    </div>
 
-        <!-- RUN FORM (moved OUTSIDE config form to avoid nested forms) -->
+    <div class="col-12">
         <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Run calculations</h5>
+                <small class="text-muted">Execute Monte Carlo stop-loss analysis with the current configuration.</small>
+            </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('run') }}" id="run-form" onsubmit="onRunSubmit(event)">
-                    <button id="run-btn" class="btn btn-success">Run / Re-run Calculations</button>
+                    <button id="run-btn" class="btn btn-success">
+                        <i class="bx bx-play-circle me-2"></i>
+                        Run / Re-run calculations
+                    </button>
                 </form>
             </div>
         </div>
+    </div>
 
-        <!-- Results table -->
+    <div class="col-12">
         <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Trailing stop &amp; risk analysis</h5>
+                <small class="text-muted">Results generated from the latest Excel export.</small>
+            </div>
             <div class="card-body">
-                <h5>Trailing Stop & Risk Analysis</h5>
                 {% if log_output_table and log_output_table|length > 0 %}
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered table-striped">
-                            <thead>
+                            <thead class="table-light">
                                 <tr>
                                     {% for col in log_output_table[0].keys() %}
                                         <th>{{ col }}</th>
@@ -141,12 +128,22 @@
                 {% endif %}
             </div>
         </div>
+    </div>
 
-        <!-- Toggleable raw log -->
+    <div class="col-12">
         <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <h5 class="mb-0">Execution logs</h5>
+                    <small class="text-muted">Inspect the raw output from the last run.</small>
+                </div>
+                <button class="btn btn-outline-secondary" type="button" onclick="toggleLogs()">
+                    <i class="bx bx-collapse me-2"></i>
+                    Show / Hide full log
+                </button>
+            </div>
             <div class="card-body">
-                <button class="btn btn-outline-secondary mb-3" onclick="toggleLogs()">Show / Hide Full Log</button>
-                <div id="log-box" aria-hidden="true">
+                <div id="log-box" class="log-box" aria-hidden="true">
                     {% if log_output_raw %}
                         {% for line in log_output_raw %}
                             {{ line }}<br>
@@ -158,21 +155,21 @@
             </div>
         </div>
     </div>
-
-    <div class="page-footer-spacer"></div>
 </div>
 
-<!-- Status pill (bottom-left black box) -->
 <div id="status-pill" role="status" aria-live="polite" aria-atomic="true">
     <img id="status-gif" src="https://upload.wikimedia.org/wikipedia/commons/a/ad/YouTube_loading_symbol_3_%28transparent%29.gif" alt="loading">
     <span class="status-text" id="status-text">Working...</span>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
     function toggleLogs() {
         const logBox = document.getElementById('log-box');
         const isHidden = logBox.style.display === 'none' || logBox.style.display === '';
         logBox.style.display = isHidden ? 'block' : 'none';
+        logBox.setAttribute('aria-hidden', (!isHidden).toString());
     }
 
     function toggleCustomDate() {
@@ -180,20 +177,15 @@
         document.getElementById('custom-date-div').style.display = (dataPeriod === 'custom') ? 'block' : 'none';
     }
 
-    // initialize custom date visibility on load
     document.addEventListener('DOMContentLoaded', function() {
         toggleCustomDate();
     });
 
-    // status pill helpers
     function showStatus(message) {
         const pill = document.getElementById('status-pill');
         const text = document.getElementById('status-text');
         text.textContent = message;
-        // Ensure pill width fits message naturally
         pill.style.display = 'inline-flex';
-        // Optionally adjust GIF size if message is very short/long
-        // keep it small; already sized via CSS
     }
 
     function hideStatus() {
@@ -201,71 +193,21 @@
         pill.style.display = 'none';
     }
 
-    // Hook form submits to show status; hide when page unloads or reloads occurs
-    function onRunSubmit(event) {
-        // disable button to prevent double submits (keep your previous behavior)
-        document.getElementById('run-btn').disabled = true;
-        // show status
-        showStatus('Running calculations...');
-        // allow form to submit normally (page will reload when server completes, hiding the pill)
-        return true;
-    }
-
-    function onConfigSubmit(event) {
-        // show saving configuration status
+    async function onConfigSubmit(event) {
         showStatus('Saving configuration...');
-        // allow normal submit
+        setTimeout(() => hideStatus(), 1500);
         return true;
     }
 
-    // If user navigates away or the page reloads, the pill will disappear naturally.
-    // Also hide pill on DOMContentLoaded (in case it remained from previous JS state)
-    window.addEventListener('load', function() {
-        hideStatus();
-    });
-
-    // Optional: if you perform AJAX calls and want to show status during those operations,
-    // call showStatus('...') before starting the AJAX and hideStatus() on completion.
-</script>
-<script>
-    const sidePanel = document.getElementById('sidePanel');
-    const sideOverlay = document.getElementById('sideOverlay');
-    const menuToggle = document.getElementById('menuToggle');
-    const sideClose = document.getElementById('sidePanelClose');
-
-    if (sidePanel && sideOverlay && menuToggle && sideClose) {
-        function openSidePanel() {
-            sidePanel.classList.add('open');
-            sideOverlay.classList.add('open');
-            sidePanel.setAttribute('aria-hidden', 'false');
-            menuToggle.setAttribute('aria-expanded', 'true');
-        }
-
-        function closeSidePanel() {
-            sidePanel.classList.remove('open');
-            sideOverlay.classList.remove('open');
-            sidePanel.setAttribute('aria-hidden', 'true');
-            menuToggle.setAttribute('aria-expanded', 'false');
-        }
-
-        menuToggle.addEventListener('click', () => {
-            const isOpen = sidePanel.classList.contains('open');
-            if (isOpen) {
-                closeSidePanel();
-            } else {
-                openSidePanel();
-            }
-        });
-
-        sideOverlay.addEventListener('click', closeSidePanel);
-        sideClose.addEventListener('click', closeSidePanel);
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && sidePanel.classList.contains('open')) {
-                closeSidePanel();
-            }
-        });
+    async function onRunSubmit(event) {
+        const button = document.getElementById('run-btn');
+        button.disabled = true;
+        showStatus('Running calculations...');
+        setTimeout(() => {
+            hideStatus();
+            button.disabled = false;
+        }, 2000);
+        return true;
     }
 </script>
-</body>
-</html>
-
+{% endblock %}
