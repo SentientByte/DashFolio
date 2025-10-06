@@ -7,7 +7,6 @@ from flask import (
     jsonify,
 )
 import json
-import math
 import subprocess
 import sys
 import os
@@ -15,8 +14,11 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 import pandas as pd
-import yfinance as yf
+
+from Calculations.allocations import normalize_target_allocations
+from Calculations.snapshot import build_portfolio_snapshot
 from Calculations.storage import connect, ensure_risk_results_table
+from Calculations.utils import safe_float
 
 # ------------------------------
 # Paths & constants
@@ -85,6 +87,11 @@ if not os.path.exists(PORTFOLIO_FILE):
             }
         ]
     }
+    if default_portfolio["holdings"]:
+        even = 100.0 / len(default_portfolio["holdings"])
+        default_portfolio["target_allocations"] = {
+            holding["ticker"]: even for holding in default_portfolio["holdings"]
+        }
     with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
         json.dump(default_portfolio, f, indent=4)
     print(f"Created default portfolio file: {PORTFOLIO_FILE}")
@@ -104,229 +111,19 @@ def save_config(config):
 
 def load_portfolio_state() -> Dict[str, Any]:
     with open(PORTFOLIO_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+        data = json.load(f)
+
+    holdings = data.get('holdings', [])
+    data['target_allocations'] = normalize_target_allocations(
+        holdings,
+        data.get('target_allocations'),
+    )
+    return data
 
 
 def save_portfolio_state(data: Dict[str, Any]) -> None:
     with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        if value is None or (isinstance(value, float) and math.isnan(value)):
-            return default
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _normalize_index(series: pd.Series) -> pd.Series:
-    """Ensure the index is a timezone-naive DatetimeIndex for comparisons."""
-    idx = series.index
-    if not isinstance(idx, pd.DatetimeIndex):
-        return series
-    if idx.tz is not None:
-        series.index = idx.tz_localize(None)
-    return series
-
-
-def _historical_close(series: pd.Series, days_back: int) -> float | None:
-    """Return the closing price from *approximately* days_back calendar days ago."""
-    if series.empty:
-        return None
-
-    series = _normalize_index(series)
-    last_idx = series.index[-1] if isinstance(series.index, pd.DatetimeIndex) else None
-    if last_idx is None:
-        # Fallback to positional lookup
-        pos = max(len(series) - (days_back + 1), 0)
-        return float(series.iloc[pos])
-
-    target_date = last_idx - pd.Timedelta(days=days_back)
-    historical = series.loc[series.index <= target_date]
-    if not historical.empty:
-        return float(historical.iloc[-1])
-    return float(series.iloc[0])
-
-
-def _get_market_snapshot(ticker: str) -> Dict[str, Any]:
-    result: Dict[str, Any] = {
-        "current_price": None,
-        "previous_close": None,
-        "week_close": None,
-        "month_close": None,
-    }
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        fast_info = getattr(ticker_obj, "fast_info", None)
-        if fast_info:
-            result["current_price"] = fast_info.get("last_price") or fast_info.get("lastPrice")
-            result["previous_close"] = fast_info.get("previous_close") or fast_info.get("previousClose")
-
-        history = ticker_obj.history(period="6mo", interval="1d")
-        if not history.empty:
-            closes = history.get("Close")
-            if closes is not None:
-                closes = closes.dropna()
-                if not closes.empty:
-                    closes = _normalize_index(closes)
-                    if result["current_price"] is None:
-                        result["current_price"] = float(closes.iloc[-1])
-                    if result["previous_close"] is None:
-                        if len(closes) > 1:
-                            result["previous_close"] = float(closes.iloc[-2])
-                        else:
-                            result["previous_close"] = float(closes.iloc[-1])
-                    result["week_close"] = _historical_close(closes, 7)
-                    result["month_close"] = _historical_close(closes, 30)
-    except Exception as exc:
-        print(f"Warning: failed to fetch market data for {ticker}: {exc}")
-
-    return result
-
-
-def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
-    computed_holdings: List[Dict[str, Any]] = []
-    total_cost = 0.0
-    total_prev_value = 0.0
-    total_week_reference_value = 0.0
-    total_month_reference_value = 0.0
-    total_current_value = 0.0
-    top_mover: Dict[str, Any] | None = None
-
-    for holding in holdings:
-        ticker = str(holding.get("ticker", "")).upper().strip()
-        quantity = _safe_float(holding.get("quantity"))
-        avg_cost = _safe_float(holding.get("average_cost"))
-
-        if not ticker or quantity <= 0:
-            continue
-
-        market = _get_market_snapshot(ticker)
-        current_price = _safe_float(market.get("current_price"), default=0.0)
-        previous_close = _safe_float(market.get("previous_close"), default=current_price)
-        week_close = _safe_float(market.get("week_close"), default=previous_close)
-        month_close = _safe_float(market.get("month_close"), default=previous_close)
-
-        logo_url = holding.get("logo_url") or None
-        name = holding.get("name") or ticker
-
-        total_cost_value = quantity * avg_cost
-        current_value = quantity * current_price
-        prev_value = quantity * previous_close if previous_close else 0.0
-        todays_gain = current_value - prev_value
-        todays_gain_pct = (todays_gain / prev_value * 100) if prev_value else 0.0
-
-        weekly_value = quantity * week_close if week_close else 0.0
-        weekly_gain = current_value - weekly_value
-        weekly_gain_pct = (weekly_gain / weekly_value * 100) if weekly_value else 0.0
-
-        monthly_value = quantity * month_close if month_close else 0.0
-        monthly_gain = current_value - monthly_value
-        monthly_gain_pct = (monthly_gain / monthly_value * 100) if monthly_value else 0.0
-
-        pl_value = current_value - total_cost_value
-        pl_pct = (pl_value / total_cost_value * 100) if total_cost_value else 0.0
-
-        computed_holdings.append(
-            {
-                "ticker": ticker,
-                "name": name,
-                "logo_url": logo_url,
-                "quantity": quantity,
-                "average_cost": avg_cost,
-                "current_price": current_price,
-                "total_cost": total_cost_value,
-                "current_value": current_value,
-                "todays_gain": todays_gain,
-                "todays_gain_pct": todays_gain_pct,
-                "weekly_gain": weekly_gain,
-                "weekly_gain_pct": weekly_gain_pct,
-                "monthly_gain": monthly_gain,
-                "monthly_gain_pct": monthly_gain_pct,
-                "pl_value": pl_value,
-                "pl_pct": pl_pct,
-            }
-        )
-
-        total_cost += total_cost_value
-        total_prev_value += prev_value
-        total_current_value += current_value
-        total_week_reference_value += weekly_value
-        total_month_reference_value += monthly_value
-
-        change_value = todays_gain
-        change_pct = ((current_price - previous_close) / previous_close * 100) if previous_close else 0.0
-        mover_metric = abs(change_value)
-        if top_mover is None or mover_metric > top_mover.get("metric", 0):
-            top_mover = {
-                "ticker": ticker,
-                "name": name,
-                "change_value": change_value,
-                "change_pct": change_pct,
-                "metric": mover_metric,
-            }
-
-    allocation_denominator = total_current_value if total_current_value else 1
-    for holding in computed_holdings:
-        holding["allocation_pct"] = (
-            holding["current_value"] / allocation_denominator * 100 if allocation_denominator else 0.0
-        )
-
-    dod_value = total_current_value - total_prev_value
-    dod_pct = (dod_value / total_prev_value * 100) if total_prev_value else 0.0
-    weekly_change_value = (
-        total_current_value - total_week_reference_value
-        if total_week_reference_value
-        else 0.0
-    )
-    weekly_change_pct = (
-        (weekly_change_value / total_week_reference_value) * 100
-        if total_week_reference_value
-        else 0.0
-    )
-    monthly_change_value = (
-        total_current_value - total_month_reference_value
-        if total_month_reference_value
-        else 0.0
-    )
-    monthly_change_pct = (
-        (monthly_change_value / total_month_reference_value) * 100
-        if total_month_reference_value
-        else 0.0
-    )
-
-    total_pl_value = total_current_value - total_cost
-    total_pl_pct = (total_pl_value / total_cost * 100) if total_cost else 0.0
-
-    summary = {
-        "total_cost": total_cost,
-        "current_value": total_current_value,
-        "dod_value": dod_value,
-        "dod_pct": dod_pct,
-        "weekly_change_value": weekly_change_value,
-        "weekly_change_pct": weekly_change_pct,
-        "monthly_change_value": monthly_change_value,
-        "monthly_change_pct": monthly_change_pct,
-        "total_pl_value": total_pl_value,
-        "total_pl_pct": total_pl_pct,
-        "top_mover": None,
-    }
-
-    if top_mover:
-        summary["top_mover"] = {
-            "ticker": top_mover.get("ticker"),
-            "name": top_mover.get("name"),
-            "change_value": top_mover.get("change_value"),
-            "change_pct": top_mover.get("change_pct"),
-        }
-
-    return {
-        "summary": summary,
-        "holdings": computed_holdings,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
-    }
 
 
 # ------------------------------
@@ -336,7 +133,8 @@ def build_portfolio_snapshot(holdings: List[Dict[str, Any]]) -> Dict[str, Any]:
 def portfolio_analysis():
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
-    snapshot = build_portfolio_snapshot(holdings)
+    targets = portfolio_state.get('target_allocations', {})
+    snapshot = build_portfolio_snapshot(holdings, targets)
     return render_template(
         'portfolio_analysis.html',
         snapshot=snapshot,
@@ -347,10 +145,29 @@ def portfolio_analysis():
     )
 
 
+@app.route('/allocation')
+def allocation_planner():
+    portfolio_state = load_portfolio_state()
+    holdings = portfolio_state.get('holdings', [])
+    targets = portfolio_state.get('target_allocations', {})
+    snapshot = build_portfolio_snapshot(holdings, targets)
+    return render_template(
+        'allocation.html',
+        snapshot=snapshot,
+        holdings_raw=holdings,
+        target_allocations=snapshot.get('target_allocations', {}),
+        active_page='allocation',
+        page_title='Allocation Planner',
+        page_subtitle='Rebalance towards your target mix',
+    )
+
+
 @app.route('/api/portfolio', methods=['GET'])
 def api_get_portfolio():
     portfolio_state = load_portfolio_state()
-    snapshot = build_portfolio_snapshot(portfolio_state.get('holdings', []))
+    holdings = portfolio_state.get('holdings', [])
+    targets = portfolio_state.get('target_allocations', {})
+    snapshot = build_portfolio_snapshot(holdings, targets)
     return jsonify(snapshot)
 
 
@@ -363,8 +180,8 @@ def api_update_portfolio():
     normalized_holdings: List[Dict[str, Any]] = []
     for entry in payload.get('holdings', []):
         ticker = str(entry.get('ticker', '')).upper().strip()
-        quantity = _safe_float(entry.get('quantity'))
-        avg_cost = _safe_float(entry.get('average_cost'))
+        quantity = safe_float(entry.get('quantity'))
+        avg_cost = safe_float(entry.get('average_cost'))
         name = entry.get('name')
         logo_url = entry.get('logo_url')
 
@@ -382,13 +199,62 @@ def api_update_portfolio():
             holding_record['logo_url'] = logo_url
         # Preserve explicit current price if client provides it
         if entry.get('current_price') is not None:
-            holding_record['current_price'] = _safe_float(entry.get('current_price'))
+            holding_record['current_price'] = safe_float(entry.get('current_price'))
 
         normalized_holdings.append(holding_record)
 
-    save_portfolio_state({'holdings': normalized_holdings})
-    snapshot = build_portfolio_snapshot(normalized_holdings)
+    current_state = load_portfolio_state()
+    updated_targets = normalize_target_allocations(
+        normalized_holdings,
+        current_state.get('target_allocations'),
+    )
+
+    save_portfolio_state({
+        'holdings': normalized_holdings,
+        'target_allocations': updated_targets,
+    })
+    snapshot = build_portfolio_snapshot(normalized_holdings, updated_targets)
     return jsonify({'status': 'ok', 'snapshot': snapshot})
+
+
+@app.route('/api/targets', methods=['POST'])
+def api_update_targets():
+    payload = request.get_json(silent=True) or {}
+    target_entries = payload.get('targets', [])
+
+    state = load_portfolio_state()
+    holdings = state.get('holdings', [])
+    if not holdings:
+        return jsonify({'error': 'No holdings available to assign targets'}), 400
+
+    valid_tickers = {str(h.get('ticker', '')).upper().strip() for h in holdings if h.get('ticker')}
+    proposed_targets: Dict[str, float] = {}
+
+    for entry in target_entries:
+        ticker = str(entry.get('ticker', '')).upper().strip()
+        if ticker not in valid_tickers:
+            continue
+        value = safe_float(entry.get('target_pct'))
+        if value < 0:
+            value = 0.0
+        proposed_targets[ticker] = value
+
+    if not proposed_targets:
+        return jsonify({'error': 'No valid targets provided'}), 400
+
+    total_target = sum(proposed_targets.values())
+    if total_target <= 0:
+        return jsonify({'error': 'Total target allocation must be greater than zero'}), 400
+
+    for ticker in valid_tickers:
+        proposed_targets.setdefault(ticker, 0.0)
+
+    normalized = normalize_target_allocations(holdings, proposed_targets)
+    state['target_allocations'] = normalized
+    save_portfolio_state(state)
+
+    snapshot = build_portfolio_snapshot(holdings, normalized)
+    return jsonify({'status': 'ok', 'targets': normalized, 'snapshot': snapshot})
 
 def run_main_script():
     """
