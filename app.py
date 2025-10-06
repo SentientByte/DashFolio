@@ -16,6 +16,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 import yfinance as yf
+from Calculations.storage import connect, ensure_risk_results_table
 
 # ------------------------------
 # Paths & constants
@@ -30,10 +31,11 @@ if not os.path.exists(VENV_PYTHON):
 MAIN_SCRIPT = os.path.join(BASE_DIR, 'main.py')
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 PORTFOLIO_FILE = os.path.join(BASE_DIR, 'portfolio.json')
+DATA_STORE = os.path.join(BASE_DIR, 'dashfolio.db')
 
 app = Flask(__name__)
 log_output_raw = []   # raw stdout lines from main.py
-log_output_table = [] # parsed table (list of dicts) built from Excel result
+log_output_table = [] # parsed table (list of dicts) built from database results
 
 
 @app.context_processor
@@ -422,21 +424,33 @@ def run_main_script():
 
     process.wait()
 
-    # Once done, attempt to load the result Excel file (if created)
+    # Once done, load the latest results from the SQLite database
     try:
         config = load_config()
         data_period = config.get('DATA_PERIOD', '1y')
-        results_file = os.path.join(BASE_DIR, f'trailing_stop_analysis_ewma_{data_period}.xlsx')
-        if os.path.exists(results_file):
-            df = pd.read_excel(results_file, engine='openpyxl')
-            # convert column names to strings (safe for template)
+        with connect(DATA_STORE) as conn:
+            ensure_risk_results_table(conn)
+            query = """
+                SELECT
+                    ticker AS "Ticker",
+                    trailing_stop_pct AS "Trailing Stop (%)",
+                    likelihood_pct AS "Likelihood of Activation (%)",
+                    potential_loss AS "Potential Loss ($)",
+                    ewma_var AS "EWMA VaR ($)"
+                FROM risk_analysis_results
+                WHERE data_period = ?
+                ORDER BY ticker, trailing_stop_pct
+            """
+            df = pd.read_sql_query(query, conn, params=(data_period,))
+        if not df.empty:
             df.columns = [str(c) for c in df.columns]
             log_output_table = df.to_dict(orient='records')
         else:
-            # no results file found; optionally include note
-            log_output_raw.append(f"Note: results file not found: {results_file}")
+            log_output_raw.append(
+                f"Note: no risk analysis results found in database for period {data_period}."
+            )
     except Exception as e:
-        log_output_raw.append(f"Error reading results file: {e}")
+        log_output_raw.append(f"Error reading results from database: {e}")
 
 # ------------------------------
 # Routes

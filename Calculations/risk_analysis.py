@@ -1,12 +1,14 @@
-"""Trailing stop likelihood and VaR calculations."""
+"""Trailing stop likelihood and VaR calculations with SQLite persistence."""
 
 from __future__ import annotations
 
-import os
+from datetime import datetime
 from typing import Dict, Tuple
 
 import numpy as np
 import pandas as pd
+
+from .storage import connect, ensure_risk_results_table
 
 
 def _simulate_trailing_stop(
@@ -43,9 +45,9 @@ def run_trailing_stop_analysis(
     span_ewma: int,
     confidence_level: float,
     data_period: str,
-    output_dir: str,
+    database_path: str,
 ) -> Tuple[pd.DataFrame, str]:
-    """Run trailing stop likelihood simulation and save results."""
+    """Run trailing stop likelihood simulation and persist results to SQLite."""
     results = []
 
     for _, row in df_portfolio.iterrows():
@@ -103,9 +105,49 @@ def run_trailing_stop_analysis(
     print(f"\nTrailing Stop & Risk Analysis ({data_period}, EWMA):")
     print(df_results if not df_results.empty else "No results to display for selected period.")
 
-    output_name = f"trailing_stop_analysis_ewma_{data_period.replace(' ', '_')}.xlsx"
-    output_path = os.path.join(output_dir, output_name)
-    df_results.to_excel(output_path, index=False)
-    print(f"\nResults saved to {output_name}")
+    generated_at = datetime.utcnow().isoformat(timespec="seconds")
 
-    return df_results, output_path
+    with connect(database_path) as conn:
+        ensure_risk_results_table(conn)
+        conn.execute(
+            "DELETE FROM risk_analysis_results WHERE data_period = ?",
+            (data_period,),
+        )
+        if not df_results.empty:
+            rows = [
+                (
+                    data_period,
+                    generated_at,
+                    row["Ticker"],
+                    float(row["Trailing Stop (%)"]),
+                    float(row["Likelihood of Activation (%)"]),
+                    float(row["Potential Loss ($)"]),
+                    float(row["EWMA VaR ($)"]),
+                )
+                for _, row in df_results.iterrows()
+            ]
+            conn.executemany(
+                """
+                INSERT INTO risk_analysis_results (
+                    data_period,
+                    generated_at,
+                    ticker,
+                    trailing_stop_pct,
+                    likelihood_pct,
+                    potential_loss,
+                    ewma_var
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+        conn.commit()
+
+    if df_results.empty:
+        print("\nNo results saved (data frame empty).")
+    else:
+        print(
+            "\nResults saved to SQLite (risk_analysis_results table) for period %s at %s"
+            % (data_period, generated_at)
+        )
+
+    return df_results, generated_at
