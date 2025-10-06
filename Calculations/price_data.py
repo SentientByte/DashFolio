@@ -14,6 +14,29 @@ from .storage import connect, ensure_price_table
 PRICE_COLUMNS = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
 
 
+def _normalise_key(value: str) -> str:
+    """Normalise a column label to compare against canonical names."""
+
+    if not isinstance(value, str):
+        return ""
+
+    key = value.strip().lower()
+    for char in ("_", "-", "*", ".", "/"):
+        key = key.replace(char, " ")
+    return " ".join(key.split())
+
+
+CANONICAL_NAME_BY_KEY = {
+    "open": "Open",
+    "high": "High",
+    "low": "Low",
+    "close": "Close",
+    "adj close": "Adj Close",
+    "adjclose": "Adj Close",
+    "volume": "Volume",
+}
+
+
 def _flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Ensure downloaded data has a flat column index.
 
@@ -30,15 +53,20 @@ def _flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
         flattened = []
         for col in df.columns:
             if isinstance(col, tuple):
-                # Prefer the last non-empty element (usually the ticker symbol or
-                # actual column name) and fall back to the first element if all
-                # entries are empty/None.
-                for item in reversed(col):
-                    if item not in (None, ""):
-                        flattened.append(item)
+                canonical = None
+                fallback_parts = []
+                for item in col:
+                    if item in (None, ""):
+                        continue
+                    key = _normalise_key(item)
+                    if not canonical and key in CANONICAL_NAME_BY_KEY:
+                        canonical = CANONICAL_NAME_BY_KEY[key]
                         break
+                    fallback_parts.append(str(item))
+                if canonical:
+                    flattened.append(canonical)
                 else:
-                    flattened.append(col[0])
+                    flattened.append("_".join(fallback_parts) if fallback_parts else str(col[0]))
             else:
                 flattened.append(col)
         df.columns = flattened
