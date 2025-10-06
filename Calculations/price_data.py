@@ -72,11 +72,54 @@ def _load_local_data(conn, ticker: str) -> pd.DataFrame:
     return df
 
 
+def _normalise_price_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename yfinance columns to the canonical set expected by the app."""
+
+    if df.empty:
+        return df
+
+    rename_map = {}
+    for col in df.columns:
+        if not isinstance(col, str):
+            continue
+
+        key = col.strip().lower()
+        # Normalise whitespace and punctuation so that variants such as
+        # "Adj Close*", "adjclose", "AdjClose" etc. map to the canonical name.
+        for char in ("_", "-", "*", ".", "/"):
+            key = key.replace(char, " ")
+        key = " ".join(key.split())
+
+        if key in {"open", "high", "low", "close", "adj close", "adjclose", "volume"}:
+            canonical = {
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Close",
+                "adj close": "Adj Close",
+                "adjclose": "Adj Close",
+                "volume": "Volume",
+            }[key]
+            rename_map[col] = canonical
+
+    if rename_map:
+        df = df.rename(columns=rename_map)
+
+    # Ensure the canonical columns exist even if the download omitted one of
+    # them (for example, some indices occasionally miss Volume).
+    for col in ["Date", *PRICE_COLUMNS]:
+        if col not in df.columns:
+            df[col] = pd.NA
+
+    return df
+
+
 def _persist_price_rows(conn, ticker: str, df: pd.DataFrame) -> None:
     if df.empty:
         return
 
     df = _flatten_columns(df)
+    df = _normalise_price_columns(df)
     df = df.loc[df["Adj Close"].notna(), ["Date", *PRICE_COLUMNS]]
     if df.empty:
         return
