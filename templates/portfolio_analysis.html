@@ -87,78 +87,88 @@
             Manage holdings
         </button>
     </div>
-    <div class="card-body p-0">
-        {% if snapshot.holdings %}
-            <div class="table-responsive">
-                <table class="table table-hover table-striped align-middle mb-0">
-                    <thead class="table-light">
-                    <tr>
-                        <th class="logo-cell"></th>
-                        <th>Ticker</th>
-                        <th>Avg cost / unit</th>
-                        <th>Current price</th>
-                        <th>Total cost</th>
-                        <th>Current value</th>
-                        <th>Today</th>
-                        <th>Week</th>
-                        <th>Month</th>
-                        <th>P/L</th>
-                        <th>Allocation</th>
+    {% if snapshot.holdings %}
+        <div class="table-responsive text-nowrap">
+            <table class="table mb-0">
+                <thead>
+                <tr>
+                    <th class="logo-cell"></th>
+                    <th class="text-uppercase text-muted small">Ticker</th>
+                    <th class="text-uppercase text-muted small">Avg cost / unit</th>
+                    <th class="text-uppercase text-muted small">Current price</th>
+                    <th class="text-uppercase text-muted small">Total cost</th>
+                    <th class="text-uppercase text-muted small">Current value</th>
+                    <th class="text-uppercase text-muted small">Today</th>
+                    <th class="text-uppercase text-muted small">Week</th>
+                    <th class="text-uppercase text-muted small">Month</th>
+                    <th class="text-uppercase text-muted small">P/L</th>
+                    <th class="text-uppercase text-muted small">Allocation</th>
+                </tr>
+                </thead>
+                <tbody class="table-border-bottom-0" id="holdings-body">
+                {% for holding in snapshot.holdings %}
+                    {% set gain_class = 'gain-positive' if holding.todays_gain >= 0 else 'gain-negative' %}
+                    {% set week_class = 'gain-positive' if holding.weekly_gain >= 0 else 'gain-negative' %}
+                    {% set month_class = 'gain-positive' if holding.monthly_gain >= 0 else 'gain-negative' %}
+                    {% set pl_value = holding.current_value - holding.total_cost %}
+                    {% set pl_class = 'gain-positive' if pl_value >= 0 else 'gain-negative' %}
+                    {% set pl_pct = (pl_value / holding.total_cost * 100) if holding.total_cost else 0.0 %}
+                    <tr data-ticker="{{ holding.ticker }}">
+                        <td class="logo-cell">
+                            {% if holding.logo_url %}
+                                <img src="{{ holding.logo_url }}" alt="{{ holding.ticker }} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
+                            {% else %}
+                                <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="fw-semibold mb-1">{{ holding.ticker }}</div>
+                            <small class="text-muted d-block">{{ holding.name }}</small>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">${{ '%.2f'|format(holding.average_cost) }}</span>
+                        </td>
+                        <td class="current-price">
+                            <span class="fw-semibold">${{ '%.2f'|format(holding.current_price) }}</span>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">${{ '%.2f'|format(holding.total_cost) }}</span>
+                        </td>
+                        <td class="current-value">
+                            <span class="fw-semibold">${{ '%.2f'|format(holding.current_value) }}</span>
+                        </td>
+                        <td class="todays-gain {{ gain_class }}">
+                            <span class="d-block fw-semibold">{{ '+' if holding.todays_gain >= 0 else '-' }}${{ '%.2f'|format(holding.todays_gain|abs) }}</span>
+                            <small class="text-muted">{{ '+' if holding.todays_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.todays_gain_pct|abs) }}%</small>
+                        </td>
+                        <td>
+                            <span class="d-block fw-semibold {{ week_class }}">{{ '+' if holding.weekly_gain >= 0 else '-' }}${{ '%.2f'|format(holding.weekly_gain|abs) }}</span>
+                            <small class="text-muted">{{ '+' if holding.weekly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.weekly_gain_pct|abs) }}%</small>
+                        </td>
+                        <td>
+                            <span class="d-block fw-semibold {{ month_class }}">{{ '+' if holding.monthly_gain >= 0 else '-' }}${{ '%.2f'|format(holding.monthly_gain|abs) }}</span>
+                            <small class="text-muted">{{ '+' if holding.monthly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.monthly_gain_pct|abs) }}%</small>
+                        </td>
+                        <td>
+                            <span class="d-block fw-semibold {{ pl_class }}">{{ '+' if pl_value >= 0 else '-' }}${{ '%.2f'|format(pl_value|abs) }}</span>
+                            <small class="text-muted">{{ '+' if pl_pct >= 0 else '-' }}{{ '%.2f'|format(pl_pct|abs) }}%</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-label-primary">{{ '%.2f'|format(holding.allocation_pct) }}%</span>
+                        </td>
                     </tr>
-                    </thead>
-                    <tbody id="holdings-body">
-                    {% for holding in snapshot.holdings %}
-                        {% set gain_class = 'gain-positive' if holding.todays_gain >= 0 else 'gain-negative' %}
-                        {% set week_class = 'gain-positive' if holding.weekly_gain >= 0 else 'gain-negative' %}
-                        {% set month_class = 'gain-positive' if holding.monthly_gain >= 0 else 'gain-negative' %}
-                        {% set pl_value = holding.current_value - holding.total_cost %}
-                        {% set pl_class = 'gain-positive' if pl_value >= 0 else 'gain-negative' %}
-                        {% set pl_pct = (pl_value / holding.total_cost * 100) if holding.total_cost else 0.0 %}
-                        <tr data-ticker="{{ holding.ticker }}">
-                            <td class="logo-cell">
-                                {% if holding.logo_url %}
-                                    <img src="{{ holding.logo_url }}" alt="{{ holding.ticker }} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
-                                {% else %}
-                                    <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
-                                {% endif %}
-                            </td>
-                            <td>
-                                <div class="fw-semibold">{{ holding.ticker }}</div>
-                                <div class="holding-name">{{ holding.name }}</div>
-                            </td>
-                            <td>${{ '%.2f'|format(holding.average_cost) }}</td>
-                            <td class="current-price">${{ '%.2f'|format(holding.current_price) }}</td>
-                            <td>${{ '%.2f'|format(holding.total_cost) }}</td>
-                            <td class="current-value">${{ '%.2f'|format(holding.current_value) }}</td>
-                            <td class="todays-gain {{ gain_class }}">
-                                {{ '+' if holding.todays_gain >= 0 else '-' }}${{ '%.2f'|format(holding.todays_gain|abs) }}
-                                <div class="text-muted small">{{ '+' if holding.todays_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.todays_gain_pct|abs) }}%</div>
-                            </td>
-                            <td>
-                                <div class="{{ week_class }}">{{ '+' if holding.weekly_gain >= 0 else '-' }}${{ '%.2f'|format(holding.weekly_gain|abs) }}</div>
-                                <div class="text-muted small">{{ '+' if holding.weekly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.weekly_gain_pct|abs) }}%</div>
-                            </td>
-                            <td>
-                                <div class="{{ month_class }}">{{ '+' if holding.monthly_gain >= 0 else '-' }}${{ '%.2f'|format(holding.monthly_gain|abs) }}</div>
-                                <div class="text-muted small">{{ '+' if holding.monthly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.monthly_gain_pct|abs) }}%</div>
-                            </td>
-                            <td>
-                                <div class="{{ pl_class }}">{{ '+' if pl_value >= 0 else '-' }}${{ '%.2f'|format(pl_value|abs) }}</div>
-                                <div class="text-muted small">{{ '+' if pl_pct >= 0 else '-' }}{{ '%.2f'|format(pl_pct|abs) }}%</div>
-                            </td>
-                            <td><span class="allocation-pill">{{ '%.2f'|format(holding.allocation_pct) }}%</span></td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="card-body">
             <div class="empty-state text-center py-5">
                 <h5 class="fw-semibold mb-1">No holdings yet</h5>
                 <p class="text-muted mb-0">Add holdings using the Manage holdings button to begin tracking performance.</p>
             </div>
-        {% endif %}
-    </div>
+        </div>
+    {% endif %}
 </div>
 
 <div class="modal fade" id="portfolioModal" tabindex="-1" aria-labelledby="portfolioModalLabel" aria-hidden="true">
