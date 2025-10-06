@@ -13,6 +13,70 @@ from .storage import connect, ensure_price_table
 
 PRICE_COLUMNS = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
 
+
+def _flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure downloaded data has a flat column index."""
+
+    if isinstance(df.columns, pd.MultiIndex):
+        df = df.copy()
+
+        # If additional levels only contain a single value (e.g. the ticker
+        # symbol), simply drop them to expose the price column names.
+        while isinstance(df.columns, pd.MultiIndex) and df.columns.nlevels > 1:
+            tail_levels = df.columns.levels[1:]
+            if all(len(level) == 1 for level in tail_levels):
+                df.columns = df.columns.droplevel(-1)
+            else:
+                break
+
+        if isinstance(df.columns, pd.MultiIndex):
+            flattened = []
+            for col in df.columns:
+                if isinstance(col, tuple):
+                    # Prefer known price column names when present inside the
+                    # tuple, otherwise keep the first non-empty element.
+                    candidate = next(
+                        (item for item in col if item in PRICE_COLUMNS or item == "Date"),
+                        None,
+                    )
+                    if candidate is None:
+                        candidate = next((item for item in col if item not in (None, "")), "")
+                    flattened.append(candidate)
+                else:
+                    flattened.append(col)
+            df.columns = flattened
+
+    # Ensure the column index is always comprised of strings for predictable
+    # lookups regardless of dtype returned by pandas.
+    df.columns = [str(col) for col in df.columns]
+    return df
+
+
+def _normalise_downloaded_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Flatten and rename columns from yfinance downloads."""
+
+    df = _flatten_columns(df)
+
+    if "Date" not in df.columns:
+        df = df.reset_index()
+        df = _flatten_columns(df)
+
+    rename_map = {}
+    for col in df.columns:
+        lowered = str(col).strip().lower()
+        if lowered == "date":
+            rename_map[col] = "Date"
+            continue
+        for canonical in PRICE_COLUMNS:
+            if lowered == canonical.lower():
+                rename_map[col] = canonical
+                break
+
+    if rename_map:
+        df = df.rename(columns=rename_map)
+
+    return df
+
 INSERT_PRICE_SQL = """
 INSERT OR REPLACE INTO price_data (
     ticker, date, "Open", "High", "Low", "Close", "Adj Close", "Volume"
@@ -44,6 +108,19 @@ def _load_local_data(conn, ticker: str) -> pd.DataFrame:
 def _persist_price_rows(conn, ticker: str, df: pd.DataFrame) -> None:
     if df.empty:
         return
+
+    df = _normalise_downloaded_frame(df)
+
+    required = {"Date", "Adj Close"}
+    if missing := sorted(required - set(df.columns)):
+        print(
+            f"Skipping persistence for {ticker}: missing required columns {', '.join(missing)} from downloaded data."
+        )
+        return
+
+    for col in PRICE_COLUMNS:
+        if col not in df.columns:
+            df[col] = pd.NA
 
     df = df.loc[df["Adj Close"].notna(), ["Date", *PRICE_COLUMNS]]
     if df.empty:
@@ -127,7 +204,7 @@ def load_price_data(
                     auto_adjust=False,
                 )
                 if not new_data.empty:
-                    new_data.reset_index(inplace=True)
+                    new_data = _normalise_downloaded_frame(new_data)
                     if refresh_all:
                         conn.execute("DELETE FROM price_data WHERE ticker = ?", (ticker,))
                     _persist_price_rows(conn, ticker, new_data)
