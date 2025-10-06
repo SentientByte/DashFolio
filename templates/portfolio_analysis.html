@@ -94,6 +94,7 @@
                 <tr>
                     <th class="logo-cell"></th>
                     <th class="text-uppercase text-muted small">Ticker</th>
+                    <th class="text-uppercase text-muted small">Quantity</th>
                     <th class="text-uppercase text-muted small">Avg cost / unit</th>
                     <th class="text-uppercase text-muted small">Current price</th>
                     <th class="text-uppercase text-muted small">Total cost</th>
@@ -102,6 +103,11 @@
                     <th class="text-uppercase text-muted small">Week</th>
                     <th class="text-uppercase text-muted small">Month</th>
                     <th class="text-uppercase text-muted small">P/L</th>
+                    <th class="text-uppercase text-muted small">Volatility (σ)</th>
+                    <th class="text-uppercase text-muted small">Sharpe Ratio</th>
+                    <th class="text-uppercase text-muted small">Max Drawdown</th>
+                    <th class="text-uppercase text-muted small">Beta vs. Benchmark</th>
+                    <th class="text-uppercase text-muted small">Yield on Cost</th>
                     <th class="text-uppercase text-muted small">Allocation</th>
                 </tr>
                 </thead>
@@ -121,10 +127,8 @@
                                 <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
                             {% endif %}
                         </td>
-                        <td>
-                            <div class="fw-semibold mb-1">{{ holding.ticker }}</div>
-                            <small class="text-muted d-block">{{ holding.name }}</small>
-                        </td>
+                        <td class="fw-semibold">{{ holding.ticker }}</td>
+                        <td><span class="fw-semibold">{{ '%.2f'|format(holding.quantity) }}</span></td>
                         <td>
                             <span class="fw-semibold">${{ '%.2f'|format(holding.average_cost) }}</span>
                         </td>
@@ -152,6 +156,21 @@
                         <td>
                             <span class="d-block fw-semibold {{ pl_class }}">{{ '+' if pl_value >= 0 else '-' }}${{ '%.2f'|format(pl_value|abs) }}</span>
                             <small class="text-muted">{{ '+' if pl_pct >= 0 else '-' }}{{ '%.2f'|format(pl_pct|abs) }}%</small>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">{{ '%.2f'|format(holding.volatility_pct) }}%</span>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">{{ '%.2f'|format(holding.sharpe_ratio) }}</span>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">{{ '%.2f'|format(holding.max_drawdown_pct) }}%</span>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">{{ '%.2f'|format(holding.beta_vs_benchmark) }}</span>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">{{ '%.2f'|format(holding.yield_on_cost_pct) }}%</span>
                         </td>
                         <td>
                             <span class="badge bg-label-primary">{{ '%.2f'|format(holding.allocation_pct) }}%</span>
@@ -261,6 +280,24 @@
         return `${prefix}${Math.abs(value).toFixed(2)}%`;
     }
 
+    function formatPercentPlain(value) {
+        if (!isFinite(value)) {
+            value = 0;
+        }
+        return `${value.toFixed(2)}%`;
+    }
+
+    function formatNumber(value, digits = 2) {
+        if (!isFinite(value)) {
+            value = 0;
+        }
+        return Number(value).toFixed(digits);
+    }
+
+    function formatQuantity(value) {
+        return formatNumber(value, 2);
+    }
+
     function updateMetrics(snapshot) {
         const summary = snapshot.summary || {};
         const dodValue = summary.dod_value || 0;
@@ -329,8 +366,8 @@
         const safePercent = Number.isFinite(percent) ? percent : 0;
         const positive = safeValue >= 0;
         const cls = positive ? 'gain-positive' : 'gain-negative';
-        return `<div class="${cls}">${formatSignedCurrency(safeValue)}</div>` +
-            `<div class="text-muted small">${formatPercent(safePercent)}</div>`;
+        return `<span class="d-block fw-semibold ${cls}">${formatSignedCurrency(safeValue)}</span>` +
+            `<small class="text-muted">${formatPercent(safePercent)}</small>`;
     }
 
     function refreshTable(snapshot) {
@@ -353,7 +390,8 @@
             const logoSrc = holding.logo_url || 'https://via.placeholder.com/42?text=%20';
             row.innerHTML = `
                 <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
-                <td><div class="fw-semibold">${holding.ticker}</div><div class="holding-name">${holding.name || ''}</div></td>
+                <td class="fw-semibold">${holding.ticker}</td>
+                <td><span class="fw-semibold">${formatQuantity(holding.quantity)}</span></td>
                 <td>${formatCurrency(holding.average_cost)}</td>
                 <td class="current-price">${formatCurrency(holding.current_price)}</td>
                 <td>${formatCurrency(holding.total_cost)}</td>
@@ -362,7 +400,12 @@
                 <td>${buildGainCell(holding.weekly_gain, holding.weekly_gain_pct)}</td>
                 <td>${buildGainCell(holding.monthly_gain, holding.monthly_gain_pct)}</td>
                 <td>${buildGainCell(holding.pl_value, holding.pl_pct)}</td>
-                <td><span class="allocation-pill">${(holding.allocation_pct || 0).toFixed(2)}%</span></td>
+                <td><span class="fw-semibold">${formatPercentPlain(holding.volatility_pct || 0)}</span></td>
+                <td><span class="fw-semibold">${formatNumber(holding.sharpe_ratio || 0)}</span></td>
+                <td><span class="fw-semibold">${formatPercentPlain(holding.max_drawdown_pct || 0)}</span></td>
+                <td><span class="fw-semibold">${formatNumber(holding.beta_vs_benchmark || 0)}</span></td>
+                <td><span class="fw-semibold">${formatPercentPlain(holding.yield_on_cost_pct || 0)}</span></td>
+                <td><span class="allocation-pill">${formatNumber(holding.allocation_pct || 0)}%</span></td>
             `;
             tbody.appendChild(row);
         });

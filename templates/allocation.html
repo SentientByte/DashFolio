@@ -1,0 +1,416 @@
+{% extends 'layout.html' %}
+{% block title %}Allocation Planner{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <p class="text-muted mb-0">Visualize your current allocation and calculate the trades required to reach your targets.</p>
+    <button class="btn btn-primary d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#targetModal">
+        <i class="bx bx-slider me-2"></i>
+        Adjust target allocation
+    </button>
+</div>
+
+{% if snapshot.holdings %}
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Current allocation</h5>
+                <canvas id="allocationChart" height="260"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                    <div>
+                        <h5 class="card-title mb-1">Rebalancing actions</h5>
+                        <small class="text-muted">Calculated against your target allocation.</small>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="buyOnlyToggle">
+                        <label class="form-check-label" for="buyOnlyToggle">Buy only mode</label>
+                    </div>
+                </div>
+                <div class="table-responsive text-nowrap">
+                    <table class="table align-middle mb-0" id="rebalance-table">
+                        <thead>
+                        <tr>
+                            <th class="logo-cell"></th>
+                            <th class="text-uppercase text-muted small">Ticker</th>
+                            <th class="text-uppercase text-muted small">Target %</th>
+                            <th class="text-uppercase text-muted small">Current %</th>
+                            <th class="text-uppercase text-muted small">Action</th>
+                            <th class="text-uppercase text-muted small">Quantity</th>
+                            <th class="text-uppercase text-muted small">Trade value</th>
+                        </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <h5 class="fw-semibold mb-1">No holdings available</h5>
+        <p class="text-muted mb-0">Add holdings from the Portfolio Overview page to unlock allocation planning.</p>
+    </div>
+</div>
+{% endif %}
+
+<div class="modal fade" id="targetModal" tabindex="-1" aria-labelledby="targetModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="targetModalLabel">Adjust target allocation</h5>
+                    <p class="text-muted mb-0">Distribute 100% across your holdings to set a target mix.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if snapshot.holdings %}
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">Targets</h6>
+                    <span class="badge bg-label-secondary" id="target-total-badge"><span id="target-total">0.00%</span> allocated</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Current allocation</th>
+                            <th>Target %</th>
+                        </tr>
+                        </thead>
+                        <tbody id="target-form-body"></tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Add holdings before configuring allocation targets.</p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-targets" {% if not snapshot.holdings %}disabled{% endif %}>Save targets</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+    const holdingsSnapshot = {{ snapshot.holdings|tojson }};
+    let holdingsData = Array.isArray(holdingsSnapshot) ? holdingsSnapshot.slice() : [];
+    let targetMap = {{ target_allocations|tojson }};
+
+    const chartColors = ['#696cff', '#8592a3', '#71dd37', '#ffab00', '#ff3e1d', '#03c3ec', '#fd3550', '#9c27b0'];
+    let allocationChart = null;
+
+    const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+    function formatCurrency(value) {
+        return currencyFormatter.format(isFinite(value) ? value : 0);
+    }
+
+    function formatSignedCurrency(value) {
+        const formatted = formatCurrency(Math.abs(isFinite(value) ? value : 0));
+        if (!isFinite(value) || value === 0) {
+            return formatCurrency(0);
+        }
+        return value > 0 ? `+${formatted}` : `-${formatted}`;
+    }
+
+    function formatPercentPlain(value) {
+        if (!isFinite(value)) {
+            value = 0;
+        }
+        return `${value.toFixed(2)}%`;
+    }
+
+    function formatSignedQuantity(value) {
+        if (!isFinite(value) || value === 0) {
+            return '0.00';
+        }
+        const prefix = value > 0 ? '+' : '-';
+        return `${prefix}${Math.abs(value).toFixed(2)}`;
+    }
+
+    function roundQuantity(quantity, maxAvailable) {
+        if (!isFinite(quantity) || quantity === 0) {
+            return 0;
+        }
+        if (quantity > 0) {
+            return Math.ceil(quantity * 100) / 100;
+        }
+        const needed = Math.ceil(Math.abs(quantity) * 100) / 100;
+        const available = Math.max(0, isFinite(maxAvailable) ? maxAvailable : 0);
+        if (available === 0) {
+            return -needed;
+        }
+        const limited = Math.min(needed, available);
+        return -Math.round(limited * 100) / 100;
+    }
+
+    function getTotalValue() {
+        return holdingsData.reduce((sum, holding) => sum + (holding.current_value || 0), 0);
+    }
+
+    function computePlan(buyOnly) {
+        const total = getTotalValue();
+        if (!total) {
+            return [];
+        }
+
+        const base = holdingsData.map(holding => {
+            const ticker = holding.ticker;
+            const targetPct = Number(targetMap?.[ticker] ?? 0);
+            const targetWeight = targetPct / 100;
+            const currentValue = Number(holding.current_value || 0);
+            const currentWeight = total ? currentValue / total : 0;
+            return {
+                ticker,
+                logo_url: holding.logo_url,
+                targetPct,
+                targetWeight,
+                currentPct: currentWeight * 100,
+                currentValue,
+                price: Number(holding.current_price || 0),
+                quantityHeld: Number(holding.quantity || 0),
+                rawQuantity: 0,
+                tradeValue: 0,
+            };
+        });
+
+        if (buyOnly) {
+            const buyCandidates = base.filter(item => item.targetWeight > 0 && item.targetWeight > (item.currentPct / 100));
+            const weightSum = buyCandidates.reduce((sum, item) => sum + item.targetWeight, 0);
+            const currentSum = buyCandidates.reduce((sum, item) => sum + item.currentValue, 0);
+            let extraCapital = 0;
+            if (weightSum > 0 && weightSum < 1) {
+                extraCapital = (weightSum * total - currentSum) / (1 - weightSum);
+            }
+            if (!isFinite(extraCapital) || extraCapital < 0) {
+                extraCapital = 0;
+            }
+            const adjustedTotal = total + extraCapital;
+            base.forEach(item => {
+                const desiredValue = item.targetWeight * adjustedTotal;
+                const deltaValue = desiredValue - item.currentValue;
+                const tradeValue = deltaValue > 0 ? deltaValue : 0;
+                item.tradeValue = tradeValue;
+                item.rawQuantity = item.price ? tradeValue / item.price : 0;
+            });
+        } else {
+            base.forEach(item => {
+                const desiredValue = item.targetWeight * total;
+                const deltaValue = desiredValue - item.currentValue;
+                item.tradeValue = deltaValue;
+                item.rawQuantity = item.price ? deltaValue / item.price : 0;
+            });
+        }
+
+        return base.map(item => {
+            const roundedQty = roundQuantity(item.rawQuantity, item.quantityHeld);
+            const tradeValue = roundedQty * item.price;
+            return {
+                ticker: item.ticker,
+                logo_url: item.logo_url,
+                targetPct: item.targetPct,
+                currentPct: item.currentPct,
+                quantity: roundedQty,
+                tradeValue,
+            };
+        });
+    }
+
+    function renderRebalanceTable(buyOnly) {
+        const tableBody = document.querySelector('#rebalance-table tbody');
+        if (!tableBody) {
+            return;
+        }
+        tableBody.innerHTML = '';
+        if (!holdingsData.length || !getTotalValue()) {
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No holdings to rebalance.</td></tr>';
+            return;
+        }
+
+        const plan = computePlan(buyOnly);
+        plan.forEach(item => {
+            const row = document.createElement('tr');
+            const logoSrc = item.logo_url || 'https://via.placeholder.com/42?text=%20';
+            let actionBadge = '<span class="badge bg-label-secondary">Hold</span>';
+            if (item.quantity > 0) {
+                actionBadge = '<span class="badge bg-label-success">Buy</span>';
+            } else if (item.quantity < 0) {
+                actionBadge = '<span class="badge bg-label-danger">Sell</span>';
+            }
+            row.innerHTML = `
+                <td class="logo-cell"><img src="${logoSrc}" alt="${item.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
+                <td class="fw-semibold">${item.ticker}</td>
+                <td>${formatPercentPlain(item.targetPct)}</td>
+                <td>${formatPercentPlain(item.currentPct)}</td>
+                <td>${actionBadge}</td>
+                <td class="fw-semibold">${formatSignedQuantity(item.quantity)}</td>
+                <td class="fw-semibold">${formatSignedCurrency(item.tradeValue)}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function renderChart() {
+        const canvas = document.getElementById('allocationChart');
+        if (!canvas || !holdingsData.length) {
+            return;
+        }
+        const total = getTotalValue();
+        const labels = holdingsData.map(holding => holding.ticker);
+        const data = holdingsData.map(holding => {
+            const value = Number(holding.current_value || 0);
+            return total ? (value / total) * 100 : 0;
+        });
+        if (allocationChart) {
+            allocationChart.data.labels = labels;
+            allocationChart.data.datasets[0].data = data;
+            allocationChart.update();
+            return;
+        }
+        allocationChart = new Chart(canvas, {
+            type: 'pie',
+            data: {
+                labels,
+                datasets: [{
+                    data,
+                    backgroundColor: chartColors,
+                    borderWidth: 1,
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                }
+            }
+        });
+    }
+
+    function populateTargetForm() {
+        const tbody = document.getElementById('target-form-body');
+        if (!tbody) {
+            return;
+        }
+        tbody.innerHTML = '';
+        holdingsData.forEach(holding => {
+            const row = document.createElement('tr');
+            const targetValue = Number(targetMap?.[holding.ticker] ?? 0);
+            const currentPct = getTotalValue() ? (Number(holding.current_value || 0) / getTotalValue()) * 100 : 0;
+            row.innerHTML = `
+                <td class="fw-semibold">${holding.ticker}</td>
+                <td>${formatPercentPlain(currentPct)}</td>
+                <td><input type="number" class="form-control target-input" data-ticker="${holding.ticker}" min="0" step="0.01" value="${targetValue.toFixed(2)}"></td>
+            `;
+            tbody.appendChild(row);
+        });
+        updateTargetTotalBadge();
+    }
+
+    function updateTargetTotalBadge() {
+        const badge = document.getElementById('target-total-badge');
+        const valueEl = document.getElementById('target-total');
+        if (!badge || !valueEl) {
+            return;
+        }
+        const inputs = document.querySelectorAll('#target-form-body .target-input');
+        let total = 0;
+        inputs.forEach(input => {
+            const val = parseFloat(input.value);
+            if (!isNaN(val)) {
+                total += val;
+            }
+        });
+        valueEl.textContent = `${total.toFixed(2)}%`;
+        badge.classList.remove('bg-label-success', 'bg-label-warning', 'bg-label-secondary');
+        if (Math.abs(total - 100) < 0.01) {
+            badge.classList.add('bg-label-success');
+        } else if (total > 100) {
+            badge.classList.add('bg-label-warning');
+        } else {
+            badge.classList.add('bg-label-secondary');
+        }
+    }
+
+    async function saveTargets() {
+        const inputs = document.querySelectorAll('#target-form-body .target-input');
+        const payload = [];
+        inputs.forEach(input => {
+            const ticker = input.dataset.ticker;
+            const value = parseFloat(input.value);
+            if (ticker) {
+                payload.push({ ticker, target_pct: isNaN(value) ? 0 : value });
+            }
+        });
+
+        try {
+            const response = await fetch('{{ url_for('api_update_targets') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targets: payload })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const message = data.error || 'Unable to save targets. Please ensure your allocations sum to more than 0%.';
+                throw new Error(message);
+            }
+            if (data.targets) {
+                targetMap = data.targets;
+            }
+            if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
+                holdingsData = data.snapshot.holdings;
+            }
+            const modalEl = document.getElementById('targetModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) {
+                modal.hide();
+            }
+            renderChart();
+            renderRebalanceTable(document.getElementById('buyOnlyToggle')?.checked);
+        } catch (error) {
+            console.error(error);
+            alert(error.message || 'Unable to save targets. Please ensure your allocations sum to more than 0%.');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const buyOnlyToggle = document.getElementById('buyOnlyToggle');
+        if (buyOnlyToggle) {
+            buyOnlyToggle.addEventListener('change', () => {
+                renderRebalanceTable(buyOnlyToggle.checked);
+            });
+        }
+
+        const targetModalEl = document.getElementById('targetModal');
+        if (targetModalEl) {
+            targetModalEl.addEventListener('show.bs.modal', populateTargetForm);
+        }
+
+        const targetFormBody = document.getElementById('target-form-body');
+        if (targetFormBody) {
+            targetFormBody.addEventListener('input', updateTargetTotalBadge);
+        }
+
+        const saveTargetsBtn = document.getElementById('save-targets');
+        if (saveTargetsBtn) {
+            saveTargetsBtn.addEventListener('click', saveTargets);
+        }
+
+        renderChart();
+        renderRebalanceTable(false);
+    });
+</script>
+{% endblock %}

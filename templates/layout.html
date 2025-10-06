@@ -37,6 +37,12 @@
                         <div data-i18n="Portfolio">Portfolio Overview</div>
                     </a>
                 </li>
+                <li class="menu-item {% if active_page == 'allocation' %}active{% endif %}">
+                    <a href="{{ url_for('allocation_planner') }}" class="menu-link">
+                        <i class="menu-icon bx bx-adjust"></i>
+                        <div data-i18n="Allocation">Allocation Planner</div>
+                    </a>
+                </li>
                 <li class="menu-item {% if active_page == 'risk' %}active{% endif %}">
                     <a href="{{ url_for('risk_analysis') }}" class="menu-link">
                         <i class="menu-icon bx bx-shield-quarter"></i>
