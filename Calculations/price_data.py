@@ -111,10 +111,24 @@ def _normalise_price_columns(df: pd.DataFrame) -> pd.DataFrame:
         if not isinstance(col, str):
             continue
 
-        key = _normalise_key(col)
+        key = col.strip().lower()
+        # Normalise whitespace and punctuation so that variants such as
+        # "Adj Close*", "adjclose", "AdjClose" etc. map to the canonical name.
+        for char in ("_", "-", "*", ".", "/"):
+            key = key.replace(char, " ")
+        key = " ".join(key.split())
 
-        if key in CANONICAL_NAME_BY_KEY:
-            rename_map[col] = CANONICAL_NAME_BY_KEY[key]
+        if key in {"open", "high", "low", "close", "adj close", "adjclose", "volume"}:
+            canonical = {
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Close",
+                "adj close": "Adj Close",
+                "adjclose": "Adj Close",
+                "volume": "Volume",
+            }[key]
+            rename_map[col] = canonical
 
     if rename_map:
         df = df.rename(columns=rename_map)
