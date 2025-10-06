@@ -13,6 +13,37 @@ from .storage import connect, ensure_price_table
 
 PRICE_COLUMNS = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
 
+
+def _flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure downloaded data has a flat column index.
+
+    When yfinance returns data for a single ticker it sometimes still includes
+    a multi-index where the last element is the actual column name.  Pandas
+    will then treat ``df["Adj Close"]`` as a DataFrame rather than a Series,
+    which later causes "Cannot index with multidimensional key" errors when we
+    attempt to filter rows.  Normalising the column index keeps the rest of the
+    logic simple and resilient to either single-level or multi-level inputs.
+    """
+
+    if isinstance(df.columns, pd.MultiIndex):
+        df = df.copy()
+        flattened = []
+        for col in df.columns:
+            if isinstance(col, tuple):
+                # Prefer the last non-empty element (usually the ticker symbol or
+                # actual column name) and fall back to the first element if all
+                # entries are empty/None.
+                for item in reversed(col):
+                    if item not in (None, ""):
+                        flattened.append(item)
+                        break
+                else:
+                    flattened.append(col[0])
+            else:
+                flattened.append(col)
+        df.columns = flattened
+    return df
+
 INSERT_PRICE_SQL = """
 INSERT OR REPLACE INTO price_data (
     ticker, date, "Open", "High", "Low", "Close", "Adj Close", "Volume"
@@ -45,6 +76,7 @@ def _persist_price_rows(conn, ticker: str, df: pd.DataFrame) -> None:
     if df.empty:
         return
 
+    df = _flatten_columns(df)
     df = df.loc[df["Adj Close"].notna(), ["Date", *PRICE_COLUMNS]]
     if df.empty:
         return
@@ -127,7 +159,9 @@ def load_price_data(
                     auto_adjust=False,
                 )
                 if not new_data.empty:
+                    new_data = _flatten_columns(new_data)
                     new_data.reset_index(inplace=True)
+                    new_data = _flatten_columns(new_data)
                     if refresh_all:
                         conn.execute("DELETE FROM price_data WHERE ticker = ?", (ticker,))
                     _persist_price_rows(conn, ticker, new_data)
