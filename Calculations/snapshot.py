@@ -5,8 +5,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List
 
+import pandas as pd
+
 from .allocations import normalize_target_allocations
-from .market_data import get_benchmark_returns, get_market_snapshot
+from .market_data import (
+    get_benchmark_history,
+    get_benchmark_returns,
+    get_market_snapshot,
+)
 from .risk_metrics import compute_risk_metrics
 from .utils import safe_float
 
@@ -24,6 +30,8 @@ def build_portfolio_snapshot(
     top_mover: Dict[str, Any] | None = None
 
     benchmark_returns = get_benchmark_returns()
+    benchmark_history = get_benchmark_history()
+    portfolio_history: pd.Series | None = None
 
     for holding in holdings:
         ticker = str(holding.get("ticker", "")).upper().strip()
@@ -64,6 +72,15 @@ def build_portfolio_snapshot(
             market.get("price_history"),
             benchmark_returns,
         )
+
+        price_history = market.get("price_history")
+        if price_history is not None and not price_history.empty:
+            value_series = price_history.astype(float) * quantity
+            portfolio_history = (
+                value_series
+                if portfolio_history is None
+                else portfolio_history.add(value_series, fill_value=0)
+            )
 
         computed_holdings.append(
             {
@@ -115,6 +132,9 @@ def build_portfolio_snapshot(
             holding["current_value"] / allocation_denominator * 100 if allocation_denominator else 0.0
         )
 
+    if portfolio_history is not None and not portfolio_history.empty:
+        portfolio_history = portfolio_history.sort_index()
+
     normalized_targets = normalize_target_allocations(computed_holdings, target_allocations)
     for holding in computed_holdings:
         holding["target_pct"] = normalized_targets.get(holding["ticker"], 0.0)
@@ -163,9 +183,37 @@ def build_portfolio_snapshot(
             "change_pct": top_mover.get("change_pct"),
         }
 
+    performance_vs_benchmark: List[Dict[str, Any]] = []
+    if portfolio_history is not None and not portfolio_history.empty:
+        portfolio_returns = portfolio_history.pct_change().fillna(0.0)
+        if not portfolio_returns.empty:
+            portfolio_curve = (1 + portfolio_returns).cumprod() * 100
+
+            benchmark_curve = None
+            if benchmark_history is not None and not benchmark_history.empty:
+                benchmark_history = benchmark_history.sort_index()
+                benchmark_history = benchmark_history.reindex(portfolio_curve.index, method="ffill")
+                benchmark_returns_curve = benchmark_history.pct_change().fillna(0.0)
+                benchmark_curve = (1 + benchmark_returns_curve).cumprod() * 100
+            elif not benchmark_returns.empty:
+                aligned_returns = benchmark_returns.reindex(portfolio_curve.index).fillna(0.0)
+                benchmark_curve = (1 + aligned_returns).cumprod() * 100
+
+            if benchmark_curve is not None and not benchmark_curve.empty:
+                benchmark_curve = benchmark_curve.reindex(portfolio_curve.index).fillna(method="ffill").fillna(100.0)
+                performance_vs_benchmark = [
+                    {
+                        "date": idx.strftime("%Y-%m-%d") if isinstance(idx, pd.Timestamp) else str(idx),
+                        "portfolio": float(portfolio_curve.loc[idx]),
+                        "benchmark": float(benchmark_curve.loc[idx]),
+                    }
+                    for idx in portfolio_curve.index
+                ]
+
     return {
         "summary": summary,
         "holdings": computed_holdings,
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "target_allocations": normalized_targets,
+        "performance_vs_benchmark": performance_vs_benchmark,
     }

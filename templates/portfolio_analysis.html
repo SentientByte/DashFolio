@@ -76,6 +76,19 @@
     </div>
 </div>
 
+<div class="card mb-4" id="performance-card">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h5 class="mb-1">Portfolio vs. SPY</h5>
+            <small class="text-muted">Indexed to 100 to compare cumulative performance</small>
+        </div>
+        <span class="badge bg-label-primary">Benchmark: SPY</span>
+    </div>
+    <div class="card-body">
+        <div id="incomeChart" style="min-height: 320px;"></div>
+    </div>
+</div>
+
 <div class="card" id="holdings-card">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
@@ -103,11 +116,6 @@
                     <th class="text-uppercase text-muted small">Week</th>
                     <th class="text-uppercase text-muted small">Month</th>
                     <th class="text-uppercase text-muted small">P/L</th>
-                    <th class="text-uppercase text-muted small">Volatility (σ)</th>
-                    <th class="text-uppercase text-muted small">Sharpe Ratio</th>
-                    <th class="text-uppercase text-muted small">Max Drawdown</th>
-                    <th class="text-uppercase text-muted small">Beta vs. Benchmark</th>
-                    <th class="text-uppercase text-muted small">Yield on Cost</th>
                     <th class="text-uppercase text-muted small">Allocation</th>
                 </tr>
                 </thead>
@@ -158,21 +166,6 @@
                             <small class="text-muted">{{ '+' if pl_pct >= 0 else '-' }}{{ '%.2f'|format(pl_pct|abs) }}%</small>
                         </td>
                         <td>
-                            <span class="fw-semibold">{{ '%.2f'|format(holding.volatility_pct) }}%</span>
-                        </td>
-                        <td>
-                            <span class="fw-semibold">{{ '%.2f'|format(holding.sharpe_ratio) }}</span>
-                        </td>
-                        <td>
-                            <span class="fw-semibold">{{ '%.2f'|format(holding.max_drawdown_pct) }}%</span>
-                        </td>
-                        <td>
-                            <span class="fw-semibold">{{ '%.2f'|format(holding.beta_vs_benchmark) }}</span>
-                        </td>
-                        <td>
-                            <span class="fw-semibold">{{ '%.2f'|format(holding.yield_on_cost_pct) }}%</span>
-                        </td>
-                        <td>
                             <span class="badge bg-label-primary">{{ '%.2f'|format(holding.allocation_pct) }}%</span>
                         </td>
                     </tr>
@@ -187,7 +180,53 @@
                 <p class="text-muted mb-0">Add holdings using the Manage holdings button to begin tracking performance.</p>
             </div>
         </div>
-    {% endif %}
+{% endif %}
+
+<div class="card mt-4" id="portfolio-kpi-card">
+    <div class="card-header">
+        <h5 class="mb-1">Portfolio KPIs</h5>
+        <small class="text-muted">Volatility and risk metrics by holding</small>
+    </div>
+    <div class="table-responsive text-nowrap {% if not snapshot.holdings %}d-none{% endif %}" id="kpi-table-wrapper">
+        <table class="table mb-0">
+            <thead>
+            <tr>
+                <th class="logo-cell"></th>
+                <th class="text-uppercase text-muted small">Ticker</th>
+                <th class="text-uppercase text-muted small">Volatility (σ)</th>
+                <th class="text-uppercase text-muted small">Sharpe Ratio</th>
+                <th class="text-uppercase text-muted small">Max Drawdown</th>
+                <th class="text-uppercase text-muted small">Beta vs. Benchmark</th>
+                <th class="text-uppercase text-muted small">Yield on Cost</th>
+            </tr>
+            </thead>
+            <tbody class="table-border-bottom-0" id="kpi-body">
+            {% if snapshot.holdings %}
+                {% for holding in snapshot.holdings %}
+                <tr>
+                    <td class="logo-cell">
+                        {% if holding.logo_url %}
+                            <img src="{{ holding.logo_url }}" alt="{{ holding.ticker }} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
+                        {% else %}
+                            <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
+                        {% endif %}
+                    </td>
+                    <td class="fw-semibold">{{ holding.ticker }}</td>
+                    <td><span class="fw-semibold">{{ '%.2f'|format(holding.volatility_pct) }}%</span></td>
+                    <td><span class="fw-semibold">{{ '%.2f'|format(holding.sharpe_ratio) }}</span></td>
+                    <td><span class="fw-semibold">{{ '%.2f'|format(holding.max_drawdown_pct) }}%</span></td>
+                    <td><span class="fw-semibold">{{ '%.2f'|format(holding.beta_vs_benchmark) }}</span></td>
+                    <td><span class="fw-semibold">{{ '%.2f'|format(holding.yield_on_cost_pct) }}%</span></td>
+                </tr>
+                {% endfor %}
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body text-center py-4 {% if snapshot.holdings %}d-none{% endif %}" id="kpi-empty-state">
+        <p class="text-muted mb-0">Add holdings to review key performance indicators.</p>
+    </div>
+</div>
 </div>
 
 <div class="modal fade" id="portfolioModal" tabindex="-1" aria-labelledby="portfolioModalLabel" aria-hidden="true">
@@ -258,7 +297,11 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 <script>
+    const initialPerformanceData = {{ snapshot.performance_vs_benchmark|tojson }} || [];
+    let incomeChart = null;
+
     function formatCurrency(value) {
         const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
         return formatter.format(isFinite(value) ? value : 0);
@@ -296,6 +339,102 @@
 
     function formatQuantity(value) {
         return formatNumber(value, 2);
+    }
+
+    function destroyIncomeChart() {
+        if (incomeChart) {
+            incomeChart.destroy();
+            incomeChart = null;
+        }
+    }
+
+    function renderIncomeChart(performanceData) {
+        const chartEl = document.getElementById('incomeChart');
+        if (!chartEl) {
+            return;
+        }
+
+        if (!Array.isArray(performanceData) || performanceData.length === 0) {
+            destroyIncomeChart();
+            chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to compare performance yet.</div>';
+            return;
+        }
+
+        const portfolioSeries = performanceData.map(point => ({
+            x: point.date,
+            y: Number(point.portfolio || 0)
+        }));
+        const benchmarkSeries = performanceData.map(point => ({
+            x: point.date,
+            y: Number(point.benchmark || 0)
+        }));
+
+        const options = {
+            chart: {
+                type: 'area',
+                height: 320,
+                toolbar: { show: false },
+            },
+            series: [
+                { name: 'Portfolio', data: portfolioSeries },
+                { name: 'SPY Benchmark', data: benchmarkSeries }
+            ],
+            colors: ['#696cff', '#03c3ec'],
+            dataLabels: { enabled: false },
+            stroke: { curve: 'smooth', width: 3 },
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shadeIntensity: 0.6,
+                    opacityFrom: 0.4,
+                    opacityTo: 0.05,
+                    stops: [0, 90, 100],
+                },
+            },
+            xaxis: {
+                type: 'datetime',
+                labels: {
+                    format: 'MMM yy',
+                },
+            },
+            yaxis: {
+                labels: {
+                    formatter: value => `${Number(value || 0).toFixed(0)}`,
+                },
+                title: {
+                    text: 'Indexed Performance (Base = 100)',
+                },
+            },
+            tooltip: {
+                shared: true,
+                x: {
+                    format: 'MMM dd, yyyy',
+                },
+                y: {
+                    formatter: value => `${Number(value || 0).toFixed(2)}`,
+                },
+            },
+            legend: {
+                position: 'top',
+            },
+        };
+
+        if (!incomeChart) {
+            chartEl.innerHTML = '';
+            incomeChart = new ApexCharts(chartEl, options);
+            incomeChart.render();
+        } else {
+            incomeChart.updateOptions({
+                xaxis: options.xaxis,
+                yaxis: options.yaxis,
+                stroke: options.stroke,
+                fill: options.fill,
+                colors: options.colors,
+                tooltip: options.tooltip,
+                legend: options.legend,
+            });
+            incomeChart.updateSeries(options.series);
+        }
     }
 
     function updateMetrics(snapshot) {
@@ -372,15 +511,33 @@
 
     function refreshTable(snapshot) {
         const tbody = document.getElementById('holdings-body');
+        const kpiBody = document.getElementById('kpi-body');
+        const kpiWrapper = document.getElementById('kpi-table-wrapper');
+        const kpiEmptyState = document.getElementById('kpi-empty-state');
+
         if (!tbody) {
             window.location.reload();
             return;
         }
 
         const holdings = snapshot.holdings || [];
+
+        if (kpiBody) {
+            kpiBody.innerHTML = '';
+        }
+
         if (holdings.length === 0) {
+            if (kpiWrapper && kpiEmptyState) {
+                kpiWrapper.classList.add('d-none');
+                kpiEmptyState.classList.remove('d-none');
+            }
             window.location.reload();
             return;
+        }
+
+        if (kpiWrapper && kpiEmptyState) {
+            kpiWrapper.classList.remove('d-none');
+            kpiEmptyState.classList.add('d-none');
         }
 
         tbody.innerHTML = '';
@@ -400,14 +557,23 @@
                 <td>${buildGainCell(holding.weekly_gain, holding.weekly_gain_pct)}</td>
                 <td>${buildGainCell(holding.monthly_gain, holding.monthly_gain_pct)}</td>
                 <td>${buildGainCell(holding.pl_value, holding.pl_pct)}</td>
-                <td><span class="fw-semibold">${formatPercentPlain(holding.volatility_pct || 0)}</span></td>
-                <td><span class="fw-semibold">${formatNumber(holding.sharpe_ratio || 0)}</span></td>
-                <td><span class="fw-semibold">${formatPercentPlain(holding.max_drawdown_pct || 0)}</span></td>
-                <td><span class="fw-semibold">${formatNumber(holding.beta_vs_benchmark || 0)}</span></td>
-                <td><span class="fw-semibold">${formatPercentPlain(holding.yield_on_cost_pct || 0)}</span></td>
                 <td><span class="allocation-pill">${formatNumber(holding.allocation_pct || 0)}%</span></td>
             `;
             tbody.appendChild(row);
+
+            if (kpiBody) {
+                const kpiRow = document.createElement('tr');
+                kpiRow.innerHTML = `
+                    <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
+                    <td class="fw-semibold">${holding.ticker}</td>
+                    <td><span class="fw-semibold">${formatPercentPlain(holding.volatility_pct || 0)}</span></td>
+                    <td><span class="fw-semibold">${formatNumber(holding.sharpe_ratio || 0)}</span></td>
+                    <td><span class="fw-semibold">${formatPercentPlain(holding.max_drawdown_pct || 0)}</span></td>
+                    <td><span class="fw-semibold">${formatNumber(holding.beta_vs_benchmark || 0)}</span></td>
+                    <td><span class="fw-semibold">${formatPercentPlain(holding.yield_on_cost_pct || 0)}</span></td>
+                `;
+                kpiBody.appendChild(kpiRow);
+            }
         });
     }
 
@@ -418,6 +584,7 @@
             const snapshot = await response.json();
             updateMetrics(snapshot);
             refreshTable(snapshot);
+            renderIncomeChart(snapshot.performance_vs_benchmark || []);
         } catch (err) {
             console.error('Failed to refresh portfolio snapshot', err);
         }
@@ -425,6 +592,7 @@
 
     setInterval(fetchSnapshot, 60000);
     fetchSnapshot();
+    renderIncomeChart(initialPerformanceData);
 
     document.getElementById('add-holding').addEventListener('click', () => {
         const container = document.getElementById('portfolio-form-container');
@@ -489,6 +657,7 @@
             }
             updateMetrics(result.snapshot);
             refreshTable(result.snapshot);
+            renderIncomeChart(result.snapshot.performance_vs_benchmark || []);
         } catch (err) {
             console.error(err);
             alert('Unable to save portfolio. Please try again.');
