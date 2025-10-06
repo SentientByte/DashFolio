@@ -35,6 +35,11 @@ app = Flask(__name__)
 log_output_raw = []   # raw stdout lines from main.py
 log_output_table = [] # parsed table (list of dicts) built from Excel result
 
+
+@app.context_processor
+def inject_global_helpers():
+    return {"datetime": datetime}
+
 # ------------------------------
 # Ensure config file exists
 # ------------------------------
@@ -334,6 +339,9 @@ def portfolio_analysis():
         'portfolio_analysis.html',
         snapshot=snapshot,
         holdings_raw=holdings,
+        active_page='portfolio',
+        page_title='Portfolio Overview',
+        page_subtitle='Live performance & allocations',
     )
 
 
@@ -479,6 +487,10 @@ def risk_analysis():
         config=config,
         log_output_raw=log_output_raw,
         log_output_table=log_output_table,
+        active_page='risk',
+        page_title='Portfolio Risk Analysis',
+        page_subtitle='Stop-loss simulations & VaR insights',
+        snapshot=None,
     )
 
 @app.route('/run', methods=['POST'])
