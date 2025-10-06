@@ -15,7 +15,7 @@
         <div class="card h-100">
             <div class="card-body">
                 <h5 class="card-title mb-3">Current allocation</h5>
-                <canvas id="allocationChart" height="260"></canvas>
+                <div id="allocationChart"></div>
             </div>
         </div>
     </div>
@@ -103,7 +103,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 <script>
     const holdingsSnapshot = {{ snapshot.holdings|tojson }};
     let holdingsData = Array.isArray(holdingsSnapshot) ? holdingsSnapshot.slice() : [];
@@ -135,26 +135,33 @@
 
     function formatSignedQuantity(value) {
         if (!isFinite(value) || value === 0) {
-            return '0.00';
+            return '0';
         }
-        const prefix = value > 0 ? '+' : '-';
-        return `${prefix}${Math.abs(value).toFixed(2)}`;
+        const rounded = Math.round(value);
+        if (rounded === 0) {
+            return '0';
+        }
+        const prefix = rounded > 0 ? '+' : '-';
+        return `${prefix}${Math.abs(rounded)}`;
     }
 
     function roundQuantity(quantity, maxAvailable) {
         if (!isFinite(quantity) || quantity === 0) {
             return 0;
         }
-        if (quantity > 0) {
-            return Math.ceil(quantity * 100) / 100;
+        const rounded = Math.round(quantity);
+        if (rounded === 0) {
+            return 0;
         }
-        const needed = Math.ceil(Math.abs(quantity) * 100) / 100;
-        const available = Math.max(0, isFinite(maxAvailable) ? maxAvailable : 0);
+        if (rounded > 0) {
+            return rounded;
+        }
+        const available = Math.floor(Math.max(0, isFinite(maxAvailable) ? maxAvailable : 0));
         if (available === 0) {
-            return -needed;
+            return 0;
         }
-        const limited = Math.min(needed, available);
-        return -Math.round(limited * 100) / 100;
+        const limited = Math.min(Math.abs(rounded), available);
+        return -limited;
     }
 
     function getTotalValue() {
@@ -215,16 +222,32 @@
             });
         }
 
-        return base.map(item => {
-            const roundedQty = roundQuantity(item.rawQuantity, item.quantityHeld);
-            const tradeValue = roundedQty * item.price;
+        const roundedPlan = base.map(item => {
+            const quantity = roundQuantity(item.rawQuantity, item.quantityHeld);
+            const tradeValue = quantity * item.price;
+            const postTradeValue = item.currentValue + tradeValue;
             return {
                 ticker: item.ticker,
                 logo_url: item.logo_url,
-                targetPct: item.targetPct,
                 currentPct: item.currentPct,
-                quantity: roundedQty,
+                quantity,
                 tradeValue,
+                postTradeValue,
+            };
+        });
+
+        const netTradeValue = roundedPlan.reduce((sum, item) => sum + item.tradeValue, 0);
+        const adjustedTotal = total + netTradeValue;
+
+        return roundedPlan.map(item => {
+            const achievedPct = adjustedTotal ? (item.postTradeValue / adjustedTotal) * 100 : 0;
+            return {
+                ticker: item.ticker,
+                logo_url: item.logo_url,
+                targetPct: achievedPct,
+                currentPct: item.currentPct,
+                quantity: item.quantity,
+                tradeValue: item.tradeValue,
             };
         });
     }
@@ -263,41 +286,93 @@
         });
     }
 
+    function destroyAllocationChart() {
+        if (allocationChart) {
+            allocationChart.destroy();
+            allocationChart = null;
+        }
+    }
+
     function renderChart() {
-        const canvas = document.getElementById('allocationChart');
-        if (!canvas || !holdingsData.length) {
+        const container = document.getElementById('allocationChart');
+        if (!container || !holdingsData.length || !getTotalValue()) {
+            destroyAllocationChart();
+            if (container) {
+                container.innerHTML = '<div class="text-muted text-center py-4">No holdings to display.</div>';
+            }
             return;
         }
+
         const total = getTotalValue();
         const labels = holdingsData.map(holding => holding.ticker);
-        const data = holdingsData.map(holding => {
+        const series = holdingsData.map(holding => {
             const value = Number(holding.current_value || 0);
             return total ? (value / total) * 100 : 0;
         });
-        if (allocationChart) {
-            allocationChart.data.labels = labels;
-            allocationChart.data.datasets[0].data = data;
-            allocationChart.update();
+
+        if (!series.length) {
+            destroyAllocationChart();
+            container.innerHTML = '<div class="text-muted text-center py-4">No allocation data available.</div>';
             return;
         }
-        allocationChart = new Chart(canvas, {
-            type: 'pie',
-            data: {
-                labels,
-                datasets: [{
-                    data,
-                    backgroundColor: chartColors,
-                    borderWidth: 1,
-                }]
+
+        const options = {
+            chart: {
+                type: 'radialBar',
+                height: 320,
             },
-            options: {
-                plugins: {
-                    legend: {
-                        position: 'bottom',
+            colors: chartColors,
+            series,
+            labels,
+            plotOptions: {
+                radialBar: {
+                    hollow: {
+                        size: '45%'
+                    },
+                    track: {
+                        margin: 8
+                    },
+                    dataLabels: {
+                        name: {
+                            fontSize: '14px',
+                        },
+                        value: {
+                            formatter: (val) => `${Number(val || 0).toFixed(1)}%`
+                        },
+                        total: {
+                            show: true,
+                            label: 'Total',
+                            formatter: () => '100%'
+                        }
                     }
                 }
+            },
+            legend: {
+                show: true,
+                position: 'bottom',
+                fontSize: '14px',
+            },
+            tooltip: {
+                y: {
+                    formatter: (val) => `${Number(val || 0).toFixed(2)}%`
+                }
             }
-        });
+        };
+
+        if (!allocationChart) {
+            container.innerHTML = '';
+            allocationChart = new ApexCharts(container, options);
+            allocationChart.render();
+        } else {
+            allocationChart.updateOptions({
+                labels,
+                colors: chartColors,
+                plotOptions: options.plotOptions,
+                legend: options.legend,
+                tooltip: options.tooltip,
+            });
+            allocationChart.updateSeries(series);
+        }
     }
 
     function populateTargetForm() {

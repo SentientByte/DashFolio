@@ -54,8 +54,8 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
     return result
 
 
-def get_benchmark_returns(period: str = "1y", benchmark: str = BENCHMARK_TICKER) -> pd.Series:
-    """Return daily percentage returns for the benchmark ticker."""
+def get_benchmark_history(period: str = "1y", benchmark: str = BENCHMARK_TICKER) -> pd.Series:
+    """Return closing prices for the benchmark ticker."""
 
     try:
         ticker = yf.Ticker(benchmark)
@@ -68,8 +68,17 @@ def get_benchmark_returns(period: str = "1y", benchmark: str = BENCHMARK_TICKER)
         closes = closes.dropna()
         if closes.empty:
             return pd.Series(dtype=float)
-        closes = normalize_index(closes)
-        return closes.pct_change().dropna()
+        return normalize_index(closes)
     except Exception as exc:
-        print(f"Warning: failed to fetch benchmark data for {benchmark}: {exc}")
+        print(f"Warning: failed to fetch benchmark history for {benchmark}: {exc}")
         return pd.Series(dtype=float)
+
+
+def get_benchmark_returns(period: str = "1y", benchmark: str = BENCHMARK_TICKER) -> pd.Series:
+    """Return daily percentage returns for the benchmark ticker."""
+
+    history = get_benchmark_history(period=period, benchmark=benchmark)
+    if history.empty:
+        return pd.Series(dtype=float)
+    returns = history.pct_change().dropna()
+    return returns if not returns.empty else pd.Series(dtype=float)
