@@ -14,7 +14,7 @@
         <div class="card metric-card h-100">
             <div class="card-body">
                 <span class="metric-label">Total Cost</span>
-                <h4 class="metric-value" id="metric-total-cost">${{ '%.2f'|format(snapshot.summary.total_cost) }}</h4>
+                <h4 class="metric-value" id="metric-total-cost">{{ format_currency(snapshot.summary.total_cost) }}</h4>
                 <p class="metric-subvalue mb-0">Total invested capital</p>
             </div>
         </div>
@@ -24,10 +24,10 @@
             <div class="card-body">
                 <span class="metric-label">Current Value</span>
                 <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2">
-                    <h4 class="metric-value mb-0" id="metric-current-value">${{ '%.2f'|format(snapshot.summary.current_value) }}</h4>
+                    <h4 class="metric-value mb-0" id="metric-current-value">{{ format_currency(snapshot.summary.current_value) }}</h4>
                     {% set total_pl = snapshot.summary.total_pl_value %}
                     <span class="pill pill-compact {{ 'pill-positive' if total_pl >= 0 else 'pill-negative' }}" id="metric-total-pl">
-                        {{ '+' if total_pl >= 0 else '-' }}${{ '%.2f'|format(total_pl|abs) }}
+                        {{ format_signed_currency(total_pl) }}
                     </span>
                 </div>
                 <p class="metric-subvalue mb-0">Live market valuation vs. invested capital</p>
@@ -41,7 +41,7 @@
                 <span class="metric-label" id="metric-today-label">{{ 'Todays Profit' if todays_positive else 'Todays Loss' }}</span>
                 <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2">
                     <h4 class="metric-value mb-0 {{ 'metric-positive' if todays_positive else 'metric-negative' }}" id="metric-dod-value">
-                        {{ '+' if todays_positive else '-' }}${{ '%.2f'|format(snapshot.summary.dod_value|abs) }}
+                        {{ format_signed_currency(snapshot.summary.dod_value) }}
                     </h4>
                     <span class="pill {{ 'pill-positive' if todays_positive else 'pill-negative' }}" id="metric-dod-pct">
                         {{ '+' if todays_positive else '-' }}{{ '%.2f'|format(snapshot.summary.dod_pct|abs) }}%
@@ -61,7 +61,7 @@
                     <h4 class="metric-value metric-trend {{ 'metric-positive' if mover_positive else 'metric-negative' }}" id="metric-top-mover-ticker">{{ mover.ticker }}</h4>
                     <p class="metric-subvalue metric-trend-group mb-0" id="metric-top-mover-change">
                         <span class="metric-trend-value {{ 'metric-positive' if mover_positive else 'metric-negative' }}">
-                            {{ '+' if mover_positive else '-' }}${{ '%.2f'|format(mover.change_value|abs) }} USD
+                            {{ format_signed_currency(mover.change_value) }}
                         </span>
                         <span class="metric-trend-pct {{ 'metric-positive' if mover_positive else 'metric-negative' }}">
                             ({{ '+' if mover_positive else '-' }}{{ '%.2f'|format(mover.change_pct|abs) }}%)
@@ -79,10 +79,10 @@
 <div class="card mb-4" id="performance-card">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
-            <h5 class="mb-1">Portfolio vs. SPY</h5>
+            <h5 class="mb-1">Portfolio vs. {{ benchmark_ticker }}</h5>
             <small class="text-muted">Indexed to 100 to compare cumulative performance</small>
         </div>
-        <span class="badge bg-label-primary">Benchmark: SPY</span>
+        <span class="badge bg-label-primary">Benchmark: {{ benchmark_ticker }}</span>
     </div>
     <div class="card-body">
         <div id="incomeChart" style="min-height: 320px;"></div>
@@ -108,10 +108,10 @@
                     <th class="logo-cell"></th>
                     <th class="text-uppercase text-muted small">Ticker</th>
                     <th class="text-uppercase text-muted small">Quantity</th>
-                    <th class="text-uppercase text-muted small">Avg cost / unit</th>
-                    <th class="text-uppercase text-muted small">Current price</th>
-                    <th class="text-uppercase text-muted small">Total cost</th>
-                    <th class="text-uppercase text-muted small">Current value</th>
+                    <th class="text-uppercase text-muted small">Avg cost / unit ({{ currency_context.code }})</th>
+                    <th class="text-uppercase text-muted small">Current price ({{ currency_context.code }})</th>
+                    <th class="text-uppercase text-muted small">Total cost ({{ currency_context.code }})</th>
+                    <th class="text-uppercase text-muted small">Current value ({{ currency_context.code }})</th>
                     <th class="text-uppercase text-muted small">Today</th>
                     <th class="text-uppercase text-muted small">Week</th>
                     <th class="text-uppercase text-muted small">Month</th>
@@ -138,31 +138,31 @@
                         <td class="fw-semibold">{{ holding.ticker }}</td>
                         <td><span class="fw-semibold">{{ '%.2f'|format(holding.quantity) }}</span></td>
                         <td>
-                            <span class="fw-semibold">${{ '%.2f'|format(holding.average_cost) }}</span>
+                            <span class="fw-semibold">{{ format_currency(holding.average_cost) }}</span>
                         </td>
                         <td class="current-price">
-                            <span class="fw-semibold">${{ '%.2f'|format(holding.current_price) }}</span>
+                            <span class="fw-semibold">{{ format_currency(holding.current_price) }}</span>
                         </td>
                         <td>
-                            <span class="fw-semibold">${{ '%.2f'|format(holding.total_cost) }}</span>
+                            <span class="fw-semibold">{{ format_currency(holding.total_cost) }}</span>
                         </td>
                         <td class="current-value">
-                            <span class="fw-semibold">${{ '%.2f'|format(holding.current_value) }}</span>
+                            <span class="fw-semibold">{{ format_currency(holding.current_value) }}</span>
                         </td>
                         <td class="todays-gain {{ gain_class }}">
-                            <span class="d-block fw-semibold">{{ '+' if holding.todays_gain >= 0 else '-' }}${{ '%.2f'|format(holding.todays_gain|abs) }}</span>
+                            <span class="d-block fw-semibold">{{ format_signed_currency(holding.todays_gain) }}</span>
                             <small class="text-muted">{{ '+' if holding.todays_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.todays_gain_pct|abs) }}%</small>
                         </td>
                         <td>
-                            <span class="d-block fw-semibold {{ week_class }}">{{ '+' if holding.weekly_gain >= 0 else '-' }}${{ '%.2f'|format(holding.weekly_gain|abs) }}</span>
+                            <span class="d-block fw-semibold {{ week_class }}">{{ format_signed_currency(holding.weekly_gain) }}</span>
                             <small class="text-muted">{{ '+' if holding.weekly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.weekly_gain_pct|abs) }}%</small>
                         </td>
                         <td>
-                            <span class="d-block fw-semibold {{ month_class }}">{{ '+' if holding.monthly_gain >= 0 else '-' }}${{ '%.2f'|format(holding.monthly_gain|abs) }}</span>
+                            <span class="d-block fw-semibold {{ month_class }}">{{ format_signed_currency(holding.monthly_gain) }}</span>
                             <small class="text-muted">{{ '+' if holding.monthly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.monthly_gain_pct|abs) }}%</small>
                         </td>
                         <td>
-                            <span class="d-block fw-semibold {{ pl_class }}">{{ '+' if pl_value >= 0 else '-' }}${{ '%.2f'|format(pl_value|abs) }}</span>
+                            <span class="d-block fw-semibold {{ pl_class }}">{{ format_signed_currency(pl_value) }}</span>
                             <small class="text-muted">{{ '+' if pl_pct >= 0 else '-' }}{{ '%.2f'|format(pl_pct|abs) }}%</small>
                         </td>
                         <td>
@@ -180,7 +180,8 @@
                 <p class="text-muted mb-0">Add holdings using the Manage holdings button to begin tracking performance.</p>
             </div>
         </div>
-{% endif %}
+    {% endif %}
+</div>
 
 <div class="card mt-4" id="portfolio-kpi-card">
     <div class="card-header">
@@ -259,7 +260,7 @@
                                     <td><input type="text" class="form-control holding-ticker" value="{{ holding.ticker }}" placeholder="AAPL"></td>
                                     <td><input type="text" class="form-control holding-name" value="{{ holding.name|default('') }}" placeholder="Company name"></td>
                                     <td><input type="number" step="0.0001" class="form-control holding-quantity" value="{{ holding.quantity|default(0) }}"></td>
-                                    <td><input type="number" step="0.01" class="form-control holding-avg-cost" value="{{ holding.average_cost|default(0) }}"></td>
+                                    <td><input type="number" step="0.01" class="form-control holding-avg-cost" value="{{ (holding.average_cost * currency_context.rate)|round(4) }}"></td>
                                     <td><input type="text" class="form-control holding-logo" value="{{ holding.logo_url|default('') }}" placeholder="https://..."></td>
                                     <td class="text-end"><button type="button" class="btn btn-link text-danger remove-row">Remove</button></td>
                                 </tr>
@@ -269,7 +270,7 @@
                                 <td><input type="text" class="form-control holding-ticker" placeholder="AAPL"></td>
                                 <td><input type="text" class="form-control holding-name" placeholder="Company name"></td>
                                 <td><input type="number" step="0.0001" class="form-control holding-quantity"></td>
-                                <td><input type="number" step="0.01" class="form-control holding-avg-cost"></td>
+                                <td><input type="number" step="0.01" class="form-control holding-avg-cost" placeholder="{{ currency_context.code }}"></td>
                                 <td><input type="text" class="form-control holding-logo" placeholder="https://..."></td>
                                 <td class="text-end"><button type="button" class="btn btn-link text-danger remove-row">Remove</button></td>
                             </tr>
@@ -300,19 +301,49 @@
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 <script>
     const initialPerformanceData = {{ snapshot.performance_vs_benchmark|tojson }} || [];
+    const benchmarkTicker = {{ benchmark_ticker|tojson }};
+    const currencySettings = {{ currency_settings|tojson }};
     let incomeChart = null;
 
+    const currencyFormatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD'
+    });
+
+    function applyCurrencyConversion(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        const rate = Number(currencySettings.rate) || 1;
+        return numeric * rate;
+    }
+
+    function revertCurrency(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        const rate = Number(currencySettings.rate) || 1;
+        return rate ? numeric / rate : numeric;
+    }
+
     function formatCurrency(value) {
-        const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-        return formatter.format(isFinite(value) ? value : 0);
+        let formatted = currencyFormatter.format(applyCurrencyConversion(value));
+        if (currencySettings.code === 'BHD') {
+            formatted = formatted.replace('BHD', currencySettings.symbol).replace(/\u00a0/g, '');
+        }
+        return formatted;
     }
 
     function formatSignedCurrency(value) {
-        const absolute = formatCurrency(Math.abs(isFinite(value) ? value : 0));
-        if (!isFinite(value) || value === 0) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric === 0) {
             return formatCurrency(0);
         }
-        return value > 0 ? `+${absolute}` : `-${absolute}`;
+        const absolute = Math.abs(numeric);
+        const prefix = numeric > 0 ? '+' : '-';
+        return `${prefix}${formatCurrency(absolute)}`;
     }
 
     function formatPercent(value) {
@@ -377,7 +408,7 @@
             },
             series: [
                 { name: 'Portfolio', data: portfolioSeries },
-                { name: 'SPY Benchmark', data: benchmarkSeries }
+                { name: `${benchmarkTicker} Benchmark`, data: benchmarkSeries }
             ],
             colors: ['#696cff', '#03c3ec'],
             dataLabels: { enabled: false },
@@ -488,7 +519,7 @@
                 topTickerEl.classList.toggle('metric-negative', !moverPositive);
 
                 topChangeEl.innerHTML = `
-                    <span class="metric-trend-value ${moverPositive ? 'metric-positive' : 'metric-negative'}">${formatSignedCurrency(moverValue)} USD</span>
+                    <span class="metric-trend-value ${moverPositive ? 'metric-positive' : 'metric-negative'}">${formatSignedCurrency(moverValue)}</span>
                     <span class="metric-trend-pct ${moverPositive ? 'metric-positive' : 'metric-negative'}">(${formatPercent(moverPct)})</span>
                 `;
             } else {
@@ -626,7 +657,7 @@
             tickerInput.value = ticker;
             const name = row.querySelector('.holding-name').value.trim();
             const quantity = parseFloat(row.querySelector('.holding-quantity').value);
-            const avgCost = parseFloat(row.querySelector('.holding-avg-cost').value);
+            const avgCostInput = parseFloat(row.querySelector('.holding-avg-cost').value);
             const logo = row.querySelector('.holding-logo').value.trim();
             if (!ticker || !quantity || quantity <= 0) {
                 return;
@@ -635,7 +666,7 @@
                 ticker,
                 name: name || undefined,
                 quantity,
-                average_cost: isNaN(avgCost) ? 0 : avgCost,
+                average_cost: Number.isFinite(avgCostInput) ? revertCurrency(avgCostInput) : 0,
                 logo_url: logo || undefined,
             });
         });

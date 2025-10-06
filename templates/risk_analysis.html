@@ -12,62 +12,51 @@
 <div class="row g-4 content-stack">
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Simulation configuration</h5>
-                <small class="text-muted">Tweak the ranges used for stop-loss optimisation.</small>
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h5 class="mb-0">Configuration overview</h5>
+                    <small class="text-muted">Current settings stored in <code>config.json</code>. Adjust them from the Settings page.</small>
+                </div>
+                <a href="{{ url_for('settings') }}" class="btn btn-outline-primary btn-sm">
+                    <i class="bx bx-cog me-1"></i>
+                    Open Settings
+                </a>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('risk_analysis') }}" id="config-form" onsubmit="onConfigSubmit(event)">
-                    <div class="row g-3">
-                        <div class="col-md-3">
-                            <label for="DATA_PERIOD" class="form-label">Data Period</label>
-                            <select id="DATA_PERIOD" name="DATA_PERIOD" class="form-select" onchange="toggleCustomDate()">
-                                <option value="YTD" {% if config['DATA_PERIOD']=='YTD' %}selected{% endif %}>YTD</option>
-                                <option value="1y" {% if config['DATA_PERIOD']=='1y' %}selected{% endif %}>1 Year</option>
-                                <option value="1.5y" {% if config['DATA_PERIOD']=='1.5y' %}selected{% endif %}>1.5 Years</option>
-                                <option value="2y" {% if config['DATA_PERIOD']=='2y' %}selected{% endif %}>2 Years</option>
-                                <option value="custom" {% if config['DATA_PERIOD']=='custom' %}selected{% endif %}>Custom</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3" id="custom-date-div" style="display:none;">
-                            <label for="CUSTOM_START_DATE" class="form-label">Custom Start Date</label>
-                            <input type="date" id="CUSTOM_START_DATE" name="CUSTOM_START_DATE" class="form-control" value="{{ config['CUSTOM_START_DATE'] }}">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Stop Loss Min (%)</label>
-                            <input type="number" step="0.1" name="STOP_LOSS_MIN" class="form-control" value="{{ config['STOP_LOSS_PERCENTAGE_RANGE'][0] }}">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Stop Loss Max (%)</label>
-                            <input type="number" step="0.1" name="STOP_LOSS_MAX" class="form-control" value="{{ config['STOP_LOSS_PERCENTAGE_RANGE'][1] }}">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Stop Loss Step (%)</label>
-                            <input type="number" step="0.1" name="STOP_LOSS_STEP" class="form-control" value="{{ config['STOP_LOSS_STEP'] }}">
-                        </div>
+                <div class="row g-4">
+                    <div class="col-sm-6 col-lg-3">
+                        <span class="text-uppercase text-muted small">Benchmark</span>
+                        <h6 class="mb-0">{{ config['BENCHMARK_TICKER'] }}</h6>
                     </div>
-                    <div class="row g-3 mt-1">
-                        <div class="col-md-3">
-                            <label class="form-label">Num Simulations</label>
-                            <input type="number" name="NUM_SIMULATIONS" class="form-control" value="{{ config['NUM_SIMULATIONS'] }}">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Confidence Level</label>
-                            <input type="number" step="0.01" name="CONFIDENCE_LEVEL" class="form-control" value="{{ config['CONFIDENCE_LEVEL'] }}">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">EWMA Span</label>
-                            <input type="number" name="SPAN_EWMA" class="form-control" value="{{ config['SPAN_EWMA'] }}">
-                        </div>
-                        <div class="col-md-4 d-flex align-items-end justify-content-end">
-                            <button class="btn btn-primary" type="submit">
-                                <i class="bx bx-save me-2"></i>
-                                Save configuration
-                            </button>
-                        </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <span class="text-uppercase text-muted small">Num simulations</span>
+                        <h6 class="mb-0">{{ config['NUM_SIMULATIONS'] }}</h6>
                     </div>
-                    <p class="mt-3 muted-note mb-0">Tip: selecting <strong>Custom</strong> in Data Period will show the start date field.</p>
-                </form>
+                    <div class="col-sm-6 col-lg-3">
+                        <span class="text-uppercase text-muted small">Confidence level</span>
+                        <h6 class="mb-0">{{ '%.2f'|format(config['CONFIDENCE_LEVEL']) }}</h6>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <span class="text-uppercase text-muted small">EWMA span</span>
+                        <h6 class="mb-0">{{ config['SPAN_EWMA'] }}</h6>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <span class="text-uppercase text-muted small">Data period</span>
+                        <h6 class="mb-0">{{ config['DATA_PERIOD']|upper }}</h6>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <span class="text-uppercase text-muted small">Stop loss range (%)</span>
+                        <h6 class="mb-0">{{ '%.1f'|format(config['STOP_LOSS_PERCENTAGE_RANGE'][0]) }} &ndash; {{ '%.1f'|format(config['STOP_LOSS_PERCENTAGE_RANGE'][1]) }}</h6>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <span class="text-uppercase text-muted small">Stop loss step (%)</span>
+                        <h6 class="mb-0">{{ '%.1f'|format(config['STOP_LOSS_STEP']) }}</h6>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <span class="text-uppercase text-muted small">Display currency</span>
+                        <h6 class="mb-0">{{ config['CURRENCY'] }}</h6>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -130,31 +119,6 @@
         </div>
     </div>
 
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex align-items-center justify-content-between">
-                <div>
-                    <h5 class="mb-0">Execution logs</h5>
-                    <small class="text-muted">Inspect the raw output from the last run.</small>
-                </div>
-                <button class="btn btn-outline-secondary" type="button" onclick="toggleLogs()">
-                    <i class="bx bx-collapse me-2"></i>
-                    Show / Hide full log
-                </button>
-            </div>
-            <div class="card-body">
-                <div id="log-box" class="log-box" aria-hidden="true">
-                    {% if log_output_raw %}
-                        {% for line in log_output_raw %}
-                            {{ line }}<br>
-                        {% endfor %}
-                    {% else %}
-                        <div class="muted-note">No logs yet. Run the calculations to see output here.</div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
 <div id="status-pill" role="status" aria-live="polite" aria-atomic="true">
@@ -165,22 +129,6 @@
 
 {% block scripts %}
 <script>
-    function toggleLogs() {
-        const logBox = document.getElementById('log-box');
-        const isHidden = logBox.style.display === 'none' || logBox.style.display === '';
-        logBox.style.display = isHidden ? 'block' : 'none';
-        logBox.setAttribute('aria-hidden', (!isHidden).toString());
-    }
-
-    function toggleCustomDate() {
-        const dataPeriod = document.getElementById('DATA_PERIOD').value;
-        document.getElementById('custom-date-div').style.display = (dataPeriod === 'custom') ? 'block' : 'none';
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        toggleCustomDate();
-    });
-
     function showStatus(message) {
         const pill = document.getElementById('status-pill');
         const text = document.getElementById('status-text');
@@ -193,19 +141,17 @@
         pill.style.display = 'none';
     }
 
-    async function onConfigSubmit(event) {
-        showStatus('Saving configuration...');
-        setTimeout(() => hideStatus(), 1500);
-        return true;
-    }
-
     async function onRunSubmit(event) {
         const button = document.getElementById('run-btn');
-        button.disabled = true;
+        if (button) {
+            button.disabled = true;
+        }
         showStatus('Running calculations...');
         setTimeout(() => {
             hideStatus();
-            button.disabled = false;
+            if (button) {
+                button.disabled = false;
+            }
         }, 2000);
         return true;
     }

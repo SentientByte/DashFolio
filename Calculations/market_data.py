@@ -54,8 +54,11 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
     return result
 
 
-def get_benchmark_history(period: str = "1y", benchmark: str = BENCHMARK_TICKER) -> pd.Series:
+def get_benchmark_history(period: str = "1y", benchmark: str | None = BENCHMARK_TICKER) -> pd.Series:
     """Return closing prices for the benchmark ticker."""
+
+    if not benchmark:
+        benchmark = BENCHMARK_TICKER
 
     try:
         ticker = yf.Ticker(benchmark)
@@ -74,7 +77,7 @@ def get_benchmark_history(period: str = "1y", benchmark: str = BENCHMARK_TICKER)
         return pd.Series(dtype=float)
 
 
-def get_benchmark_returns(period: str = "1y", benchmark: str = BENCHMARK_TICKER) -> pd.Series:
+def get_benchmark_returns(period: str = "1y", benchmark: str | None = BENCHMARK_TICKER) -> pd.Series:
     """Return daily percentage returns for the benchmark ticker."""
 
     history = get_benchmark_history(period=period, benchmark=benchmark)
