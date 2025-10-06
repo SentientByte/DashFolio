@@ -49,6 +49,12 @@
                         <div data-i18n="Risk">Risk Analysis</div>
                     </a>
                 </li>
+                <li class="menu-item {% if active_page == 'settings' %}active{% endif %}">
+                    <a href="{{ url_for('settings') }}" class="menu-link">
+                        <i class="menu-icon bx bx-cog"></i>
+                        <div data-i18n="Settings">Settings</div>
+                    </a>
+                </li>
             </ul>
         </aside>
         <div class="layout-page">

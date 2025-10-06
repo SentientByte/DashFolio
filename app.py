@@ -35,14 +35,68 @@ CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 PORTFOLIO_FILE = os.path.join(BASE_DIR, 'portfolio.json')
 DATA_STORE = os.path.join(BASE_DIR, 'dashfolio.db')
 
+USD_TO_BHD = 0.376081
+
 app = Flask(__name__)
-log_output_raw = []   # raw stdout lines from main.py
-log_output_table = [] # parsed table (list of dicts) built from database results
+log_output_raw: List[str] = []   # raw stdout lines from main.py
+log_output_table: List[Dict[str, Any]] = [] # parsed table (list of dicts) built from database results
+
+
+def get_currency_context(config: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    if config is None:
+        config = load_config()
+
+    currency = str(config.get("CURRENCY", "USD")).upper()
+    if currency not in {"USD", "BHD"}:
+        currency = "USD"
+
+    rate = USD_TO_BHD if currency == "BHD" else 1.0
+    symbol = "BD" if currency == "BHD" else "$"
+    return {
+        "code": currency,
+        "symbol": symbol,
+        "rate": rate,
+        "symbol_first": True,
+    }
+
+
+def format_currency_value(value: Any, currency_context: Dict[str, Any]) -> str:
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        numeric_value = 0.0
+
+    converted = numeric_value * currency_context.get("rate", 1.0)
+    symbol = currency_context.get("symbol", "$")
+    decimals = currency_context.get("decimals", 2)
+    formatted = f"{converted:,.{decimals}f}"
+    return f"{symbol}{formatted}" if currency_context.get("symbol_first", True) else f"{formatted}{symbol}"
+
+
+def format_signed_currency_value(value: Any, currency_context: Dict[str, Any]) -> str:
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        numeric_value = 0.0
+
+    prefix = "+" if numeric_value > 0 else ("-" if numeric_value < 0 else "")
+    absolute = abs(numeric_value)
+    formatted = format_currency_value(absolute, currency_context)
+    if prefix:
+        return f"{prefix}{formatted}"
+    return formatted
 
 
 @app.context_processor
 def inject_global_helpers():
-    return {"datetime": datetime}
+    config = load_config()
+    currency_context = get_currency_context(config)
+    return {
+        "datetime": datetime,
+        "currency_context": currency_context,
+        "format_currency": lambda value, ctx=currency_context: format_currency_value(value, ctx),
+        "format_signed_currency": lambda value, ctx=currency_context: format_signed_currency_value(value, ctx),
+    }
 
 # ------------------------------
 # Ensure config file exists
@@ -55,7 +109,9 @@ if not os.path.exists(CONFIG_FILE):
         "STOP_LOSS_STEP": 0.2,
         "NUM_SIMULATIONS": 10000,
         "CONFIDENCE_LEVEL": 0.95,
-        "SPAN_EWMA": 60
+        "SPAN_EWMA": 60,
+        "BENCHMARK_TICKER": "SPY",
+        "CURRENCY": "USD",
     }
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(default_config, f, indent=4)
@@ -101,7 +157,22 @@ if not os.path.exists(PORTFOLIO_FILE):
 # ------------------------------
 def load_config():
     with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+        config = json.load(f)
+
+    defaults = {
+        "BENCHMARK_TICKER": "SPY",
+        "CURRENCY": "USD",
+    }
+    updated = False
+    for key, value in defaults.items():
+        if key not in config:
+            config[key] = value
+            updated = True
+
+    if updated:
+        save_config(config)
+
+    return config
 
 
 def save_config(config):
@@ -131,10 +202,14 @@ def save_portfolio_state(data: Dict[str, Any]) -> None:
 # ------------------------------
 @app.route('/')
 def portfolio_analysis():
+    config = load_config()
+    currency_settings = get_currency_context(config)
+    benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
+
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
-    snapshot = build_portfolio_snapshot(holdings, targets)
+    snapshot = build_portfolio_snapshot(holdings, targets, benchmark_ticker)
     return render_template(
         'portfolio_analysis.html',
         snapshot=snapshot,
@@ -142,15 +217,22 @@ def portfolio_analysis():
         active_page='portfolio',
         page_title='Portfolio Overview',
         page_subtitle='Live performance & allocations',
+        config=config,
+        currency_settings=currency_settings,
+        benchmark_ticker=benchmark_ticker,
     )
 
 
 @app.route('/allocation')
 def allocation_planner():
+    config = load_config()
+    currency_settings = get_currency_context(config)
+    benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
+
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
-    snapshot = build_portfolio_snapshot(holdings, targets)
+    snapshot = build_portfolio_snapshot(holdings, targets, benchmark_ticker)
     return render_template(
         'allocation.html',
         snapshot=snapshot,
@@ -159,15 +241,45 @@ def allocation_planner():
         active_page='allocation',
         page_title='Allocation Planner',
         page_subtitle='Rebalance towards your target mix',
+        config=config,
+        currency_settings=currency_settings,
+    )
+
+
+@app.route('/settings')
+def settings():
+    config = load_config()
+    currency_settings = get_currency_context(config)
+    benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
+
+    portfolio_state = load_portfolio_state()
+    holdings = portfolio_state.get('holdings', [])
+    targets = portfolio_state.get('target_allocations', {})
+    snapshot = build_portfolio_snapshot(holdings, targets, benchmark_ticker)
+
+    return render_template(
+        'settings.html',
+        snapshot=snapshot,
+        holdings_raw=holdings,
+        target_allocations=targets,
+        config=config,
+        currency_settings=currency_settings,
+        benchmark_ticker=benchmark_ticker,
+        log_output_raw=log_output_raw,
+        active_page='settings',
+        page_title='Settings',
+        page_subtitle='Manage portfolio configuration & preferences',
     )
 
 
 @app.route('/api/portfolio', methods=['GET'])
 def api_get_portfolio():
+    config = load_config()
+    benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
-    snapshot = build_portfolio_snapshot(holdings, targets)
+    snapshot = build_portfolio_snapshot(holdings, targets, benchmark_ticker)
     return jsonify(snapshot)
 
 
@@ -203,6 +315,9 @@ def api_update_portfolio():
 
         normalized_holdings.append(holding_record)
 
+    config = load_config()
+    benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
+
     current_state = load_portfolio_state()
     updated_targets = normalize_target_allocations(
         normalized_holdings,
@@ -213,7 +328,7 @@ def api_update_portfolio():
         'holdings': normalized_holdings,
         'target_allocations': updated_targets,
     })
-    snapshot = build_portfolio_snapshot(normalized_holdings, updated_targets)
+    snapshot = build_portfolio_snapshot(normalized_holdings, updated_targets, benchmark_ticker)
     return jsonify({'status': 'ok', 'snapshot': snapshot})
 
 
@@ -222,6 +337,8 @@ def api_update_targets():
     payload = request.get_json(silent=True) or {}
     target_entries = payload.get('targets', [])
 
+    config = load_config()
+    benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
     state = load_portfolio_state()
     holdings = state.get('holdings', [])
     if not holdings:
@@ -253,8 +370,75 @@ def api_update_targets():
     state['target_allocations'] = normalized
     save_portfolio_state(state)
 
-    snapshot = build_portfolio_snapshot(holdings, normalized)
+    snapshot = build_portfolio_snapshot(holdings, normalized, benchmark_ticker)
     return jsonify({'status': 'ok', 'targets': normalized, 'snapshot': snapshot})
+
+
+@app.route('/api/config', methods=['POST'])
+def api_update_config():
+    payload = request.get_json(silent=True) or {}
+    config = load_config()
+
+    errors: List[str] = []
+
+    if 'benchmark_ticker' in payload:
+        ticker = str(payload.get('benchmark_ticker', '')).upper().strip()
+        if ticker:
+            config['BENCHMARK_TICKER'] = ticker
+        else:
+            errors.append('Benchmark ticker must not be empty.')
+
+    if 'num_simulations' in payload:
+        try:
+            value = int(payload.get('num_simulations'))
+            if value <= 0:
+                raise ValueError
+            config['NUM_SIMULATIONS'] = value
+        except (TypeError, ValueError):
+            errors.append('Num simulations must be a positive integer.')
+
+    if 'confidence_level' in payload:
+        try:
+            value = float(payload.get('confidence_level'))
+            if not (0 < value < 1):
+                raise ValueError
+            config['CONFIDENCE_LEVEL'] = value
+        except (TypeError, ValueError):
+            errors.append('Confidence level must be a decimal between 0 and 1.')
+
+    if 'span_ewma' in payload:
+        try:
+            value = int(payload.get('span_ewma'))
+            if value <= 0:
+                raise ValueError
+            config['SPAN_EWMA'] = value
+        except (TypeError, ValueError):
+            errors.append('EWMA span must be a positive integer.')
+
+    if 'currency' in payload:
+        currency = str(payload.get('currency', '')).upper()
+        if currency in {'USD', 'BHD'}:
+            config['CURRENCY'] = currency
+        else:
+            errors.append('Currency must be either USD or BHD.')
+
+    if errors:
+        return jsonify({'status': 'error', 'errors': errors}), 400
+
+    save_config(config)
+    currency_settings = get_currency_context(config)
+
+    return jsonify({
+        'status': 'ok',
+        'config': {
+            'BENCHMARK_TICKER': config.get('BENCHMARK_TICKER'),
+            'NUM_SIMULATIONS': config.get('NUM_SIMULATIONS'),
+            'CONFIDENCE_LEVEL': config.get('CONFIDENCE_LEVEL'),
+            'SPAN_EWMA': config.get('SPAN_EWMA'),
+            'CURRENCY': config.get('CURRENCY'),
+        },
+        'currency': currency_settings,
+    })
 
 def run_main_script():
     """
@@ -321,47 +505,9 @@ def run_main_script():
 # ------------------------------
 # Routes
 # ------------------------------
-@app.route('/risk-analysis', methods=['GET', 'POST'])
+@app.route('/risk-analysis', methods=['GET'])
 def risk_analysis():
     config = load_config()
-    if request.method == 'POST':
-        # update config from form
-        # Note: some basic input sanitization/typing
-        config['DATA_PERIOD'] = request.form.get('DATA_PERIOD', config.get('DATA_PERIOD', '1y'))
-        config['CUSTOM_START_DATE'] = request.form.get('CUSTOM_START_DATE', config.get('CUSTOM_START_DATE', '2024-01-01'))
-
-        try:
-            minp = float(request.form.get('STOP_LOSS_MIN', config.get('STOP_LOSS_PERCENTAGE_RANGE', [1,2])[0]))
-            maxp = float(request.form.get('STOP_LOSS_MAX', config.get('STOP_LOSS_PERCENTAGE_RANGE', [1,2])[1]))
-            config['STOP_LOSS_PERCENTAGE_RANGE'] = [minp, maxp]
-        except Exception:
-            # keep old values on error
-            pass
-
-        try:
-            config['STOP_LOSS_STEP'] = float(request.form.get('STOP_LOSS_STEP', config.get('STOP_LOSS_STEP', 0.2)))
-        except Exception:
-            pass
-
-        try:
-            config['NUM_SIMULATIONS'] = int(request.form.get('NUM_SIMULATIONS', config.get('NUM_SIMULATIONS', 10000)))
-        except Exception:
-            pass
-
-        try:
-            config['CONFIDENCE_LEVEL'] = float(request.form.get('CONFIDENCE_LEVEL', config.get('CONFIDENCE_LEVEL', 0.95)))
-        except Exception:
-            pass
-
-        try:
-            config['SPAN_EWMA'] = int(request.form.get('SPAN_EWMA', config.get('SPAN_EWMA', 60)))
-        except Exception:
-            pass
-
-        save_config(config)
-        return redirect(url_for('risk_analysis'))
-
-    # GET
     return render_template(
         'risk_analysis.html',
         config=config,

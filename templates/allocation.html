@@ -42,7 +42,7 @@
                             <th class="text-uppercase text-muted small">Current %</th>
                             <th class="text-uppercase text-muted small">Action</th>
                             <th class="text-uppercase text-muted small">Quantity</th>
-                            <th class="text-uppercase text-muted small">Trade value</th>
+                            <th class="text-uppercase text-muted small">Trade value ({{ currency_context.code }})</th>
                         </tr>
                         </thead>
                         <tbody></tbody>
@@ -108,22 +108,39 @@
     const holdingsSnapshot = {{ snapshot.holdings|tojson }};
     let holdingsData = Array.isArray(holdingsSnapshot) ? holdingsSnapshot.slice() : [];
     let targetMap = {{ target_allocations|tojson }};
+    const currencySettings = {{ currency_settings|tojson }};
 
     const chartColors = ['#696cff', '#8592a3', '#71dd37', '#ffab00', '#ff3e1d', '#03c3ec', '#fd3550', '#9c27b0'];
     let allocationChart = null;
 
-    const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+    const currencyFormatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD'
+    });
+
+    function convertCurrency(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        return numeric * (Number(currencySettings.rate) || 1);
+    }
 
     function formatCurrency(value) {
-        return currencyFormatter.format(isFinite(value) ? value : 0);
+        let formatted = currencyFormatter.format(convertCurrency(value));
+        if (currencySettings.code === 'BHD') {
+            formatted = formatted.replace('BHD', currencySettings.symbol).replace(/\u00a0/g, '');
+        }
+        return formatted;
     }
 
     function formatSignedCurrency(value) {
-        const formatted = formatCurrency(Math.abs(isFinite(value) ? value : 0));
-        if (!isFinite(value) || value === 0) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric === 0) {
             return formatCurrency(0);
         }
-        return value > 0 ? `+${formatted}` : `-${formatted}`;
+        const formatted = formatCurrency(Math.abs(numeric));
+        return numeric > 0 ? `+${formatted}` : `-${formatted}`;
     }
 
     function formatPercentPlain(value) {
@@ -318,33 +335,17 @@
 
         const options = {
             chart: {
-                type: 'radialBar',
+                type: 'pie',
                 height: 320,
             },
             colors: chartColors,
             series,
             labels,
-            plotOptions: {
-                radialBar: {
-                    hollow: {
-                        size: '45%'
-                    },
-                    track: {
-                        margin: 8
-                    },
-                    dataLabels: {
-                        name: {
-                            fontSize: '14px',
-                        },
-                        value: {
-                            formatter: (val) => `${Number(val || 0).toFixed(1)}%`
-                        },
-                        total: {
-                            show: true,
-                            label: 'Total',
-                            formatter: () => '100%'
-                        }
-                    }
+            dataLabels: {
+                enabled: true,
+                formatter: (val, opts) => {
+                    const label = opts.w.globals.labels[opts.seriesIndex] || '';
+                    return `${label}: ${Number(val || 0).toFixed(1)}%`;
                 }
             },
             legend: {
@@ -367,7 +368,7 @@
             allocationChart.updateOptions({
                 labels,
                 colors: chartColors,
-                plotOptions: options.plotOptions,
+                dataLabels: options.dataLabels,
                 legend: options.legend,
                 tooltip: options.tooltip,
             });

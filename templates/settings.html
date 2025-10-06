@@ -1,0 +1,474 @@
+{% extends 'layout.html' %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card" id="settings-holdings-card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h5 class="mb-1">Portfolio holdings &amp; targets</h5>
+                    <small class="text-muted">Modify holdings and rebalance targets. Changes are stored in <code>portfolio.json</code>.</small>
+                </div>
+                <div class="text-muted small">
+                    Current value: <strong id="settings-current-value">{{ format_currency(snapshot.summary.current_value) }}</strong>
+                </div>
+            </div>
+            <div class="card-body">
+                <h6 class="mb-2">Holdings</h6>
+                <div class="table-responsive mb-3">
+                    <table class="table align-middle">
+                        <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Name</th>
+                            <th>Quantity</th>
+                            <th>Avg cost ({{ currency_context.code }})</th>
+                            <th>Logo URL</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody id="settings-holdings-body"></tbody>
+                    </table>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm mb-3" type="button" id="settings-add-holding">
+                    <i class="bx bx-plus me-1"></i>
+                    Add holding
+                </button>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <small id="settings-holdings-status" class="text-muted"></small>
+                    <button class="btn btn-primary" type="button" id="settings-save-holdings">
+                        <i class="bx bx-save me-1"></i>
+                        Save holdings
+                    </button>
+                </div>
+
+                <hr class="my-4">
+
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                    <h6 class="mb-0">Target allocation</h6>
+                    <span class="badge bg-label-secondary" id="settings-target-total-badge"><span id="settings-target-total">0.00%</span> allocated</span>
+                </div>
+                <div class="table-responsive mb-3">
+                    <table class="table align-middle">
+                        <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Current allocation</th>
+                            <th>Target %</th>
+                        </tr>
+                        </thead>
+                        <tbody id="settings-target-body"></tbody>
+                    </table>
+                </div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <small class="text-muted d-block">Targets persist inside <code>portfolio.json</code>.</small>
+                        <small id="settings-targets-status" class="text-muted"></small>
+                    </div>
+                    <button class="btn btn-primary" type="button" id="settings-save-targets" {% if not snapshot.holdings %}disabled{% endif %}>
+                        <i class="bx bx-target-lock me-1"></i>
+                        Save targets
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card" id="settings-risk-card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h5 class="mb-1">Benchmark &amp; risk parameters</h5>
+                    <small class="text-muted">Control the Monte Carlo inputs and displayed currency. Saved in <code>config.json</code>.</small>
+                </div>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="settings-currency-toggle" {% if currency_settings.code == 'BHD' %}checked{% endif %}>
+                    <label class="form-check-label" for="settings-currency-toggle">Show values in Bahraini Dinar (BD)</label>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="settings-risk-form" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="settings-benchmark" class="form-label">Benchmark ticker</label>
+                        <input type="text" class="form-control" id="settings-benchmark" value="{{ benchmark_ticker }}" placeholder="SPY" autocomplete="off">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="settings-num-simulations" class="form-label">Num simulations</label>
+                        <input type="number" class="form-control" id="settings-num-simulations" value="{{ config['NUM_SIMULATIONS'] }}" min="1">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="settings-confidence-level" class="form-label">Confidence level (0-1)</label>
+                        <input type="number" step="0.01" class="form-control" id="settings-confidence-level" value="{{ '%.2f'|format(config['CONFIDENCE_LEVEL']) }}" min="0" max="1">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="settings-span-ewma" class="form-label">EWMA span</label>
+                        <input type="number" class="form-control" id="settings-span-ewma" value="{{ config['SPAN_EWMA'] }}" min="1">
+                    </div>
+                    <div class="col-12 d-flex justify-content-end gap-2">
+                        <button class="btn btn-primary" type="submit">
+                            <i class="bx bx-save me-1"></i>
+                            Save parameters
+                        </button>
+                    </div>
+                </form>
+                <div class="alert alert-success mt-3 d-none" role="alert" id="settings-risk-success">Settings saved. Reloading to apply changes…</div>
+                <div class="alert alert-danger mt-3 d-none" role="alert" id="settings-risk-error"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card" id="settings-log-card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h5 class="mb-1">Application log</h5>
+                    <small class="text-muted">Inspect the most recent console output from risk calculations.</small>
+                </div>
+                <button class="btn btn-outline-secondary" type="button" id="settings-toggle-log">
+                    <i class="bx bx-show me-1"></i>
+                    Show log
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="settings-log-box" class="log-box" aria-hidden="true">
+                    {% if log_output_raw %}
+                        {% for line in log_output_raw %}
+                            {{ line }}<br>
+                        {% endfor %}
+                    {% else %}
+                        <div class="muted-note mb-0">No log entries available yet. Run calculations from the Risk Analysis page.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const initialHoldings = {{ holdings_raw|tojson }} || [];
+    let holdingsData = Array.isArray(initialHoldings) ? initialHoldings.slice() : [];
+    let targetMap = {{ target_allocations|tojson }} || {};
+    let snapshotHoldings = {{ snapshot.holdings|tojson }} || [];
+    const currencySettings = {{ currency_settings|tojson }};
+
+    const currencyFormatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD'
+    });
+
+    function convertCurrency(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        return numeric * (Number(currencySettings.rate) || 1);
+    }
+
+    function revertCurrency(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        const rate = Number(currencySettings.rate) || 1;
+        return rate ? numeric / rate : numeric;
+    }
+
+    function formatCurrency(value) {
+        let formatted = currencyFormatter.format(convertCurrency(value));
+        if (currencySettings.code === 'BHD') {
+            formatted = formatted.replace('BHD', currencySettings.symbol).replace(/\u00a0/g, '');
+        }
+        return formatted;
+    }
+
+    function addHoldingRow(holding = {}) {
+        const tbody = document.getElementById('settings-holdings-body');
+        if (!tbody) return;
+        const row = document.createElement('tr');
+        row.classList.add('holding-row');
+        const avgCostDisplay = Number.isFinite(Number(holding.average_cost)) ? convertCurrency(holding.average_cost) : 0;
+        row.innerHTML = `
+            <td><input type="text" class="form-control holding-ticker" value="${holding.ticker || ''}" placeholder="AAPL"></td>
+            <td><input type="text" class="form-control holding-name" value="${holding.name || ''}" placeholder="Company name"></td>
+            <td><input type="number" step="0.0001" class="form-control holding-quantity" value="${Number(holding.quantity || 0)}"></td>
+            <td><input type="number" step="0.01" class="form-control holding-avg-cost" value="${avgCostDisplay.toFixed(4)}"></td>
+            <td><input type="text" class="form-control holding-logo" value="${holding.logo_url || ''}" placeholder="https://..."></td>
+            <td class="text-end"><button type="button" class="btn btn-link text-danger settings-remove-row">Remove</button></td>
+        `;
+        tbody.appendChild(row);
+    }
+
+    function populateHoldingsTable() {
+        const tbody = document.getElementById('settings-holdings-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (holdingsData.length) {
+            holdingsData.forEach(holding => addHoldingRow(holding));
+        } else {
+            addHoldingRow();
+        }
+    }
+
+    function getTotalValueFromSnapshot(data) {
+        if (!Array.isArray(data)) return 0;
+        return data.reduce((sum, holding) => sum + Number(holding.current_value || 0), 0);
+    }
+
+    function populateTargetTable() {
+        const tbody = document.getElementById('settings-target-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        const totalValue = getTotalValueFromSnapshot(snapshotHoldings);
+        snapshotHoldings.forEach(holding => {
+            const currentPct = totalValue ? (Number(holding.current_value || 0) / totalValue) * 100 : 0;
+            const targetValue = Number(targetMap?.[holding.ticker] ?? 0);
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="fw-semibold">${holding.ticker}</td>
+                <td>${currentPct.toFixed(2)}%</td>
+                <td><input type="number" class="form-control settings-target-input" data-ticker="${holding.ticker}" min="0" step="0.01" value="${targetValue.toFixed(2)}"></td>
+            `;
+            tbody.appendChild(row);
+        });
+        updateTargetTotalBadge();
+        const saveBtn = document.getElementById('settings-save-targets');
+        if (saveBtn) {
+            saveBtn.disabled = snapshotHoldings.length === 0;
+        }
+    }
+
+    function updateTargetTotalBadge() {
+        const badge = document.getElementById('settings-target-total-badge');
+        const valueEl = document.getElementById('settings-target-total');
+        if (!badge || !valueEl) return;
+        const inputs = document.querySelectorAll('.settings-target-input');
+        let total = 0;
+        inputs.forEach(input => {
+            const val = parseFloat(input.value);
+            if (!Number.isNaN(val)) {
+                total += val;
+            }
+        });
+        valueEl.textContent = `${total.toFixed(2)}%`;
+        badge.classList.remove('bg-label-success', 'bg-label-warning', 'bg-label-secondary');
+        if (Math.abs(total - 100) < 0.01) {
+            badge.classList.add('bg-label-success');
+        } else if (total > 100) {
+            badge.classList.add('bg-label-warning');
+        } else {
+            badge.classList.add('bg-label-secondary');
+        }
+    }
+
+    async function saveHoldings() {
+        const statusEl = document.getElementById('settings-holdings-status');
+        const rows = document.querySelectorAll('#settings-holdings-body .holding-row');
+        const payload = [];
+        rows.forEach(row => {
+            const ticker = row.querySelector('.holding-ticker')?.value?.toUpperCase().trim();
+            const quantity = parseFloat(row.querySelector('.holding-quantity')?.value || '0');
+            const avgCostInput = parseFloat(row.querySelector('.holding-avg-cost')?.value || '0');
+            const name = row.querySelector('.holding-name')?.value?.trim();
+            const logo = row.querySelector('.holding-logo')?.value?.trim();
+            payload.push({
+                ticker,
+                quantity: Number.isFinite(quantity) ? quantity : 0,
+                average_cost: Number.isFinite(avgCostInput) ? revertCurrency(avgCostInput) : 0,
+                name,
+                logo_url: logo,
+            });
+        });
+
+        try {
+            const response = await fetch('{{ url_for('api_update_portfolio') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ holdings: payload })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to save holdings. Ensure quantities and tickers are valid.');
+            }
+            if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
+                holdingsData = data.snapshot.holdings;
+                targetMap = data.snapshot.target_allocations || targetMap;
+                snapshotHoldings = data.snapshot.holdings;
+                populateHoldingsTable();
+                populateTargetTable();
+                const currentValueEl = document.getElementById('settings-current-value');
+                if (currentValueEl && data.snapshot.summary) {
+                    currentValueEl.textContent = formatCurrency(data.snapshot.summary.current_value || 0);
+                }
+            }
+            if (statusEl) {
+                statusEl.classList.remove('text-danger', 'text-muted');
+                statusEl.classList.add('text-success');
+                statusEl.textContent = 'Holdings saved successfully.';
+            }
+        } catch (error) {
+            console.error(error);
+            if (statusEl) {
+                statusEl.classList.remove('text-success', 'text-muted');
+                statusEl.classList.add('text-danger');
+                statusEl.textContent = error.message || 'Unable to save holdings right now.';
+            }
+        }
+    }
+
+    async function saveTargets() {
+        const inputs = document.querySelectorAll('.settings-target-input');
+        const payload = [];
+        inputs.forEach(input => {
+            const ticker = input.dataset.ticker;
+            const value = parseFloat(input.value);
+            if (ticker) {
+                payload.push({ ticker, target_pct: Number.isNaN(value) ? 0 : value });
+            }
+        });
+
+        const statusEl = document.getElementById('settings-targets-status');
+        try {
+            const response = await fetch('{{ url_for('api_update_targets') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targets: payload })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to save targets.');
+            }
+            if (data.targets) {
+                targetMap = data.targets;
+            }
+            if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
+                snapshotHoldings = data.snapshot.holdings;
+                populateTargetTable();
+            }
+            updateTargetTotalBadge();
+            if (statusEl) {
+                statusEl.classList.remove('text-danger', 'text-muted');
+                statusEl.classList.add('text-success');
+                statusEl.textContent = 'Targets saved successfully.';
+            }
+        } catch (error) {
+            console.error(error);
+            if (statusEl) {
+                statusEl.classList.remove('text-success', 'text-muted');
+                statusEl.classList.add('text-danger');
+                statusEl.textContent = error.message || 'Unable to save targets.';
+            } else {
+                alert(error.message || 'Unable to save targets.');
+            }
+        }
+    }
+
+    async function saveRiskParameters(event) {
+        event.preventDefault();
+        const successAlert = document.getElementById('settings-risk-success');
+        const errorAlert = document.getElementById('settings-risk-error');
+        const payload = {
+            benchmark_ticker: document.getElementById('settings-benchmark')?.value?.trim(),
+            num_simulations: document.getElementById('settings-num-simulations')?.value,
+            confidence_level: document.getElementById('settings-confidence-level')?.value,
+            span_ewma: document.getElementById('settings-span-ewma')?.value,
+            currency: document.getElementById('settings-currency-toggle')?.checked ? 'BHD' : 'USD',
+        };
+
+        try {
+            const response = await fetch('{{ url_for('api_update_config') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const message = Array.isArray(data.errors) ? data.errors.join(' ') : (data.error || 'Failed to save settings.');
+                throw new Error(message);
+            }
+            if (errorAlert) {
+                errorAlert.classList.add('d-none');
+                errorAlert.textContent = '';
+            }
+            if (successAlert) {
+                successAlert.classList.remove('d-none');
+                setTimeout(() => window.location.reload(), 1200);
+            } else {
+                window.location.reload();
+            }
+        } catch (error) {
+            console.error(error);
+            if (successAlert) {
+                successAlert.classList.add('d-none');
+            }
+            if (errorAlert) {
+                errorAlert.textContent = error.message || 'Unable to save settings right now.';
+                errorAlert.classList.remove('d-none');
+            }
+        }
+    }
+
+    function setupEventListeners() {
+        const addBtn = document.getElementById('settings-add-holding');
+        if (addBtn) {
+            addBtn.addEventListener('click', () => addHoldingRow());
+        }
+
+        const holdingsBody = document.getElementById('settings-holdings-body');
+        if (holdingsBody) {
+            holdingsBody.addEventListener('click', event => {
+                if (event.target.classList.contains('settings-remove-row')) {
+                    const row = event.target.closest('tr');
+                    row?.remove();
+                }
+            });
+        }
+
+        const saveHoldingsBtn = document.getElementById('settings-save-holdings');
+        if (saveHoldingsBtn) {
+            saveHoldingsBtn.addEventListener('click', saveHoldings);
+        }
+
+        const targetBody = document.getElementById('settings-target-body');
+        if (targetBody) {
+            targetBody.addEventListener('input', event => {
+                if (event.target.classList.contains('settings-target-input')) {
+                    updateTargetTotalBadge();
+                }
+            });
+        }
+
+        const saveTargetsBtn = document.getElementById('settings-save-targets');
+        if (saveTargetsBtn) {
+            saveTargetsBtn.addEventListener('click', saveTargets);
+        }
+
+        const riskForm = document.getElementById('settings-risk-form');
+        if (riskForm) {
+            riskForm.addEventListener('submit', saveRiskParameters);
+        }
+
+        const logToggle = document.getElementById('settings-toggle-log');
+        const logBox = document.getElementById('settings-log-box');
+        if (logToggle && logBox) {
+            logBox.style.display = 'none';
+            logToggle.addEventListener('click', () => {
+                const isHidden = logBox.style.display === 'none';
+                logBox.style.display = isHidden ? 'block' : 'none';
+                logBox.setAttribute('aria-hidden', (!isHidden).toString());
+                logToggle.innerHTML = isHidden
+                    ? '<i class="bx bx-hide me-1"></i>Hide log'
+                    : '<i class="bx bx-show me-1"></i>Show log';
+            });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        populateHoldingsTable();
+        populateTargetTable();
+        setupEventListeners();
+        updateTargetTotalBadge();
+    });
+</script>
+{% endblock %}

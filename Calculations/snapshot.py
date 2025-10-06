@@ -20,6 +20,7 @@ from .utils import safe_float
 def build_portfolio_snapshot(
     holdings: List[Dict[str, Any]],
     target_allocations: Dict[str, Any] | None = None,
+    benchmark_ticker: str | None = None,
 ) -> Dict[str, Any]:
     computed_holdings: List[Dict[str, Any]] = []
     total_cost = 0.0
@@ -29,8 +30,8 @@ def build_portfolio_snapshot(
     total_current_value = 0.0
     top_mover: Dict[str, Any] | None = None
 
-    benchmark_returns = get_benchmark_returns()
-    benchmark_history = get_benchmark_history()
+    benchmark_returns = get_benchmark_returns(benchmark=benchmark_ticker)
+    benchmark_history = get_benchmark_history(benchmark=benchmark_ticker)
     portfolio_history: pd.Series | None = None
 
     for holding in holdings:
