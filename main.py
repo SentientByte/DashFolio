@@ -18,7 +18,7 @@ from Calculations import (
 def main() -> None:
     base_dir = os.path.dirname(os.path.abspath(__file__))
     portfolio_file = os.path.join(base_dir, "portfolio.json")
-    price_folder = os.path.join(base_dir, "price_data")
+    database_path = os.path.join(base_dir, "dashfolio.db")
     config_file = os.path.join(base_dir, "config.json")
 
     today = datetime.now()
@@ -42,7 +42,7 @@ def main() -> None:
     df_portfolio = update_portfolio_prices(df_portfolio, portfolio_file)
     tickers = df_portfolio["Ticker"].unique()
 
-    all_data = load_price_data(tickers, start_date, today, price_folder)
+    all_data = load_price_data(tickers, start_date, today, database_path)
 
     calculate_statistics(
         all_data,
@@ -60,7 +60,7 @@ def main() -> None:
         config["SPAN_EWMA"],
         config["CONFIDENCE_LEVEL"],
         config["DATA_PERIOD"],
-        base_dir,
+        database_path,
     )
 
 
