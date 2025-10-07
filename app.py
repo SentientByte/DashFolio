@@ -112,6 +112,7 @@ if not os.path.exists(CONFIG_FILE):
         "SPAN_EWMA": 60,
         "BENCHMARK_TICKER": "SPY",
         "CURRENCY": "USD",
+        "AUTO_REFRESH_INTERVAL": 60,
     }
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(default_config, f, indent=4)
@@ -162,12 +163,25 @@ def load_config():
     defaults = {
         "BENCHMARK_TICKER": "SPY",
         "CURRENCY": "USD",
+        "AUTO_REFRESH_INTERVAL": 60,
     }
     updated = False
     for key, value in defaults.items():
         if key not in config:
             config[key] = value
             updated = True
+
+    try:
+        interval = int(config.get("AUTO_REFRESH_INTERVAL", 60))
+    except (TypeError, ValueError):
+        interval = 60
+    if interval < 5:
+        interval = 5
+        updated = True
+    elif interval > 900:
+        interval = 900
+        updated = True
+    config["AUTO_REFRESH_INTERVAL"] = interval
 
     if updated:
         save_config(config)
@@ -294,11 +308,14 @@ def api_get_portfolio():
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
+    force_refresh = str(request.args.get('force', '')).lower() in {'1', 'true', 'yes'}
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         holdings,
         targets,
         benchmark_ticker,
+        refresh_async=not force_refresh,
+        force_recompute=force_refresh,
     )
     return jsonify(snapshot)
 
@@ -456,6 +473,15 @@ def api_update_config():
         else:
             errors.append('Currency must be either USD or BHD.')
 
+    if 'auto_refresh_interval' in payload:
+        try:
+            value = int(payload.get('auto_refresh_interval'))
+            if value < 5 or value > 900:
+                raise ValueError
+            config['AUTO_REFRESH_INTERVAL'] = value
+        except (TypeError, ValueError):
+            errors.append('Auto refresh interval must be between 5 seconds and 900 seconds.')
+
     if errors:
         return jsonify({'status': 'error', 'errors': errors}), 400
 
@@ -470,6 +496,7 @@ def api_update_config():
             'CONFIDENCE_LEVEL': config.get('CONFIDENCE_LEVEL'),
             'SPAN_EWMA': config.get('SPAN_EWMA'),
             'CURRENCY': config.get('CURRENCY'),
+            'AUTO_REFRESH_INTERVAL': config.get('AUTO_REFRESH_INTERVAL'),
         },
         'currency': currency_settings,
     })

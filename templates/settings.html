@@ -3,18 +3,50 @@
 {% block content %}
 <div class="row g-4">
     <div class="col-12">
+        <div class="card" id="settings-general-card">
+            <div class="card-header">
+                <h5 class="mb-1">General settings</h5>
+                <small class="text-muted">Control global preferences that apply across dashboards.</small>
+            </div>
+            <div class="card-body">
+                <form id="settings-general-form" class="row g-3 align-items-end">
+                    <div class="col-md-6">
+                        <label class="form-label" for="settings-currency-toggle">Display currency</label>
+                        <div class="form-check form-switch mt-1">
+                            <input class="form-check-input" type="checkbox" id="settings-currency-toggle" {% if currency_settings.code == 'BHD' %}checked{% endif %}>
+                            <label class="form-check-label" for="settings-currency-toggle">Show values in Bahraini Dinar (BD)</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="settings-auto-refresh" class="form-label">Auto refresh interval (seconds)</label>
+                        <input type="number" class="form-control" id="settings-auto-refresh" value="{{ config['AUTO_REFRESH_INTERVAL'] }}" min="5" max="900" step="1" required>
+                        <div class="form-text">Applies to price and valuation data on the Portfolio Overview page (5 sec – 15 min).</div>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end justify-content-md-end">
+                        <button class="btn btn-primary ms-md-auto" type="submit">
+                            <i class="bx bx-save me-1"></i>
+                            Save general settings
+                        </button>
+                    </div>
+                </form>
+                <div class="alert alert-success mt-3 d-none" role="alert" id="settings-general-success">Settings saved. Reloading to apply changes…</div>
+                <div class="alert alert-danger mt-3 d-none" role="alert" id="settings-general-error"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
         <div class="card" id="settings-holdings-card">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
-                    <h5 class="mb-1">Portfolio holdings &amp; targets</h5>
-                    <small class="text-muted">Modify holdings and rebalance targets. Changes are stored in <code>portfolio.json</code>.</small>
+                    <h5 class="mb-1">Portfolio holdings</h5>
+                    <small class="text-muted">Modify holdings data. Changes are stored in <code>portfolio.json</code>.</small>
                 </div>
                 <div class="text-muted small">
                     Current value: <strong id="settings-current-value">{{ format_currency(snapshot.summary.current_value) }}</strong>
                 </div>
             </div>
             <div class="card-body">
-                <h6 class="mb-2">Holdings</h6>
                 <div class="table-responsive mb-3">
                     <table class="table align-middle">
                         <thead>
@@ -41,13 +73,20 @@
                         Save holdings
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
 
-                <hr class="my-4">
-
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-                    <h6 class="mb-0">Target allocation</h6>
-                    <span class="badge bg-label-secondary" id="settings-target-total-badge"><span id="settings-target-total">0.00%</span> allocated</span>
+    <div class="col-12">
+        <div class="card" id="settings-target-card">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div>
+                    <h5 class="mb-1">Target allocation</h5>
+                    <small class="text-muted">Rebalance goals are stored alongside holdings in <code>portfolio.json</code>.</small>
                 </div>
+                <span class="badge bg-label-secondary" id="settings-target-total-badge"><span id="settings-target-total">0.00%</span> allocated</span>
+            </div>
+            <div class="card-body">
                 <div class="table-responsive mb-3">
                     <table class="table align-middle">
                         <thead>
@@ -79,11 +118,7 @@
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
                     <h5 class="mb-1">Benchmark &amp; risk parameters</h5>
-                    <small class="text-muted">Control the Monte Carlo inputs and displayed currency. Saved in <code>config.json</code>.</small>
-                </div>
-                <div class="form-check form-switch mb-0">
-                    <input class="form-check-input" type="checkbox" id="settings-currency-toggle" {% if currency_settings.code == 'BHD' %}checked{% endif %}>
-                    <label class="form-check-label" for="settings-currency-toggle">Show values in Bahraini Dinar (BD)</label>
+                    <small class="text-muted">Control Monte Carlo inputs saved inside <code>config.json</code>.</small>
                 </div>
             </div>
             <div class="card-body">
@@ -143,6 +178,10 @@
         </div>
     </div>
 </div>
+<div id="status-pill" role="status" aria-live="polite" aria-atomic="true">
+    <img id="status-gif" src="https://upload.wikimedia.org/wikipedia/commons/a/ad/YouTube_loading_symbol_3_%28transparent%29.gif" alt="loading">
+    <span class="status-text" id="status-text">Saving settings...</span>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -157,6 +196,30 @@
         style: 'currency',
         currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD'
     });
+
+    let statusHideTimer = null;
+
+    function showStatus(message = 'Saving settings...') {
+        const pill = document.getElementById('status-pill');
+        const text = document.getElementById('status-text');
+        if (!pill || !text) return;
+        if (statusHideTimer) {
+            clearTimeout(statusHideTimer);
+        }
+        text.textContent = message;
+        pill.style.display = 'inline-flex';
+    }
+
+    function hideStatus(delay = 0) {
+        const pill = document.getElementById('status-pill');
+        if (!pill) return;
+        if (statusHideTimer) {
+            clearTimeout(statusHideTimer);
+        }
+        statusHideTimer = setTimeout(() => {
+            pill.style.display = 'none';
+        }, delay);
+    }
 
     function convertCurrency(value) {
         const numeric = Number(value);
@@ -281,6 +344,7 @@
             });
         });
 
+        showStatus('Saving settings...');
         try {
             const response = await fetch('{{ url_for('api_update_portfolio') }}', {
                 method: 'POST',
@@ -314,6 +378,8 @@
                 statusEl.classList.add('text-danger');
                 statusEl.textContent = error.message || 'Unable to save holdings right now.';
             }
+        } finally {
+            hideStatus(400);
         }
     }
 
@@ -329,6 +395,7 @@
         });
 
         const statusEl = document.getElementById('settings-targets-status');
+        showStatus('Saving settings...');
         try {
             const response = await fetch('{{ url_for('api_update_targets') }}', {
                 method: 'POST',
@@ -361,6 +428,59 @@
             } else {
                 alert(error.message || 'Unable to save targets.');
             }
+        } finally {
+            hideStatus(400);
+        }
+    }
+
+    async function saveGeneralSettings(event) {
+        event.preventDefault();
+        const successAlert = document.getElementById('settings-general-success');
+        const errorAlert = document.getElementById('settings-general-error');
+        const currencyToggle = document.getElementById('settings-currency-toggle');
+        const autoRefreshInput = document.getElementById('settings-auto-refresh');
+        const intervalValue = parseInt(autoRefreshInput?.value, 10);
+
+        const payload = {
+            currency: currencyToggle?.checked ? 'BHD' : 'USD',
+            auto_refresh_interval: Number.isFinite(intervalValue) ? intervalValue : undefined,
+        };
+
+        showStatus('Saving settings...');
+        try {
+            const response = await fetch('{{ url_for('api_update_config') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const message = Array.isArray(data.errors) ? data.errors.join(' ') : (data.error || 'Failed to save settings.');
+                throw new Error(message);
+            }
+            if (errorAlert) {
+                errorAlert.classList.add('d-none');
+                errorAlert.textContent = '';
+            }
+            if (successAlert) {
+                successAlert.classList.remove('d-none');
+                setTimeout(() => window.location.reload(), 1200);
+            } else {
+                window.location.reload();
+            }
+        } catch (error) {
+            console.error(error);
+            if (successAlert) {
+                successAlert.classList.add('d-none');
+            }
+            if (errorAlert) {
+                errorAlert.textContent = error.message || 'Unable to save settings right now.';
+                errorAlert.classList.remove('d-none');
+            } else {
+                alert(error.message || 'Unable to save settings right now.');
+            }
+        } finally {
+            hideStatus(400);
         }
     }
 
@@ -373,9 +493,9 @@
             num_simulations: document.getElementById('settings-num-simulations')?.value,
             confidence_level: document.getElementById('settings-confidence-level')?.value,
             span_ewma: document.getElementById('settings-span-ewma')?.value,
-            currency: document.getElementById('settings-currency-toggle')?.checked ? 'BHD' : 'USD',
         };
 
+        showStatus('Saving settings...');
         try {
             const response = await fetch('{{ url_for('api_update_config') }}', {
                 method: 'POST',
@@ -406,10 +526,17 @@
                 errorAlert.textContent = error.message || 'Unable to save settings right now.';
                 errorAlert.classList.remove('d-none');
             }
+        } finally {
+            hideStatus(400);
         }
     }
 
     function setupEventListeners() {
+        const generalForm = document.getElementById('settings-general-form');
+        if (generalForm) {
+            generalForm.addEventListener('submit', saveGeneralSettings);
+        }
+
         const addBtn = document.getElementById('settings-add-holding');
         if (addBtn) {
             addBtn.addEventListener('click', () => addHoldingRow());

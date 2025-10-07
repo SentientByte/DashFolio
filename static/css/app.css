@@ -172,6 +172,52 @@ body {
     font-weight: 600;
 }
 
+.holdings-table-wrapper {
+    overflow-x: auto;
+}
+
+.holdings-table thead th {
+    white-space: normal;
+    line-height: 1.2;
+}
+
+.holdings-table thead th .th-subtitle {
+    font-size: 0.7rem;
+    text-transform: none;
+    font-weight: 500;
+    color: #9aa5b1;
+}
+
+.holdings-table td,
+.holdings-table th {
+    vertical-align: middle;
+}
+
+.holdings-table td.compact-col small {
+    display: block;
+    font-size: 0.75rem;
+}
+
+.holdings-table th.logo-cell,
+.holdings-table td.logo-cell {
+    width: 52px;
+}
+
+.holdings-table th.ticker-col,
+.holdings-table td.ticker-col {
+    width: 68px;
+}
+
+.holdings-table th.numeric-col,
+.holdings-table td.numeric-col {
+    width: 112px;
+}
+
+.holdings-table th.compact-col,
+.holdings-table td.compact-col {
+    width: 120px;
+}
+
 .empty-state {
     background: rgba(85, 110, 230, 0.05);
     border-radius: 16px;
