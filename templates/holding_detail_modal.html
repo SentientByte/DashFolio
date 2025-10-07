@@ -1,0 +1,44 @@
+<div class="modal fade holding-detail-modal" id="holdingDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-1" id="holdingDetailTitle"></h5>
+                    <small class="text-muted" id="holdingDetailSubtitle"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex flex-wrap align-items-end justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="detail-logo-wrapper" id="holdingDetailLogo"></div>
+                        <div>
+                            <div class="detail-price" id="holdingDetailPrice"></div>
+                            <div class="detail-change">
+                                <span class="detail-change-value" id="holdingDetailChange"></span>
+                                <span class="detail-change-pct" id="holdingDetailChangePct"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="detail-meta text-muted small" id="holdingDetailMeta"></div>
+                </div>
+
+                <div class="holding-chart-section mt-4">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <h6 class="mb-0">Price data</h6>
+                        <div class="btn-group btn-group-sm" role="group" id="holdingDetailRange">
+                            <button type="button" class="btn btn-outline-secondary active" data-range="1M">1M</button>
+                            <button type="button" class="btn btn-outline-secondary" data-range="3M">3M</button>
+                            <button type="button" class="btn btn-outline-secondary" data-range="6M">6M</button>
+                            <button type="button" class="btn btn-outline-secondary" data-range="YTD">YTD</button>
+                            <button type="button" class="btn btn-outline-secondary" data-range="1Y">1Y</button>
+                        </div>
+                    </div>
+                    <div id="holdingPriceChart" class="holding-price-chart"></div>
+                </div>
+
+                <div class="holding-detail-grid mt-4" id="holdingDetailMetrics"></div>
+            </div>
+        </div>
+    </div>
+</div>

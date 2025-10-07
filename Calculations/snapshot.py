@@ -47,6 +47,27 @@ def build_portfolio_snapshot(
         previous_close = safe_float(market.get("previous_close"), default=current_price)
         week_close = safe_float(market.get("week_close"), default=previous_close)
         month_close = safe_float(market.get("month_close"), default=previous_close)
+        open_price_raw = market.get("open_price")
+        close_price_raw = market.get("close_price")
+        adj_close_price_raw = market.get("adj_close_price")
+        day_high_raw = market.get("day_high")
+        day_low_raw = market.get("day_low")
+        market_cap_raw = market.get("market_cap")
+        ema_50_raw = market.get("ema_50")
+        ema_200_raw = market.get("ema_200")
+        rolling_high_raw = market.get("rolling_high_250")
+        rolling_low_raw = market.get("rolling_low_250")
+
+        open_price = safe_float(open_price_raw) if open_price_raw is not None else None
+        close_price = safe_float(close_price_raw) if close_price_raw is not None else None
+        adj_close_price = safe_float(adj_close_price_raw) if adj_close_price_raw is not None else None
+        day_high = safe_float(day_high_raw) if day_high_raw is not None else None
+        day_low = safe_float(day_low_raw) if day_low_raw is not None else None
+        market_cap = safe_float(market_cap_raw) if market_cap_raw is not None else None
+        ema_50 = safe_float(ema_50_raw) if ema_50_raw is not None else None
+        ema_200 = safe_float(ema_200_raw) if ema_200_raw is not None else None
+        rolling_high_250 = safe_float(rolling_high_raw) if rolling_high_raw is not None else None
+        rolling_low_250 = safe_float(rolling_low_raw) if rolling_low_raw is not None else None
 
         logo_url = holding.get("logo_url") or None
         name = holding.get("name") or ticker
@@ -75,6 +96,7 @@ def build_portfolio_snapshot(
         )
 
         price_history = market.get("price_history")
+        price_history_points: List[Dict[str, Any]] = []
         if price_history is not None and not price_history.empty:
             value_series = price_history.astype(float) * quantity
             portfolio_history = (
@@ -82,6 +104,14 @@ def build_portfolio_snapshot(
                 if portfolio_history is None
                 else portfolio_history.add(value_series, fill_value=0)
             )
+            trimmed_history = price_history.tail(260)
+            price_history_points = [
+                {
+                    "date": idx.strftime("%Y-%m-%d") if isinstance(idx, pd.Timestamp) else str(idx),
+                    "close": float(value),
+                }
+                for idx, value in trimmed_history.dropna().items()
+            ]
 
         computed_holdings.append(
             {
@@ -106,6 +136,17 @@ def build_portfolio_snapshot(
                 "max_drawdown_pct": max_drawdown,
                 "beta_vs_benchmark": beta,
                 "yield_on_cost_pct": yield_on_cost_pct,
+                "open_price": open_price,
+                "close_price": close_price,
+                "adj_close_price": adj_close_price,
+                "day_high_price": day_high,
+                "day_low_price": day_low,
+                "market_cap": market_cap,
+                "ema_50": ema_50,
+                "ema_200": ema_200,
+                "rolling_high_250": rolling_high_250,
+                "rolling_low_250": rolling_low_250,
+                "price_history": price_history_points,
             }
         )
 

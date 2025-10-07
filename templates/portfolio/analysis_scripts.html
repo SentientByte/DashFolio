@@ -1,0 +1,768 @@
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+    const initialSnapshot = {{ snapshot|tojson }} || {};
+    const initialPerformanceData = initialSnapshot.performance_vs_benchmark || [];
+    const benchmarkTicker = {{ benchmark_ticker|tojson }};
+    const currencySettings = {{ currency_settings|tojson }};
+    const autoRefreshInterval = Math.min(900, Math.max(5, Number({{ config['AUTO_REFRESH_INTERVAL']|default(60) }}) || 60));
+    let incomeChart = null;
+    let autoRefreshHandle = null;
+    let statusHideTimer = null;
+    let latestSnapshot = initialSnapshot;
+    const holdingsCache = new Map();
+    let holdingDetailModal = null;
+    let holdingDetailChart = null;
+    let holdingChartData = [];
+    const HOLDING_RANGE_DEFAULT = '6M';
+    let holdingChartRange = HOLDING_RANGE_DEFAULT;
+    let holdingRangeButtons = [];
+
+    const holdingDetailModalEl = document.getElementById('holdingDetailModal');
+    const holdingDetailTitleEl = document.getElementById('holdingDetailTitle');
+    const holdingDetailSubtitleEl = document.getElementById('holdingDetailSubtitle');
+    const holdingDetailLogoEl = document.getElementById('holdingDetailLogo');
+    const holdingDetailPriceEl = document.getElementById('holdingDetailPrice');
+    const holdingDetailChangeEl = document.getElementById('holdingDetailChange');
+    const holdingDetailChangePctEl = document.getElementById('holdingDetailChangePct');
+    const holdingDetailMetaEl = document.getElementById('holdingDetailMeta');
+    const holdingDetailMetricsEl = document.getElementById('holdingDetailMetrics');
+    const holdingDetailRangeGroup = document.getElementById('holdingDetailRange');
+    const holdingPriceChartEl = document.getElementById('holdingPriceChart');
+
+    function getThemeColors() {
+        const style = getComputedStyle(document.documentElement);
+        const primary = style.getPropertyValue('--bs-primary').trim() || '#696cff';
+        const success = style.getPropertyValue('--bs-success').trim() || '#71dd37';
+        return { primary, success };
+    }
+
+    const currencyFormatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD'
+    });
+
+    function showStatus(message = 'Refreshing data...') {
+        const pill = document.getElementById('status-pill');
+        const text = document.getElementById('status-text');
+        if (!pill || !text) return;
+        if (statusHideTimer) {
+            clearTimeout(statusHideTimer);
+        }
+        text.textContent = message;
+        pill.style.display = 'inline-flex';
+    }
+
+    function hideStatus(delay = 0) {
+        const pill = document.getElementById('status-pill');
+        if (!pill) return;
+        if (statusHideTimer) {
+            clearTimeout(statusHideTimer);
+        }
+        statusHideTimer = setTimeout(() => {
+            pill.style.display = 'none';
+        }, delay);
+    }
+
+    function applyCurrencyConversion(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        const rate = Number(currencySettings.rate) || 1;
+        return numeric * rate;
+    }
+
+    function formatCurrency(value) {
+        let formatted = currencyFormatter.format(applyCurrencyConversion(value));
+        if (currencySettings.code === 'BHD') {
+            formatted = formatted.replace('BHD', currencySettings.symbol).replace(/\u00a0/g, '');
+        }
+        return formatted;
+    }
+
+    function formatSignedCurrency(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric === 0) {
+            return formatCurrency(0);
+        }
+        const absolute = Math.abs(numeric);
+        const prefix = numeric > 0 ? '+' : '-';
+        return `${prefix}${formatCurrency(absolute)}`;
+    }
+
+    function formatPercent(value) {
+        if (!isFinite(value)) {
+            value = 0;
+        }
+        const prefix = value > 0 ? '+' : (value < 0 ? '-' : '');
+        return `${prefix}${Math.abs(value).toFixed(2)}%`;
+    }
+
+    function formatPercentPlain(value) {
+        if (!isFinite(value)) {
+            value = 0;
+        }
+        return `${value.toFixed(2)}%`;
+    }
+
+    function formatNumber(value, digits = 2) {
+        if (!isFinite(value)) {
+            value = 0;
+        }
+        return Number(value).toFixed(digits);
+    }
+
+    function formatQuantity(value) {
+        return formatNumber(value, 2);
+    }
+
+    function isValidNumber(value) {
+        if (value === null || value === undefined || value === '') {
+            return false;
+        }
+        const numeric = Number(value);
+        return Number.isFinite(numeric);
+    }
+
+    function formatCurrencyOrNA(value) {
+        if (!isValidNumber(value)) {
+            return 'N/A';
+        }
+        return formatCurrency(Number(value));
+    }
+
+    function formatMarketCap(value) {
+        if (!isValidNumber(value) || Number(value) <= 0) {
+            return 'N/A';
+        }
+        return formatCurrency(Number(value));
+    }
+
+    function formatUpdateTimestamp(isoString) {
+        if (!isoString) {
+            return 'Updated: Recently';
+        }
+        const parsed = new Date(isoString);
+        if (Number.isNaN(parsed.getTime())) {
+            return 'Updated: Recently';
+        }
+
+        const now = new Date();
+        const diffMs = now.getTime() - parsed.getTime();
+        const minuteMs = 60 * 1000;
+        const hourMs = 60 * minuteMs;
+        const dayMs = 24 * hourMs;
+
+        if (diffMs < minuteMs) {
+            return 'Updated: Recently';
+        }
+
+        if (diffMs < hourMs) {
+            const minutes = Math.max(1, Math.floor(diffMs / minuteMs));
+            return `Updated: ${minutes} min ago`;
+        }
+
+        if (diffMs < dayMs) {
+            const hours = Math.max(1, Math.floor(diffMs / hourMs));
+            return `Updated: ${hours} hour${hours === 1 ? '' : 's'} ago`;
+        }
+
+        const utcPlusThreeMs = parsed.getTime() + 3 * hourMs;
+        const utcPlusThree = new Date(utcPlusThreeMs);
+        const datePart = [
+            utcPlusThree.getUTCFullYear(),
+            String(utcPlusThree.getUTCMonth() + 1).padStart(2, '0'),
+            String(utcPlusThree.getUTCDate()).padStart(2, '0'),
+        ].join('-');
+        const timePart = [
+            String(utcPlusThree.getUTCHours()).padStart(2, '0'),
+            String(utcPlusThree.getUTCMinutes()).padStart(2, '0'),
+            String(utcPlusThree.getUTCSeconds()).padStart(2, '0'),
+        ].join(':');
+
+        return `Updated: ${datePart} ${timePart} UTC+3`;
+    }
+
+    function destroyIncomeChart() {
+        if (incomeChart) {
+            incomeChart.destroy();
+            incomeChart = null;
+        }
+    }
+
+    function renderIncomeChart(performanceData) {
+        const chartEl = document.getElementById('incomeChart');
+        if (!chartEl) {
+            return;
+        }
+
+        const normalized = Array.isArray(performanceData)
+            ? performanceData.map(point => ({
+                x: point.date,
+                portfolio: Number(point.portfolio || 0),
+                benchmark: Number(point.benchmark || 0),
+            }))
+            : [];
+
+        if (!normalized.length) {
+            destroyIncomeChart();
+            chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to compare performance yet.</div>';
+            return;
+        }
+
+        const portfolioSeries = normalized.map(point => ({
+            x: point.x,
+            y: Number.isFinite(point.portfolio) ? Number(point.portfolio.toFixed(2)) : null,
+        }));
+        const benchmarkSeries = normalized.map(point => ({
+            x: point.x,
+            y: Number.isFinite(point.benchmark) ? Number(point.benchmark.toFixed(2)) : null,
+        }));
+
+        const { primary, success } = getThemeColors();
+
+        const options = {
+            chart: {
+                type: 'line',
+                height: 320,
+                toolbar: { show: false },
+            },
+            series: [
+                { name: 'Portfolio', data: portfolioSeries },
+                { name: `${benchmarkTicker}`, data: benchmarkSeries },
+            ],
+            colors: [success, primary],
+            dataLabels: { enabled: false },
+            stroke: { curve: 'smooth', width: 3 },
+            xaxis: {
+                type: 'datetime',
+                labels: {
+                    format: 'MMM yy',
+                },
+            },
+            yaxis: {
+                title: {
+                    text: 'Indexed performance (base = 100)',
+                },
+                tickAmount: 6,
+            },
+            tooltip: {
+                shared: true,
+                x: {
+                    format: 'MMM dd, yyyy',
+                },
+                y: {
+                    formatter: value => `${Number(value || 0).toFixed(2)}`,
+                },
+            },
+            legend: { show: true },
+            grid: {
+                strokeDashArray: 4,
+            },
+        };
+
+        if (!incomeChart) {
+            chartEl.innerHTML = '';
+            incomeChart = new ApexCharts(chartEl, options);
+            incomeChart.render();
+        } else {
+            incomeChart.updateOptions({
+                xaxis: options.xaxis,
+                yaxis: options.yaxis,
+                stroke: options.stroke,
+                colors: options.colors,
+                tooltip: options.tooltip,
+                legend: options.legend,
+                grid: options.grid,
+            });
+            incomeChart.updateSeries(options.series);
+        }
+    }
+
+    function updateMetrics(snapshot) {
+        const summary = snapshot.summary || {};
+        const dodValue = summary.dod_value || 0;
+        const dodPositive = dodValue >= 0;
+
+        document.getElementById('metric-total-cost').textContent = formatCurrency(summary.total_cost || 0);
+        document.getElementById('metric-current-value').textContent = formatCurrency(summary.current_value || 0);
+
+        const totalPlEl = document.getElementById('metric-total-pl');
+        if (totalPlEl) {
+            const totalPlValue = summary.total_pl_value || 0;
+            const totalPlPositive = totalPlValue >= 0;
+            totalPlEl.textContent = formatSignedCurrency(totalPlValue);
+            totalPlEl.classList.toggle('pill-positive', totalPlPositive);
+            totalPlEl.classList.toggle('pill-negative', !totalPlPositive);
+        }
+
+        const labelEl = document.getElementById('metric-today-label');
+        if (labelEl) {
+            labelEl.textContent = dodPositive ? 'Todays Profit' : 'Todays Loss';
+        }
+
+        const dodValueEl = document.getElementById('metric-dod-value');
+        if (dodValueEl) {
+            dodValueEl.textContent = formatSignedCurrency(dodValue);
+            dodValueEl.classList.toggle('metric-positive', dodPositive);
+            dodValueEl.classList.toggle('metric-negative', !dodPositive);
+        }
+
+        const dodPctEl = document.getElementById('metric-dod-pct');
+        if (dodPctEl) {
+            dodPctEl.textContent = formatPercent(summary.dod_pct || 0);
+            dodPctEl.classList.toggle('pill-positive', dodPositive);
+            dodPctEl.classList.toggle('pill-negative', !dodPositive);
+        }
+
+        const topMover = summary.top_mover;
+        const topTickerEl = document.getElementById('metric-top-mover-ticker');
+        const topChangeEl = document.getElementById('metric-top-mover-change');
+        if (topTickerEl && topChangeEl) {
+            if (topMover) {
+                const moverValue = topMover.change_value || 0;
+                const moverPct = topMover.change_pct || 0;
+                const moverPositive = moverValue >= 0;
+
+                topTickerEl.textContent = topMover.ticker;
+                topTickerEl.classList.remove('text-muted');
+                topTickerEl.classList.toggle('metric-positive', moverPositive);
+                topTickerEl.classList.toggle('metric-negative', !moverPositive);
+
+                topChangeEl.innerHTML = `
+                    <span class="metric-trend-value ${moverPositive ? 'metric-positive' : 'metric-negative'}">${formatSignedCurrency(moverValue)}</span>
+                    <span class="metric-trend-pct ${moverPositive ? 'metric-positive' : 'metric-negative'}">(${formatPercent(moverPct)})</span>
+                `;
+            } else {
+                topTickerEl.textContent = 'N/A';
+                topTickerEl.classList.add('text-muted');
+                topTickerEl.classList.remove('metric-positive', 'metric-negative');
+                topChangeEl.textContent = 'No holdings available';
+            }
+        }
+
+        const updateStatusEl = document.getElementById('update-status');
+        if (updateStatusEl) {
+            updateStatusEl.textContent = formatUpdateTimestamp(snapshot.generated_at);
+        }
+    }
+
+    function buildGainCell(value, percent) {
+        const safeValue = Number.isFinite(value) ? value : 0;
+        const safePercent = Number.isFinite(percent) ? percent : 0;
+        const positive = safeValue >= 0;
+        const cls = positive ? 'gain-positive' : 'gain-negative';
+        return `<span class="d-block fw-semibold ${cls}">${formatSignedCurrency(safeValue)}</span>` +
+            `<small class="text-muted">${formatPercent(safePercent)}</small>`;
+    }
+
+    function updateHoldingsCache(snapshot) {
+        holdingsCache.clear();
+        if (!snapshot || !Array.isArray(snapshot.holdings)) {
+            return;
+        }
+        snapshot.holdings.forEach(holding => {
+            if (holding && holding.ticker) {
+                holdingsCache.set(holding.ticker, holding);
+            }
+        });
+    }
+
+    function destroyHoldingChart() {
+        if (holdingDetailChart) {
+            holdingDetailChart.destroy();
+            holdingDetailChart = null;
+        }
+    }
+
+    function setActiveRangeButton(range) {
+        if (!holdingRangeButtons || !holdingRangeButtons.length) {
+            return;
+        }
+        holdingRangeButtons.forEach(button => {
+            const isActive = button.dataset.range === range;
+            button.classList.toggle('active', isActive);
+        });
+    }
+
+    function filterPriceHistory(range) {
+        if (!Array.isArray(holdingChartData) || holdingChartData.length === 0) {
+            return [];
+        }
+        if (!range) {
+            return holdingChartData.slice();
+        }
+        const normalized = String(range).toUpperCase();
+        const now = new Date();
+        if (normalized === 'YTD') {
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            return holdingChartData.filter(point => {
+                const parsed = new Date(point.date);
+                return !Number.isNaN(parsed.getTime()) && parsed >= startOfYear;
+            });
+        }
+        const dayLookup = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
+        const days = dayLookup[normalized];
+        if (!days) {
+            return holdingChartData.slice();
+        }
+        const cutoff = new Date(now);
+        cutoff.setDate(cutoff.getDate() - days);
+        return holdingChartData.filter(point => {
+            const parsed = new Date(point.date);
+            return !Number.isNaN(parsed.getTime()) && parsed >= cutoff;
+        });
+    }
+
+    function renderHoldingChart() {
+        if (!holdingPriceChartEl) {
+            return;
+        }
+        const filtered = filterPriceHistory(holdingChartRange);
+        if (!filtered.length) {
+            destroyHoldingChart();
+            holdingPriceChartEl.innerHTML = '<div class="text-muted text-center py-4">No price history available.</div>';
+            return;
+        }
+
+        const seriesData = filtered
+            .map(point => {
+                const numeric = Number(point.close);
+                if (!Number.isFinite(numeric)) {
+                    return null;
+                }
+                return {
+                    x: point.date,
+                    y: Number(numeric.toFixed(2)),
+                };
+            })
+            .filter(Boolean);
+
+        if (!seriesData.length) {
+            destroyHoldingChart();
+            holdingPriceChartEl.innerHTML = '<div class="text-muted text-center py-4">No price history available.</div>';
+            return;
+        }
+
+        const { primary } = getThemeColors();
+        const options = {
+            chart: {
+                type: 'area',
+                height: 260,
+                toolbar: { show: false },
+            },
+            series: [{ name: 'Price', data: seriesData }],
+            dataLabels: { enabled: false },
+            stroke: { curve: 'smooth', width: 2 },
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shadeIntensity: 1,
+                    opacityFrom: 0.3,
+                    opacityTo: 0.05,
+                    stops: [0, 90, 100],
+                },
+            },
+            colors: [primary],
+            xaxis: {
+                type: 'datetime',
+                labels: { format: 'MMM yy' },
+            },
+            yaxis: {
+                labels: {
+                    formatter: value => formatCurrency(value),
+                },
+            },
+            tooltip: {
+                x: { format: 'MMM dd, yyyy' },
+                y: { formatter: value => formatCurrency(value) },
+            },
+            grid: { strokeDashArray: 4 },
+        };
+
+        if (!holdingDetailChart) {
+            holdingPriceChartEl.innerHTML = '';
+            holdingDetailChart = new ApexCharts(holdingPriceChartEl, options);
+            holdingDetailChart.render();
+        } else {
+            holdingDetailChart.updateOptions({
+                colors: options.colors,
+                stroke: options.stroke,
+                fill: options.fill,
+                xaxis: options.xaxis,
+                yaxis: options.yaxis,
+                tooltip: options.tooltip,
+                grid: options.grid,
+            });
+            holdingDetailChart.updateSeries(options.series);
+        }
+    }
+
+    function setHoldingRange(range) {
+        holdingChartRange = range || HOLDING_RANGE_DEFAULT;
+        setActiveRangeButton(holdingChartRange);
+        renderHoldingChart();
+    }
+
+    function populateHoldingDetail(holding) {
+        if (!holding) {
+            return;
+        }
+
+        if (holdingDetailTitleEl) {
+            holdingDetailTitleEl.textContent = holding.ticker || '';
+        }
+
+        if (holdingDetailSubtitleEl) {
+            const subtitle = holding.name && holding.name !== holding.ticker ? holding.name : '';
+            holdingDetailSubtitleEl.textContent = subtitle;
+            holdingDetailSubtitleEl.classList.toggle('d-none', !subtitle);
+        }
+
+        if (holdingDetailLogoEl) {
+            const logoSrc = holding.logo_url || 'https://via.placeholder.com/64?text=%20';
+            holdingDetailLogoEl.innerHTML = `<img src="${logoSrc}" alt="${holding.ticker || ''} logo" onerror="this.src='https://via.placeholder.com/64?text=%20';">`;
+        }
+
+        if (holdingDetailPriceEl) {
+            holdingDetailPriceEl.textContent = formatCurrencyOrNA(holding.current_price);
+        }
+
+        const changeValue = Number(holding.todays_gain || 0);
+        const changePct = Number(holding.todays_gain_pct || 0);
+
+        if (holdingDetailChangeEl) {
+            holdingDetailChangeEl.textContent = formatSignedCurrency(changeValue);
+            holdingDetailChangeEl.classList.toggle('detail-positive', changeValue > 0);
+            holdingDetailChangeEl.classList.toggle('detail-negative', changeValue < 0);
+        }
+
+        if (holdingDetailChangePctEl) {
+            holdingDetailChangePctEl.textContent = `(${formatPercent(changePct)})`;
+            holdingDetailChangePctEl.classList.toggle('detail-positive', changePct > 0);
+            holdingDetailChangePctEl.classList.toggle('detail-negative', changePct < 0);
+        }
+
+        if (holdingDetailMetaEl) {
+            const parts = [];
+            parts.push(`Quantity ${formatQuantity(holding.quantity || 0)}`);
+            if (isValidNumber(holding.average_cost)) {
+                parts.push(`Avg cost ${formatCurrencyOrNA(holding.average_cost)}`);
+            }
+            parts.push(`Allocation ${formatNumber(holding.allocation_pct || 0)}%`);
+            if (isValidNumber(holding.target_pct)) {
+                parts.push(`Target ${formatNumber(holding.target_pct)}%`);
+            }
+            holdingDetailMetaEl.textContent = parts.join(' · ');
+        }
+
+        if (holdingDetailMetricsEl) {
+            const metrics = [
+                { label: 'Open', value: formatCurrencyOrNA(holding.open_price) },
+                { label: 'Close', value: formatCurrencyOrNA(holding.close_price) },
+                { label: 'Adjusted close', value: formatCurrencyOrNA(holding.adj_close_price) },
+                { label: 'High', value: formatCurrencyOrNA(holding.day_high_price) },
+                { label: 'Low', value: formatCurrencyOrNA(holding.day_low_price) },
+                { label: 'Market cap', value: formatMarketCap(holding.market_cap) },
+                { label: '50-Day EMA', value: formatCurrencyOrNA(holding.ema_50) },
+                { label: '200-Day EMA', value: formatCurrencyOrNA(holding.ema_200) },
+                { label: '250-Day High', value: formatCurrencyOrNA(holding.rolling_high_250) },
+                { label: '250-Day Low', value: formatCurrencyOrNA(holding.rolling_low_250) },
+            ];
+            holdingDetailMetricsEl.innerHTML = metrics
+                .map(metric => `
+                    <div class="holding-detail-metric">
+                        <span class="metric-label">${metric.label}</span>
+                        <span class="metric-value">${metric.value}</span>
+                    </div>
+                `)
+                .join('');
+        }
+
+        holdingChartData = Array.isArray(holding.price_history) ? holding.price_history : [];
+        setHoldingRange(HOLDING_RANGE_DEFAULT);
+    }
+
+    function openHoldingDetail(holding) {
+        if (!holdingDetailModal) {
+            return;
+        }
+        populateHoldingDetail(holding);
+        holdingDetailModal.show();
+    }
+
+    function refreshTable(snapshot) {
+        const tbody = document.getElementById('holdings-body');
+        const kpiBody = document.getElementById('kpi-body');
+        const kpiWrapper = document.getElementById('kpi-table-wrapper');
+        const kpiEmptyState = document.getElementById('kpi-empty-state');
+
+        if (!tbody) {
+            window.location.reload();
+            return;
+        }
+
+        updateHoldingsCache(snapshot);
+
+        const holdings = snapshot.holdings || [];
+
+        if (kpiBody) {
+            kpiBody.innerHTML = '';
+        }
+
+        if (holdings.length === 0) {
+            if (kpiWrapper && kpiEmptyState) {
+                kpiWrapper.classList.add('d-none');
+                kpiEmptyState.classList.remove('d-none');
+            }
+            window.location.reload();
+            return;
+        }
+
+        if (kpiWrapper && kpiEmptyState) {
+            kpiWrapper.classList.remove('d-none');
+            kpiEmptyState.classList.add('d-none');
+        }
+
+        tbody.innerHTML = '';
+        holdings.forEach(holding => {
+            const row = document.createElement('tr');
+            row.dataset.ticker = holding.ticker;
+            const logoSrc = holding.logo_url || 'https://via.placeholder.com/42?text=%20';
+            row.innerHTML = `
+                <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
+                <td class="fw-semibold ticker-col">${holding.ticker}</td>
+                <td class="numeric-col"><span class="fw-semibold">${formatQuantity(holding.quantity)}</span></td>
+                <td class="numeric-col">${formatCurrency(holding.average_cost)}</td>
+                <td class="current-price numeric-col">${formatCurrency(holding.current_price)}</td>
+                <td class="numeric-col">${formatCurrency(holding.total_cost)}</td>
+                <td class="current-value numeric-col">${formatCurrency(holding.current_value)}</td>
+                <td class="todays-gain compact-col">${buildGainCell(holding.todays_gain, holding.todays_gain_pct)}</td>
+                <td class="compact-col">${buildGainCell(holding.weekly_gain, holding.weekly_gain_pct)}</td>
+                <td class="compact-col">${buildGainCell(holding.monthly_gain, holding.monthly_gain_pct)}</td>
+                <td class="compact-col">${buildGainCell(holding.pl_value, holding.pl_pct)}</td>
+                <td class="compact-col"><span class="allocation-pill">${formatNumber(holding.allocation_pct || 0)}%</span></td>
+            `;
+            tbody.appendChild(row);
+
+            if (kpiBody) {
+                const kpiRow = document.createElement('tr');
+                kpiRow.innerHTML = `
+                    <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
+                    <td class="fw-semibold">${holding.ticker}</td>
+                    <td><span class="fw-semibold">${formatPercentPlain(holding.volatility_pct || 0)}</span></td>
+                    <td><span class="fw-semibold">${formatNumber(holding.sharpe_ratio || 0)}</span></td>
+                    <td><span class="fw-semibold">${formatPercentPlain(holding.max_drawdown_pct || 0)}</span></td>
+                    <td><span class="fw-semibold">${formatNumber(holding.beta_vs_benchmark || 0)}</span></td>
+                    <td><span class="fw-semibold">${formatPercentPlain(holding.yield_on_cost_pct || 0)}</span></td>
+                `;
+                kpiBody.appendChild(kpiRow);
+            }
+        });
+    }
+
+    async function fetchSnapshot({ force = false, showStatusPill = false } = {}) {
+        const refreshButton = document.getElementById('portfolio-refresh-btn');
+        if (showStatusPill) {
+            showStatus('Refreshing data...');
+            if (refreshButton) {
+                refreshButton.disabled = true;
+            }
+        }
+        try {
+            const url = new URL('{{ url_for('api_get_portfolio') }}', window.location.origin);
+            if (force) {
+                url.searchParams.set('force', '1');
+            }
+            const response = await fetch(url, { cache: 'no-cache' });
+            if (!response.ok) throw new Error('Request failed');
+            const snapshot = await response.json();
+            latestSnapshot = snapshot;
+            updateMetrics(snapshot);
+            refreshTable(snapshot);
+            renderIncomeChart(snapshot.performance_vs_benchmark || []);
+        } catch (err) {
+            console.error('Failed to refresh portfolio snapshot', err);
+        } finally {
+            if (showStatusPill) {
+                hideStatus(400);
+                if (refreshButton) {
+                    refreshButton.disabled = false;
+                }
+            }
+        }
+    }
+
+    function scheduleAutoRefresh() {
+        if (autoRefreshHandle) {
+            clearInterval(autoRefreshHandle);
+        }
+        if (autoRefreshInterval && autoRefreshInterval >= 5) {
+            autoRefreshHandle = setInterval(() => {
+                fetchSnapshot({ force: true });
+            }, autoRefreshInterval * 1000);
+        }
+    }
+
+    if (holdingDetailModalEl) {
+        holdingDetailModal = new bootstrap.Modal(holdingDetailModalEl);
+        holdingDetailModalEl.addEventListener('hidden.bs.modal', () => {
+            destroyHoldingChart();
+            holdingChartData = [];
+            holdingChartRange = HOLDING_RANGE_DEFAULT;
+            setActiveRangeButton(HOLDING_RANGE_DEFAULT);
+        });
+    }
+
+    if (holdingDetailRangeGroup) {
+        holdingRangeButtons = Array.from(holdingDetailRangeGroup.querySelectorAll('button'));
+        holdingRangeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const { range } = button.dataset;
+                if (range) {
+                    setHoldingRange(range);
+                }
+            });
+        });
+        setActiveRangeButton(HOLDING_RANGE_DEFAULT);
+    }
+
+    updateHoldingsCache(initialSnapshot);
+
+    const holdingsCard = document.getElementById('holdings-card');
+    if (holdingsCard) {
+        holdingsCard.addEventListener('click', event => {
+            const target = event.target;
+            if (!target) {
+                return;
+            }
+            const actionable = target.closest('.ticker-col') || target.closest('.logo-cell');
+            if (!actionable) {
+                return;
+            }
+            const row = target.closest('tr[data-ticker]');
+            if (!row) {
+                return;
+            }
+            const ticker = row.dataset.ticker;
+            if (!ticker) {
+                return;
+            }
+            const holding = holdingsCache.get(ticker);
+            if (holding) {
+                openHoldingDetail(holding);
+            }
+        });
+    }
+
+    const manualRefreshButton = document.getElementById('portfolio-refresh-btn');
+    if (manualRefreshButton) {
+        manualRefreshButton.addEventListener('click', () => {
+            fetchSnapshot({ force: true, showStatusPill: true });
+        });
+    }
+
+    renderIncomeChart(initialPerformanceData);
+    fetchSnapshot({ force: true });
+    scheduleAutoRefresh();
+</script>
