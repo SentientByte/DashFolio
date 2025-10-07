@@ -3,9 +3,9 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <p class="text-muted mb-0">Monitor valuation changes, intraday moves and allocations across every holding.</p>
-    <button class="btn btn-primary d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#portfolioModal">
-        <i class="bx bx-edit me-2"></i>
-        Update Portfolio
+    <button class="btn btn-outline-primary d-flex align-items-center" type="button" id="portfolio-refresh-btn">
+        <i class="bx bx-refresh me-2"></i>
+        Refresh data
     </button>
 </div>
 
@@ -79,8 +79,8 @@
 <div class="card mb-4" id="performance-card">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
-            <h5 class="mb-1">Portfolio vs. {{ benchmark_ticker }}</h5>
-            <small class="text-muted">Indexed to 100 to compare cumulative performance</small>
+            <h5 class="mb-1">Portfolio vs. Benchmark</h5>
+            <small class="text-muted">Relative performance compared with {{ benchmark_ticker }}</small>
         </div>
         <span class="badge bg-label-primary">Benchmark: {{ benchmark_ticker }}</span>
     </div>
@@ -95,28 +95,54 @@
             <h5 class="mb-1">Holdings snapshot</h5>
             <small class="text-muted">Real-time snapshot pulled from Yahoo Finance</small>
         </div>
-        <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#portfolioModal">
-            <i class="bx bx-plus me-1"></i>
-            Manage holdings
-        </button>
     </div>
     {% if snapshot.holdings %}
-        <div class="table-responsive text-nowrap">
-            <table class="table mb-0">
+        <div class="table-responsive holdings-table-wrapper">
+            <table class="table mb-0 holdings-table align-middle">
                 <thead>
                 <tr>
                     <th class="logo-cell"></th>
-                    <th class="text-uppercase text-muted small">Ticker</th>
-                    <th class="text-uppercase text-muted small">Quantity</th>
-                    <th class="text-uppercase text-muted small">Avg cost / unit ({{ currency_context.code }})</th>
-                    <th class="text-uppercase text-muted small">Current price ({{ currency_context.code }})</th>
-                    <th class="text-uppercase text-muted small">Total cost ({{ currency_context.code }})</th>
-                    <th class="text-uppercase text-muted small">Current value ({{ currency_context.code }})</th>
-                    <th class="text-uppercase text-muted small">Today</th>
-                    <th class="text-uppercase text-muted small">Week</th>
-                    <th class="text-uppercase text-muted small">Month</th>
-                    <th class="text-uppercase text-muted small">P/L</th>
-                    <th class="text-uppercase text-muted small">Allocation</th>
+                    <th class="text-muted small ticker-col"><span class="d-block text-uppercase">Ticker</span></th>
+                    <th class="text-muted small numeric-col">
+                        <span class="d-block text-uppercase">Quantity</span>
+                        <span class="th-subtitle">Units</span>
+                    </th>
+                    <th class="text-muted small numeric-col">
+                        <span class="d-block text-uppercase">Avg cost</span>
+                        <span class="th-subtitle">({{ currency_context.code }})</span>
+                    </th>
+                    <th class="text-muted small numeric-col">
+                        <span class="d-block text-uppercase">Current price</span>
+                        <span class="th-subtitle">({{ currency_context.code }})</span>
+                    </th>
+                    <th class="text-muted small numeric-col">
+                        <span class="d-block text-uppercase">Total cost</span>
+                        <span class="th-subtitle">({{ currency_context.code }})</span>
+                    </th>
+                    <th class="text-muted small numeric-col">
+                        <span class="d-block text-uppercase">Current value</span>
+                        <span class="th-subtitle">({{ currency_context.code }})</span>
+                    </th>
+                    <th class="text-muted small compact-col">
+                        <span class="d-block text-uppercase">Today</span>
+                        <span class="th-subtitle">Value / %</span>
+                    </th>
+                    <th class="text-muted small compact-col">
+                        <span class="d-block text-uppercase">Week</span>
+                        <span class="th-subtitle">Value / %</span>
+                    </th>
+                    <th class="text-muted small compact-col">
+                        <span class="d-block text-uppercase">Month</span>
+                        <span class="th-subtitle">Value / %</span>
+                    </th>
+                    <th class="text-muted small compact-col">
+                        <span class="d-block text-uppercase">P/L</span>
+                        <span class="th-subtitle">Value / %</span>
+                    </th>
+                    <th class="text-muted small compact-col">
+                        <span class="d-block text-uppercase">Allocation</span>
+                        <span class="th-subtitle">% of total</span>
+                    </th>
                 </tr>
                 </thead>
                 <tbody class="table-border-bottom-0" id="holdings-body">
@@ -135,38 +161,38 @@
                                 <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
                             {% endif %}
                         </td>
-                        <td class="fw-semibold">{{ holding.ticker }}</td>
-                        <td><span class="fw-semibold">{{ '%.2f'|format(holding.quantity) }}</span></td>
-                        <td>
+                        <td class="fw-semibold ticker-col">{{ holding.ticker }}</td>
+                        <td class="numeric-col"><span class="fw-semibold">{{ '%.2f'|format(holding.quantity) }}</span></td>
+                        <td class="numeric-col">
                             <span class="fw-semibold">{{ format_currency(holding.average_cost) }}</span>
                         </td>
-                        <td class="current-price">
+                        <td class="current-price numeric-col">
                             <span class="fw-semibold">{{ format_currency(holding.current_price) }}</span>
                         </td>
-                        <td>
+                        <td class="numeric-col">
                             <span class="fw-semibold">{{ format_currency(holding.total_cost) }}</span>
                         </td>
-                        <td class="current-value">
+                        <td class="current-value numeric-col">
                             <span class="fw-semibold">{{ format_currency(holding.current_value) }}</span>
                         </td>
-                        <td class="todays-gain {{ gain_class }}">
-                            <span class="d-block fw-semibold">{{ format_signed_currency(holding.todays_gain) }}</span>
+                        <td class="todays-gain compact-col">
+                            <span class="d-block fw-semibold {{ gain_class }}">{{ format_signed_currency(holding.todays_gain) }}</span>
                             <small class="text-muted">{{ '+' if holding.todays_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.todays_gain_pct|abs) }}%</small>
                         </td>
-                        <td>
+                        <td class="compact-col">
                             <span class="d-block fw-semibold {{ week_class }}">{{ format_signed_currency(holding.weekly_gain) }}</span>
                             <small class="text-muted">{{ '+' if holding.weekly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.weekly_gain_pct|abs) }}%</small>
                         </td>
-                        <td>
+                        <td class="compact-col">
                             <span class="d-block fw-semibold {{ month_class }}">{{ format_signed_currency(holding.monthly_gain) }}</span>
                             <small class="text-muted">{{ '+' if holding.monthly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.monthly_gain_pct|abs) }}%</small>
                         </td>
-                        <td>
+                        <td class="compact-col">
                             <span class="d-block fw-semibold {{ pl_class }}">{{ format_signed_currency(pl_value) }}</span>
                             <small class="text-muted">{{ '+' if pl_pct >= 0 else '-' }}{{ '%.2f'|format(pl_pct|abs) }}%</small>
                         </td>
-                        <td>
-                            <span class="badge bg-label-primary">{{ '%.2f'|format(holding.allocation_pct) }}%</span>
+                        <td class="compact-col">
+                            <span class="allocation-pill">{{ '%.2f'|format(holding.allocation_pct) }}%</span>
                         </td>
                     </tr>
                 {% endfor %}
@@ -177,7 +203,7 @@
         <div class="card-body">
             <div class="empty-state text-center py-5">
                 <h5 class="fw-semibold mb-1">No holdings yet</h5>
-                <p class="text-muted mb-0">Add holdings using the Manage holdings button to begin tracking performance.</p>
+                <p class="text-muted mb-0">Add holdings from the Settings page to begin tracking performance.</p>
             </div>
         </div>
     {% endif %}
@@ -230,70 +256,9 @@
 </div>
 </div>
 
-<div class="modal fade" id="portfolioModal" tabindex="-1" aria-labelledby="portfolioModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div>
-                    <h5 class="modal-title" id="portfolioModalLabel">Update portfolio holdings</h5>
-                    <p class="text-muted mb-0">Add, remove or adjust positions. Tickers will be saved in uppercase.</p>
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="table-responsive">
-                    <table class="table align-middle" id="portfolio-form-table">
-                        <thead>
-                        <tr>
-                            <th>Ticker</th>
-                            <th>Name</th>
-                            <th>Quantity</th>
-                            <th>Avg cost</th>
-                            <th>Logo URL</th>
-                            <th></th>
-                        </tr>
-                        </thead>
-                        <tbody id="portfolio-form-container">
-                        {% if holdings_raw %}
-                            {% for holding in holdings_raw %}
-                                <tr class="holding-row">
-                                    <td><input type="text" class="form-control holding-ticker" value="{{ holding.ticker }}" placeholder="AAPL"></td>
-                                    <td><input type="text" class="form-control holding-name" value="{{ holding.name|default('') }}" placeholder="Company name"></td>
-                                    <td><input type="number" step="0.0001" class="form-control holding-quantity" value="{{ holding.quantity|default(0) }}"></td>
-                                    <td><input type="number" step="0.01" class="form-control holding-avg-cost" value="{{ (holding.average_cost * currency_context.rate)|round(4) }}"></td>
-                                    <td><input type="text" class="form-control holding-logo" value="{{ holding.logo_url|default('') }}" placeholder="https://..."></td>
-                                    <td class="text-end"><button type="button" class="btn btn-link text-danger remove-row">Remove</button></td>
-                                </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr class="holding-row">
-                                <td><input type="text" class="form-control holding-ticker" placeholder="AAPL"></td>
-                                <td><input type="text" class="form-control holding-name" placeholder="Company name"></td>
-                                <td><input type="number" step="0.0001" class="form-control holding-quantity"></td>
-                                <td><input type="number" step="0.01" class="form-control holding-avg-cost" placeholder="{{ currency_context.code }}"></td>
-                                <td><input type="text" class="form-control holding-logo" placeholder="https://..."></td>
-                                <td class="text-end"><button type="button" class="btn btn-link text-danger remove-row">Remove</button></td>
-                            </tr>
-                        {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-                <button type="button" class="btn btn-outline-secondary mt-2" id="add-holding">
-                    <i class="bx bx-plus me-1"></i>
-                    Add holding
-                </button>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="save-portfolio">Save changes</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div id="status-pill" role="status" aria-live="polite" aria-atomic="true">
     <img id="status-gif" src="https://upload.wikimedia.org/wikipedia/commons/a/ad/YouTube_loading_symbol_3_%28transparent%29.gif" alt="loading">
-    <span class="status-text" id="status-text">Working...</span>
+    <span class="status-text" id="status-text">Refreshing data...</span>
 </div>
 {% endblock %}
 
@@ -303,12 +268,37 @@
     const initialPerformanceData = {{ snapshot.performance_vs_benchmark|tojson }} || [];
     const benchmarkTicker = {{ benchmark_ticker|tojson }};
     const currencySettings = {{ currency_settings|tojson }};
+    const autoRefreshInterval = Math.min(900, Math.max(5, Number({{ config['AUTO_REFRESH_INTERVAL']|default(60) }}) || 60));
     let incomeChart = null;
+    let autoRefreshHandle = null;
+    let statusHideTimer = null;
 
     const currencyFormatter = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD'
     });
+
+    function showStatus(message = 'Refreshing data...') {
+        const pill = document.getElementById('status-pill');
+        const text = document.getElementById('status-text');
+        if (!pill || !text) return;
+        if (statusHideTimer) {
+            clearTimeout(statusHideTimer);
+        }
+        text.textContent = message;
+        pill.style.display = 'inline-flex';
+    }
+
+    function hideStatus(delay = 0) {
+        const pill = document.getElementById('status-pill');
+        if (!pill) return;
+        if (statusHideTimer) {
+            clearTimeout(statusHideTimer);
+        }
+        statusHideTimer = setTimeout(() => {
+            pill.style.display = 'none';
+        }, delay);
+    }
 
     function applyCurrencyConversion(value) {
         const numeric = Number(value);
@@ -317,15 +307,6 @@
         }
         const rate = Number(currencySettings.rate) || 1;
         return numeric * rate;
-    }
-
-    function revertCurrency(value) {
-        const numeric = Number(value);
-        if (!Number.isFinite(numeric)) {
-            return 0;
-        }
-        const rate = Number(currencySettings.rate) || 1;
-        return rate ? numeric / rate : numeric;
     }
 
     function formatCurrency(value) {
@@ -385,42 +366,50 @@
             return;
         }
 
-        if (!Array.isArray(performanceData) || performanceData.length === 0) {
+        const normalized = Array.isArray(performanceData)
+            ? performanceData.map(point => ({
+                x: point.date,
+                portfolio: Number(point.portfolio || 0) - 100,
+                benchmark: Number(point.benchmark || 0) - 100,
+            }))
+            : [];
+
+        if (!normalized.length) {
             destroyIncomeChart();
             chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to compare performance yet.</div>';
             return;
         }
 
-        const portfolioSeries = performanceData.map(point => ({
-            x: point.date,
-            y: Number(point.portfolio || 0)
+        const portfolioGainSeries = normalized.map(point => ({
+            x: point.x,
+            y: point.portfolio >= 0 ? Number(point.portfolio.toFixed(2)) : null,
         }));
-        const benchmarkSeries = performanceData.map(point => ({
-            x: point.date,
-            y: Number(point.benchmark || 0)
+        const portfolioLossSeries = normalized.map(point => ({
+            x: point.x,
+            y: point.portfolio < 0 ? Number(point.portfolio.toFixed(2)) : null,
+        }));
+        const benchmarkSeries = normalized.map(point => ({
+            x: point.x,
+            y: Number(point.benchmark.toFixed(2)),
         }));
 
         const options = {
             chart: {
-                type: 'area',
+                type: 'line',
                 height: 320,
                 toolbar: { show: false },
             },
             series: [
-                { name: 'Portfolio', data: portfolioSeries },
-                { name: `${benchmarkTicker} Benchmark`, data: benchmarkSeries }
+                { name: 'Portfolio (Gain)', data: portfolioGainSeries },
+                { name: 'Portfolio (Loss)', data: portfolioLossSeries },
+                { name: `${benchmarkTicker} Benchmark`, data: benchmarkSeries },
             ],
-            colors: ['#696cff', '#03c3ec'],
+            colors: ['#28c76f', '#ea5455', '#b0b5bd'],
             dataLabels: { enabled: false },
-            stroke: { curve: 'smooth', width: 3 },
+            stroke: { curve: 'smooth', width: [3, 3, 3] },
             fill: {
-                type: 'gradient',
-                gradient: {
-                    shadeIntensity: 0.6,
-                    opacityFrom: 0.4,
-                    opacityTo: 0.05,
-                    stops: [0, 90, 100],
-                },
+                type: 'solid',
+                opacity: [0.25, 0.25, 0],
             },
             xaxis: {
                 type: 'datetime',
@@ -430,11 +419,12 @@
             },
             yaxis: {
                 labels: {
-                    formatter: value => `${Number(value || 0).toFixed(0)}`,
+                    formatter: value => `${Number(value || 0).toFixed(1)}%`,
                 },
                 title: {
-                    text: 'Indexed Performance (Base = 100)',
+                    text: 'Return since start (%)',
                 },
+                tickAmount: 6,
             },
             tooltip: {
                 shared: true,
@@ -442,11 +432,32 @@
                     format: 'MMM dd, yyyy',
                 },
                 y: {
-                    formatter: value => `${Number(value || 0).toFixed(2)}`,
+                    formatter: value => `${Number(value || 0).toFixed(2)}%`,
                 },
             },
             legend: {
                 position: 'top',
+                formatter: (seriesName) => {
+                    if (seriesName === 'Portfolio (Gain)') {
+                        return 'Portfolio +';
+                    }
+                    if (seriesName === 'Portfolio (Loss)') {
+                        return 'Portfolio -';
+                    }
+                    return seriesName.replace(' Benchmark', '');
+                },
+            },
+            annotations: {
+                yaxis: [
+                    {
+                        y: 0,
+                        borderColor: '#d9dee3',
+                        strokeDashArray: 4,
+                    },
+                ],
+            },
+            grid: {
+                strokeDashArray: 4,
             },
         };
 
@@ -463,6 +474,8 @@
                 colors: options.colors,
                 tooltip: options.tooltip,
                 legend: options.legend,
+                annotations: options.annotations,
+                grid: options.grid,
             });
             incomeChart.updateSeries(options.series);
         }
@@ -578,17 +591,17 @@
             const logoSrc = holding.logo_url || 'https://via.placeholder.com/42?text=%20';
             row.innerHTML = `
                 <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
-                <td class="fw-semibold">${holding.ticker}</td>
-                <td><span class="fw-semibold">${formatQuantity(holding.quantity)}</span></td>
-                <td>${formatCurrency(holding.average_cost)}</td>
-                <td class="current-price">${formatCurrency(holding.current_price)}</td>
-                <td>${formatCurrency(holding.total_cost)}</td>
-                <td class="current-value">${formatCurrency(holding.current_value)}</td>
-                <td class="todays-gain">${buildGainCell(holding.todays_gain, holding.todays_gain_pct)}</td>
-                <td>${buildGainCell(holding.weekly_gain, holding.weekly_gain_pct)}</td>
-                <td>${buildGainCell(holding.monthly_gain, holding.monthly_gain_pct)}</td>
-                <td>${buildGainCell(holding.pl_value, holding.pl_pct)}</td>
-                <td><span class="allocation-pill">${formatNumber(holding.allocation_pct || 0)}%</span></td>
+                <td class="fw-semibold ticker-col">${holding.ticker}</td>
+                <td class="numeric-col"><span class="fw-semibold">${formatQuantity(holding.quantity)}</span></td>
+                <td class="numeric-col">${formatCurrency(holding.average_cost)}</td>
+                <td class="current-price numeric-col">${formatCurrency(holding.current_price)}</td>
+                <td class="numeric-col">${formatCurrency(holding.total_cost)}</td>
+                <td class="current-value numeric-col">${formatCurrency(holding.current_value)}</td>
+                <td class="todays-gain compact-col">${buildGainCell(holding.todays_gain, holding.todays_gain_pct)}</td>
+                <td class="compact-col">${buildGainCell(holding.weekly_gain, holding.weekly_gain_pct)}</td>
+                <td class="compact-col">${buildGainCell(holding.monthly_gain, holding.monthly_gain_pct)}</td>
+                <td class="compact-col">${buildGainCell(holding.pl_value, holding.pl_pct)}</td>
+                <td class="compact-col"><span class="allocation-pill">${formatNumber(holding.allocation_pct || 0)}%</span></td>
             `;
             tbody.appendChild(row);
 
@@ -608,9 +621,20 @@
         });
     }
 
-    async function fetchSnapshot() {
+    async function fetchSnapshot({ force = false, showStatusPill = false } = {}) {
+        const refreshButton = document.getElementById('portfolio-refresh-btn');
+        if (showStatusPill) {
+            showStatus('Refreshing data...');
+            if (refreshButton) {
+                refreshButton.disabled = true;
+            }
+        }
         try {
-            const response = await fetch('{{ url_for('api_get_portfolio') }}');
+            const url = new URL('{{ url_for('api_get_portfolio') }}', window.location.origin);
+            if (force) {
+                url.searchParams.set('force', '1');
+            }
+            const response = await fetch(url, { cache: 'no-cache' });
             if (!response.ok) throw new Error('Request failed');
             const snapshot = await response.json();
             updateMetrics(snapshot);
@@ -618,81 +642,36 @@
             renderIncomeChart(snapshot.performance_vs_benchmark || []);
         } catch (err) {
             console.error('Failed to refresh portfolio snapshot', err);
+        } finally {
+            if (showStatusPill) {
+                hideStatus(400);
+                if (refreshButton) {
+                    refreshButton.disabled = false;
+                }
+            }
         }
     }
 
-    setInterval(fetchSnapshot, 60000);
-    fetchSnapshot();
-    renderIncomeChart(initialPerformanceData);
-
-    document.getElementById('add-holding').addEventListener('click', () => {
-        const container = document.getElementById('portfolio-form-container');
-        const template = document.createElement('tr');
-        template.className = 'holding-row';
-        template.innerHTML = `
-            <td><input type="text" class="form-control holding-ticker" placeholder="AAPL"></td>
-            <td><input type="text" class="form-control holding-name" placeholder="Company name"></td>
-            <td><input type="number" step="0.0001" class="form-control holding-quantity"></td>
-            <td><input type="number" step="0.01" class="form-control holding-avg-cost"></td>
-            <td><input type="text" class="form-control holding-logo" placeholder="https://..."></td>
-            <td class="text-end"><button type="button" class="btn btn-link text-danger remove-row">Remove</button></td>`;
-        container.appendChild(template);
-    });
-
-    document.getElementById('portfolio-form-container').addEventListener('click', (event) => {
-        if (event.target.classList.contains('remove-row')) {
-            const row = event.target.closest('.holding-row');
-            if (row) {
-                row.remove();
-            }
+    function scheduleAutoRefresh() {
+        if (autoRefreshHandle) {
+            clearInterval(autoRefreshHandle);
         }
-    });
+        if (autoRefreshInterval && autoRefreshInterval >= 5) {
+            autoRefreshHandle = setInterval(() => {
+                fetchSnapshot({ force: true });
+            }, autoRefreshInterval * 1000);
+        }
+    }
 
-    document.getElementById('save-portfolio').addEventListener('click', async () => {
-        const rows = document.querySelectorAll('.holding-row');
-        const holdings = [];
-        rows.forEach(row => {
-            const tickerInput = row.querySelector('.holding-ticker');
-            const ticker = tickerInput.value.trim().toUpperCase();
-            tickerInput.value = ticker;
-            const name = row.querySelector('.holding-name').value.trim();
-            const quantity = parseFloat(row.querySelector('.holding-quantity').value);
-            const avgCostInput = parseFloat(row.querySelector('.holding-avg-cost').value);
-            const logo = row.querySelector('.holding-logo').value.trim();
-            if (!ticker || !quantity || quantity <= 0) {
-                return;
-            }
-            holdings.push({
-                ticker,
-                name: name || undefined,
-                quantity,
-                average_cost: Number.isFinite(avgCostInput) ? revertCurrency(avgCostInput) : 0,
-                logo_url: logo || undefined,
-            });
+    const manualRefreshButton = document.getElementById('portfolio-refresh-btn');
+    if (manualRefreshButton) {
+        manualRefreshButton.addEventListener('click', () => {
+            fetchSnapshot({ force: true, showStatusPill: true });
         });
+    }
 
-        try {
-            const response = await fetch('{{ url_for('api_update_portfolio') }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ holdings })
-            });
-            if (!response.ok) {
-                throw new Error('Failed to save portfolio');
-            }
-            const result = await response.json();
-            const modalEl = document.getElementById('portfolioModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) {
-                modal.hide();
-            }
-            updateMetrics(result.snapshot);
-            refreshTable(result.snapshot);
-            renderIncomeChart(result.snapshot.performance_vs_benchmark || []);
-        } catch (err) {
-            console.error(err);
-            alert('Unable to save portfolio. Please try again.');
-        }
-    });
+    renderIncomeChart(initialPerformanceData);
+    fetchSnapshot({ force: true });
+    scheduleAutoRefresh();
 </script>
 {% endblock %}
