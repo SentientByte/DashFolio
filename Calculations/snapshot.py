@@ -125,6 +125,7 @@ def build_portfolio_snapshot(
                 "current_value": current_value,
                 "todays_gain": todays_gain,
                 "todays_gain_pct": todays_gain_pct,
+                "previous_close": previous_close,
                 "weekly_gain": weekly_gain,
                 "weekly_gain_pct": weekly_gain_pct,
                 "monthly_gain": monthly_gain,

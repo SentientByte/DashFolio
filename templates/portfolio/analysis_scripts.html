@@ -119,6 +119,30 @@
         return formatCurrency(Number(value));
     }
 
+    function computeTodayChange(holding) {
+        if (!holding) {
+            return { value: 0, pct: 0 };
+        }
+
+        const quantity = Number(holding.quantity) || 0;
+        const currentPrice = Number(holding.current_price);
+        const referenceClose = isValidNumber(holding.previous_close)
+            ? Number(holding.previous_close)
+            : (isValidNumber(holding.close_price) ? Number(holding.close_price) : NaN);
+
+        if (Number.isFinite(currentPrice) && Number.isFinite(referenceClose)) {
+            const priceDiff = currentPrice - referenceClose;
+            const value = priceDiff * quantity;
+            const pct = referenceClose !== 0 ? (priceDiff / referenceClose) * 100 : 0;
+            return { value, pct };
+        }
+
+        return {
+            value: Number(holding.todays_gain || 0),
+            pct: Number(holding.todays_gain_pct || 0),
+        };
+    }
+
     function formatMarketCap(value) {
         if (!isValidNumber(value) || Number(value) <= 0) {
             return 'N/A';
@@ -347,14 +371,26 @@
     function updateHoldingsCache(snapshot) {
         holdingsCache.clear();
         const holdings = snapshot && Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
+        const normalized = holdings.map(holding => {
+            if (!holding || !holding.ticker) {
+                return holding;
+            }
+            const todayChange = computeTodayChange(holding);
+            return {
+                ...holding,
+                todays_gain: todayChange.value,
+                todays_gain_pct: todayChange.pct,
+            };
+        });
         if (window.DashFolioHoldingDetail) {
-            window.DashFolioHoldingDetail.setHoldings(holdings);
+            window.DashFolioHoldingDetail.setHoldings(normalized);
         }
-        holdings.forEach(holding => {
+        normalized.forEach(holding => {
             if (holding && holding.ticker) {
                 holdingsCache.set(holding.ticker, holding);
             }
         });
+        return normalized;
     }
 
     function refreshTable(snapshot) {
@@ -368,9 +404,7 @@
             return;
         }
 
-        updateHoldingsCache(snapshot);
-
-        const holdings = snapshot.holdings || [];
+        const holdings = updateHoldingsCache(snapshot);
 
         if (kpiBody) {
             kpiBody.innerHTML = '';
@@ -392,6 +426,9 @@
 
         tbody.innerHTML = '';
         holdings.forEach(holding => {
+            if (!holding) {
+                return;
+            }
             const row = document.createElement('tr');
             row.dataset.ticker = holding.ticker;
             row.classList.add('holding-detail-trigger');
