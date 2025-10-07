@@ -273,6 +273,13 @@
     let autoRefreshHandle = null;
     let statusHideTimer = null;
 
+    function getThemeColors() {
+        const style = getComputedStyle(document.documentElement);
+        const primary = style.getPropertyValue('--bs-primary').trim() || '#696cff';
+        const success = style.getPropertyValue('--bs-success').trim() || '#71dd37';
+        return { primary, success };
+    }
+
     const currencyFormatter = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD'
@@ -414,8 +421,8 @@
         const normalized = Array.isArray(performanceData)
             ? performanceData.map(point => ({
                 x: point.date,
-                portfolio: Number(point.portfolio || 0) - 100,
-                benchmark: Number(point.benchmark || 0) - 100,
+                portfolio: Number(point.portfolio || 0),
+                benchmark: Number(point.benchmark || 0),
             }))
             : [];
 
@@ -434,6 +441,8 @@
             y: Number.isFinite(point.benchmark) ? Number(point.benchmark.toFixed(2)) : null,
         }));
 
+        const { primary, success } = getThemeColors();
+
         const options = {
             chart: {
                 type: 'line',
@@ -444,13 +453,9 @@
                 { name: 'Portfolio', data: portfolioSeries },
                 { name: `${benchmarkTicker}`, data: benchmarkSeries },
             ],
-            colors: ['#28c76f', '#7367f0'],
+            colors: [success, primary],
             dataLabels: { enabled: false },
-            stroke: { curve: 'smooth', width: [3, 3] },
-            fill: {
-                type: 'solid',
-                opacity: [0.25, 0],
-            },
+            stroke: { curve: 'smooth', width: 3 },
             xaxis: {
                 type: 'datetime',
                 labels: {
@@ -458,11 +463,8 @@
                 },
             },
             yaxis: {
-                labels: {
-                    formatter: value => `${Number(value || 0).toFixed(1)}%`,
-                },
                 title: {
-                    text: 'Return since start (%)',
+                    text: 'Indexed performance (base = 100)',
                 },
                 tickAmount: 6,
             },
@@ -472,19 +474,10 @@
                     format: 'MMM dd, yyyy',
                 },
                 y: {
-                    formatter: value => `${Number(value || 0).toFixed(2)}%`,
+                    formatter: value => `${Number(value || 0).toFixed(2)}`,
                 },
             },
-            legend: { show: false },
-            annotations: {
-                yaxis: [
-                    {
-                        y: 0,
-                        borderColor: '#d9dee3',
-                        strokeDashArray: 4,
-                    },
-                ],
-            },
+            legend: { show: true },
             grid: {
                 strokeDashArray: 4,
             },
@@ -499,11 +492,9 @@
                 xaxis: options.xaxis,
                 yaxis: options.yaxis,
                 stroke: options.stroke,
-                fill: options.fill,
                 colors: options.colors,
                 tooltip: options.tooltip,
                 legend: options.legend,
-                annotations: options.annotations,
                 grid: options.grid,
             });
             incomeChart.updateSeries(options.series);

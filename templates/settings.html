@@ -10,7 +10,7 @@
             </div>
             <div class="card-body">
                 <form id="settings-general-form" class="row g-3 align-items-end">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="form-label" for="settings-currency-toggle">Display currency</label>
                         <div class="form-check form-switch mt-1">
                             <input class="form-check-input" type="checkbox" id="settings-currency-toggle" {% if currency_settings.code == 'BHD' %}checked{% endif %}>
@@ -22,7 +22,12 @@
                         <input type="number" class="form-control" id="settings-auto-refresh" value="{{ config['AUTO_REFRESH_INTERVAL'] }}" min="5" max="900" step="1" required>
                         <div class="form-text">Applies to price and valuation data on the Portfolio Overview page (5 sec – 15 min).</div>
                     </div>
-                    <div class="col-md-2 d-flex align-items-end justify-content-md-end">
+                    <div class="col-md-4">
+                        <label for="settings-benchmark" class="form-label">Benchmark ticker</label>
+                        <input type="text" class="form-control" id="settings-benchmark" value="{{ benchmark_ticker }}" placeholder="SPY" autocomplete="off">
+                        <div class="form-text">Used for performance comparisons across the app.</div>
+                    </div>
+                    <div class="col-12 d-flex align-items-end justify-content-md-end">
                         <button class="btn btn-primary ms-md-auto" type="submit">
                             <i class="bx bx-save me-1"></i>
                             Save general settings
@@ -123,19 +128,15 @@
             </div>
             <div class="card-body">
                 <form id="settings-risk-form" class="row g-3">
-                    <div class="col-md-3">
-                        <label for="settings-benchmark" class="form-label">Benchmark ticker</label>
-                        <input type="text" class="form-control" id="settings-benchmark" value="{{ benchmark_ticker }}" placeholder="SPY" autocomplete="off">
-                    </div>
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="settings-num-simulations" class="form-label">Num simulations</label>
                         <input type="number" class="form-control" id="settings-num-simulations" value="{{ config['NUM_SIMULATIONS'] }}" min="1">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="settings-confidence-level" class="form-label">Confidence level (0-1)</label>
                         <input type="number" step="0.01" class="form-control" id="settings-confidence-level" value="{{ '%.2f'|format(config['CONFIDENCE_LEVEL']) }}" min="0" max="1">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="settings-span-ewma" class="form-label">EWMA span</label>
                         <input type="number" class="form-control" id="settings-span-ewma" value="{{ config['SPAN_EWMA'] }}" min="1">
                     </div>
@@ -439,11 +440,14 @@
         const errorAlert = document.getElementById('settings-general-error');
         const currencyToggle = document.getElementById('settings-currency-toggle');
         const autoRefreshInput = document.getElementById('settings-auto-refresh');
+        const benchmarkInput = document.getElementById('settings-benchmark');
         const intervalValue = parseInt(autoRefreshInput?.value, 10);
+        const benchmarkValue = benchmarkInput?.value?.trim();
 
         const payload = {
             currency: currencyToggle?.checked ? 'BHD' : 'USD',
             auto_refresh_interval: Number.isFinite(intervalValue) ? intervalValue : undefined,
+            benchmark_ticker: benchmarkValue,
         };
 
         showStatus('Saving settings...');
@@ -489,7 +493,6 @@
         const successAlert = document.getElementById('settings-risk-success');
         const errorAlert = document.getElementById('settings-risk-error');
         const payload = {
-            benchmark_ticker: document.getElementById('settings-benchmark')?.value?.trim(),
             num_simulations: document.getElementById('settings-num-simulations')?.value,
             confidence_level: document.getElementById('settings-confidence-level')?.value,
             span_ewma: document.getElementById('settings-span-ewma')?.value,

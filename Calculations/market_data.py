@@ -51,11 +51,11 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
                         fallback_previous_close = float(closes.iloc[-2])
                     else:
                         fallback_previous_close = last_close
-                    if (
-                        result["previous_close"] is None
-                        or result["previous_close"] <= 0
-                    ):
-                        result["previous_close"] = fallback_previous_close
+                    # Always rely on the historical series for previous close to
+                    # ensure valuation changes are based on the most recent
+                    # completed session. ``fast_info`` can occasionally report
+                    # stale values which skews per-holding change calculations.
+                    result["previous_close"] = fallback_previous_close
                     result["week_close"] = historical_close(closes, 7)
                     result["month_close"] = historical_close(closes, 30)
     except Exception as exc:
