@@ -100,15 +100,25 @@
         </div>
     </div>
 </div>
+{% include 'holding_detail_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+{% include 'holding_detail_scripts.html' %}
 <script>
     const holdingsSnapshot = {{ snapshot.holdings|tojson }};
     let holdingsData = Array.isArray(holdingsSnapshot) ? holdingsSnapshot.slice() : [];
     let targetMap = {{ target_allocations|tojson }};
     const currencySettings = {{ currency_settings|tojson }};
+
+    if (window.DashFolioHoldingDetail) {
+        window.DashFolioHoldingDetail.configure({
+            currencySettings,
+            defaultRange: '6M',
+        });
+        window.DashFolioHoldingDetail.setHoldings(holdingsData);
+    }
 
     const chartColors = ['#696cff', '#8592a3', '#71dd37', '#ffab00', '#ff3e1d', '#03c3ec', '#fd3550', '#9c27b0'];
     let allocationChart = null;
@@ -283,6 +293,8 @@
         const plan = computePlan(buyOnly);
         plan.forEach(item => {
             const row = document.createElement('tr');
+            row.dataset.ticker = item.ticker;
+            row.classList.add('holding-detail-trigger');
             const logoSrc = item.logo_url || 'https://via.placeholder.com/42?text=%20';
             let actionBadge = '<span class="badge bg-label-secondary">Hold</span>';
             if (item.quantity > 0) {
@@ -448,6 +460,9 @@
             }
             if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
                 holdingsData = data.snapshot.holdings;
+                if (window.DashFolioHoldingDetail) {
+                    window.DashFolioHoldingDetail.setHoldings(holdingsData);
+                }
             }
             const modalEl = document.getElementById('targetModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
@@ -483,6 +498,30 @@
         const saveTargetsBtn = document.getElementById('save-targets');
         if (saveTargetsBtn) {
             saveTargetsBtn.addEventListener('click', saveTargets);
+        }
+
+        const rebalanceBody = document.querySelector('#rebalance-table tbody');
+        if (rebalanceBody) {
+            rebalanceBody.addEventListener('click', event => {
+                const target = event.target;
+                if (!target) {
+                    return;
+                }
+                const row = target.closest('tr[data-ticker]');
+                if (!row) {
+                    return;
+                }
+                const ticker = row.dataset.ticker;
+                if (!ticker || !window.DashFolioHoldingDetail) {
+                    return;
+                }
+                const holding = holdingsData.find(item => item.ticker === ticker);
+                if (holding) {
+                    window.DashFolioHoldingDetail.openHolding(holding);
+                } else {
+                    window.DashFolioHoldingDetail.openByTicker(ticker);
+                }
+            });
         }
 
         renderChart();

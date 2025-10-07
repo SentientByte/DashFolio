@@ -1,0 +1,459 @@
+<script>
+    (function (global) {
+        const state = {
+            currency: {
+                code: 'USD',
+                symbol: '$',
+                rate: 1,
+                symbol_first: true,
+            },
+            formatter: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }),
+            holdings: new Map(),
+            modal: null,
+            elements: {},
+            chart: null,
+            chartData: [],
+            range: '6M',
+            defaultRange: '6M',
+            rangeButtons: [],
+        };
+
+        function updateFormatter() {
+            const currencyCode = state.currency.code === 'BHD' ? 'BHD' : 'USD';
+            state.formatter = new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: currencyCode,
+            });
+        }
+
+        function configure(options = {}) {
+            if (options.currencySettings) {
+                state.currency = {
+                    ...state.currency,
+                    ...options.currencySettings,
+                };
+                updateFormatter();
+            }
+            if (options.defaultRange) {
+                state.defaultRange = options.defaultRange;
+                state.range = options.defaultRange;
+            }
+        }
+
+        function ensureElements() {
+            if (state.elements.modalEl) {
+                return true;
+            }
+
+            const modalEl = document.getElementById('holdingDetailModal');
+            if (!modalEl) {
+                return false;
+            }
+
+            state.elements = {
+                modalEl,
+                titleEl: document.getElementById('holdingDetailTitle'),
+                subtitleEl: document.getElementById('holdingDetailSubtitle'),
+                logoEl: document.getElementById('holdingDetailLogo'),
+                priceEl: document.getElementById('holdingDetailPrice'),
+                changeEl: document.getElementById('holdingDetailChange'),
+                changePctEl: document.getElementById('holdingDetailChangePct'),
+                metaEl: document.getElementById('holdingDetailMeta'),
+                metricsEl: document.getElementById('holdingDetailMetrics'),
+                rangeGroupEl: document.getElementById('holdingDetailRange'),
+                chartEl: document.getElementById('holdingPriceChart'),
+            };
+
+            state.rangeButtons = [];
+            const { rangeGroupEl } = state.elements;
+            if (rangeGroupEl) {
+                state.rangeButtons = Array.from(rangeGroupEl.querySelectorAll('button'));
+                state.rangeButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        const { range } = button.dataset;
+                        if (range) {
+                            setRange(range);
+                        }
+                    });
+                });
+            }
+
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                destroyChart();
+                state.chartData = [];
+                state.range = state.defaultRange;
+                setActiveRangeButton(state.range);
+            });
+
+            return true;
+        }
+
+        function ensureModal() {
+            if (!ensureElements()) {
+                return null;
+            }
+            if (!state.modal) {
+                state.modal = new bootstrap.Modal(state.elements.modalEl);
+            }
+            return state.modal;
+        }
+
+        function applyCurrencyConversion(value) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) {
+                return 0;
+            }
+            const rate = Number(state.currency.rate) || 1;
+            return numeric * rate;
+        }
+
+        function formatCurrency(value) {
+            const converted = applyCurrencyConversion(value);
+            let formatted = state.formatter.format(converted);
+            if (state.currency.code === 'BHD') {
+                formatted = formatted.replace('BHD', state.currency.symbol || 'BD').replace(/\u00a0/g, '');
+            }
+            return formatted;
+        }
+
+        function formatSignedCurrency(value) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric) || numeric === 0) {
+                return formatCurrency(0);
+            }
+            const prefix = numeric > 0 ? '+' : '-';
+            return `${prefix}${formatCurrency(Math.abs(numeric))}`;
+        }
+
+        function formatPercent(value) {
+            if (!Number.isFinite(value)) {
+                value = 0;
+            }
+            const numeric = Number(value);
+            const prefix = numeric > 0 ? '+' : (numeric < 0 ? '-' : '');
+            return `${prefix}${Math.abs(numeric).toFixed(2)}%`;
+        }
+
+        function formatNumber(value, digits = 2) {
+            if (!Number.isFinite(value)) {
+                value = 0;
+            }
+            return Number(value).toFixed(digits);
+        }
+
+        function formatQuantity(value) {
+            return formatNumber(Number(value) || 0, 2);
+        }
+
+        function isValidNumber(value) {
+            if (value === null || value === undefined || value === '') {
+                return false;
+            }
+            return Number.isFinite(Number(value));
+        }
+
+        function formatCurrencyOrNA(value) {
+            if (!isValidNumber(value)) {
+                return 'N/A';
+            }
+            return formatCurrency(Number(value));
+        }
+
+        function setActiveRangeButton(range) {
+            if (!state.rangeButtons.length) {
+                return;
+            }
+            state.rangeButtons.forEach(button => {
+                const isActive = button.dataset.range === range;
+                button.classList.toggle('active', isActive);
+            });
+        }
+
+        function destroyChart() {
+            if (state.chart) {
+                state.chart.destroy();
+                state.chart = null;
+            }
+        }
+
+        function filterChartData(range) {
+            if (!Array.isArray(state.chartData) || !state.chartData.length) {
+                return [];
+            }
+            if (!range) {
+                return state.chartData.slice();
+            }
+            const normalized = String(range).toUpperCase();
+            const now = new Date();
+            if (normalized === 'YTD') {
+                const startOfYear = new Date(now.getFullYear(), 0, 1);
+                return state.chartData.filter(point => {
+                    const parsed = new Date(point.date);
+                    return !Number.isNaN(parsed.getTime()) && parsed >= startOfYear;
+                });
+            }
+            const dayLookup = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
+            const days = dayLookup[normalized];
+            if (!days) {
+                return state.chartData.slice();
+            }
+            const cutoff = new Date(now);
+            cutoff.setDate(cutoff.getDate() - days);
+            return state.chartData.filter(point => {
+                const parsed = new Date(point.date);
+                return !Number.isNaN(parsed.getTime()) && parsed >= cutoff;
+            });
+        }
+
+        function getThemeColors() {
+            const style = getComputedStyle(document.documentElement);
+            const primary = style.getPropertyValue('--bs-primary').trim() || '#696cff';
+            return { primary };
+        }
+
+        function renderChart() {
+            const { chartEl } = state.elements;
+            if (!chartEl) {
+                return;
+            }
+
+            const filtered = filterChartData(state.range);
+            if (!filtered.length) {
+                destroyChart();
+                chartEl.innerHTML = '<div class="text-muted text-center py-4">No price history available.</div>';
+                return;
+            }
+
+            const seriesData = filtered
+                .map(point => {
+                    const numeric = Number(point.close);
+                    if (!Number.isFinite(numeric)) {
+                        return null;
+                    }
+                    return {
+                        x: point.date,
+                        y: Number(numeric.toFixed(2)),
+                    };
+                })
+                .filter(Boolean);
+
+            if (!seriesData.length) {
+                destroyChart();
+                chartEl.innerHTML = '<div class="text-muted text-center py-4">No price history available.</div>';
+                return;
+            }
+
+            if (typeof ApexCharts === 'undefined') {
+                chartEl.innerHTML = '<div class="text-muted text-center py-4">Chart unavailable.</div>';
+                return;
+            }
+
+            const { primary } = getThemeColors();
+            const options = {
+                chart: {
+                    type: 'area',
+                    height: 260,
+                    toolbar: { show: false },
+                },
+                series: [{ name: 'Price', data: seriesData }],
+                dataLabels: { enabled: false },
+                stroke: { curve: 'smooth', width: 2 },
+                fill: {
+                    type: 'gradient',
+                    gradient: {
+                        shadeIntensity: 1,
+                        opacityFrom: 0.35,
+                        opacityTo: 0,
+                        stops: [0, 90, 100],
+                    },
+                },
+                colors: [primary],
+                xaxis: {
+                    type: 'datetime',
+                    labels: { datetimeUTC: false },
+                },
+                yaxis: {
+                    labels: {
+                        formatter: val => formatCurrency(val),
+                    },
+                },
+                tooltip: {
+                    x: { format: 'yyyy-MM-dd' },
+                    y: {
+                        formatter: val => formatCurrency(val),
+                    },
+                },
+            };
+
+            if (!state.chart) {
+                chartEl.innerHTML = '';
+                state.chart = new ApexCharts(chartEl, options);
+                state.chart.render();
+            } else {
+                state.chart.updateOptions({
+                    xaxis: options.xaxis,
+                    yaxis: options.yaxis,
+                    stroke: options.stroke,
+                    fill: options.fill,
+                    colors: options.colors,
+                    tooltip: options.tooltip,
+                });
+                state.chart.updateSeries(options.series);
+            }
+        }
+
+        function setRange(range) {
+            state.range = range || state.defaultRange;
+            setActiveRangeButton(state.range);
+            renderChart();
+        }
+
+        function setHoldings(holdings) {
+            state.holdings.clear();
+            if (!holdings) {
+                return;
+            }
+            if (holdings instanceof Map) {
+                holdings.forEach((value, key) => {
+                    if (key) {
+                        state.holdings.set(String(key).toUpperCase(), value);
+                    }
+                });
+                return;
+            }
+            if (Array.isArray(holdings)) {
+                holdings.forEach(holding => {
+                    if (holding && holding.ticker) {
+                        state.holdings.set(String(holding.ticker).toUpperCase(), holding);
+                    }
+                });
+            }
+        }
+
+        function buildMetrics(holding) {
+            return [
+                { label: 'Open', value: formatCurrencyOrNA(holding.open_price) },
+                { label: 'Close', value: formatCurrencyOrNA(holding.close_price) },
+                { label: 'High', value: formatCurrencyOrNA(holding.day_high_price) },
+                { label: 'Low', value: formatCurrencyOrNA(holding.day_low_price) },
+                { label: '50-Day EMA', value: formatCurrencyOrNA(holding.ema_50) },
+                { label: '200-Day EMA', value: formatCurrencyOrNA(holding.ema_200) },
+                { label: '250-Day High', value: formatCurrencyOrNA(holding.rolling_high_250) },
+                { label: '250-Day Low', value: formatCurrencyOrNA(holding.rolling_low_250) },
+            ];
+        }
+
+        function populateHoldingDetail(holding) {
+            if (!ensureElements()) {
+                return;
+            }
+
+            const {
+                titleEl,
+                subtitleEl,
+                logoEl,
+                priceEl,
+                changeEl,
+                changePctEl,
+                metaEl,
+                metricsEl,
+            } = state.elements;
+
+            if (titleEl) {
+                titleEl.textContent = holding.ticker || '';
+            }
+
+            if (subtitleEl) {
+                const subtitle = holding.name && holding.name !== holding.ticker ? holding.name : '';
+                subtitleEl.textContent = subtitle;
+                subtitleEl.classList.toggle('d-none', !subtitle);
+            }
+
+            if (logoEl) {
+                const logoSrc = holding.logo_url || 'https://via.placeholder.com/64?text=%20';
+                logoEl.innerHTML = `<img src="${logoSrc}" alt="${holding.ticker || ''} logo" onerror="this.src='https://via.placeholder.com/64?text=%20';">`;
+            }
+
+            if (priceEl) {
+                priceEl.textContent = formatCurrencyOrNA(holding.current_price);
+            }
+
+            const changeValue = Number(holding.todays_gain || 0);
+            const changePct = Number(holding.todays_gain_pct || 0);
+
+            if (changeEl) {
+                changeEl.textContent = formatSignedCurrency(changeValue);
+                changeEl.classList.toggle('detail-positive', changeValue > 0);
+                changeEl.classList.toggle('detail-negative', changeValue < 0);
+            }
+
+            if (changePctEl) {
+                changePctEl.textContent = `(${formatPercent(changePct)})`;
+                changePctEl.classList.toggle('detail-positive', changePct > 0);
+                changePctEl.classList.toggle('detail-negative', changePct < 0);
+            }
+
+            if (metaEl) {
+                const parts = [];
+                parts.push(`Quantity ${formatQuantity(holding.quantity || 0)}`);
+                if (isValidNumber(holding.average_cost)) {
+                    parts.push(`Avg cost ${formatCurrencyOrNA(holding.average_cost)}`);
+                }
+                parts.push(`Allocation ${formatNumber(holding.allocation_pct || 0)}%`);
+                if (isValidNumber(holding.target_pct)) {
+                    parts.push(`Target ${formatNumber(holding.target_pct)}%`);
+                }
+                metaEl.textContent = parts.join(' · ');
+            }
+
+            if (metricsEl) {
+                const metrics = buildMetrics(holding);
+                metricsEl.innerHTML = metrics.map(metric => `
+                    <div class="holding-detail-metric">
+                        <span class="metric-label">${metric.label}</span>
+                        <span class="metric-value">${metric.value}</span>
+                    </div>
+                `).join('');
+            }
+
+            state.chartData = Array.isArray(holding.price_history) ? holding.price_history : [];
+            state.range = state.defaultRange;
+            setRange(state.range);
+        }
+
+        function openHolding(holding) {
+            const modal = ensureModal();
+            if (!modal) {
+                return;
+            }
+            populateHoldingDetail(holding);
+            modal.show();
+        }
+
+        function openByTicker(ticker) {
+            if (!ticker) {
+                return;
+            }
+            const normalized = String(ticker).toUpperCase();
+            const holding = state.holdings.get(normalized);
+            if (holding) {
+                openHolding(holding);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!ensureElements()) {
+                return;
+            }
+            ensureModal();
+            setActiveRangeButton(state.range);
+        });
+
+        global.DashFolioHoldingDetail = {
+            configure,
+            setHoldings,
+            openByTicker,
+            openHolding,
+        };
+    })(window);
+</script>

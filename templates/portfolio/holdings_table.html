@@ -62,7 +62,7 @@
                     {% set pl_value = holding.current_value - holding.total_cost %}
                     {% set pl_class = 'gain-positive' if pl_value >= 0 else 'gain-negative' %}
                     {% set pl_pct = (pl_value / holding.total_cost * 100) if holding.total_cost else 0.0 %}
-                    <tr data-ticker="{{ holding.ticker }}">
+                    <tr data-ticker="{{ holding.ticker }}" class="holding-detail-trigger">
                         <td class="logo-cell">
                             {% if holding.logo_url %}
                                 <img src="{{ holding.logo_url }}" alt="{{ holding.ticker }} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
