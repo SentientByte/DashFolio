@@ -201,7 +201,7 @@ def build_portfolio_snapshot(
                 benchmark_curve = (1 + aligned_returns).cumprod() * 100
 
             if benchmark_curve is not None and not benchmark_curve.empty:
-                benchmark_curve = benchmark_curve.reindex(portfolio_curve.index).fillna(method="ffill").fillna(100.0)
+                benchmark_curve = benchmark_curve.reindex(portfolio_curve.index).ffill().fillna(100.0)
                 performance_vs_benchmark = [
                     {
                         "date": idx.strftime("%Y-%m-%d") if isinstance(idx, pd.Timestamp) else str(idx),
