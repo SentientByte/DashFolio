@@ -16,7 +16,7 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from Calculations.allocations import normalize_target_allocations
-from Calculations.snapshot import build_portfolio_snapshot
+from Calculations.snapshot_cache import get_portfolio_snapshot as get_cached_portfolio_snapshot
 from Calculations.storage import connect, ensure_risk_results_table
 from Calculations.utils import safe_float
 
@@ -209,7 +209,12 @@ def portfolio_analysis():
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
-    snapshot = build_portfolio_snapshot(holdings, targets, benchmark_ticker)
+    snapshot = get_cached_portfolio_snapshot(
+        DATA_STORE,
+        holdings,
+        targets,
+        benchmark_ticker,
+    )
     return render_template(
         'portfolio_analysis.html',
         snapshot=snapshot,
@@ -232,7 +237,12 @@ def allocation_planner():
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
-    snapshot = build_portfolio_snapshot(holdings, targets, benchmark_ticker)
+    snapshot = get_cached_portfolio_snapshot(
+        DATA_STORE,
+        holdings,
+        targets,
+        benchmark_ticker,
+    )
     return render_template(
         'allocation.html',
         snapshot=snapshot,
@@ -255,7 +265,12 @@ def settings():
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
-    snapshot = build_portfolio_snapshot(holdings, targets, benchmark_ticker)
+    snapshot = get_cached_portfolio_snapshot(
+        DATA_STORE,
+        holdings,
+        targets,
+        benchmark_ticker,
+    )
 
     return render_template(
         'settings.html',
@@ -279,7 +294,12 @@ def api_get_portfolio():
     portfolio_state = load_portfolio_state()
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
-    snapshot = build_portfolio_snapshot(holdings, targets, benchmark_ticker)
+    snapshot = get_cached_portfolio_snapshot(
+        DATA_STORE,
+        holdings,
+        targets,
+        benchmark_ticker,
+    )
     return jsonify(snapshot)
 
 
@@ -328,7 +348,14 @@ def api_update_portfolio():
         'holdings': normalized_holdings,
         'target_allocations': updated_targets,
     })
-    snapshot = build_portfolio_snapshot(normalized_holdings, updated_targets, benchmark_ticker)
+    snapshot = get_cached_portfolio_snapshot(
+        DATA_STORE,
+        normalized_holdings,
+        updated_targets,
+        benchmark_ticker,
+        refresh_async=True,
+        force_recompute=True,
+    )
     return jsonify({'status': 'ok', 'snapshot': snapshot})
 
 
@@ -370,7 +397,14 @@ def api_update_targets():
     state['target_allocations'] = normalized
     save_portfolio_state(state)
 
-    snapshot = build_portfolio_snapshot(holdings, normalized, benchmark_ticker)
+    snapshot = get_cached_portfolio_snapshot(
+        DATA_STORE,
+        holdings,
+        normalized,
+        benchmark_ticker,
+        refresh_async=True,
+        force_recompute=True,
+    )
     return jsonify({'status': 'ok', 'targets': normalized, 'snapshot': snapshot})
 
 
