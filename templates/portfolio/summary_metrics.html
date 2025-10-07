@@ -1,0 +1,66 @@
+<div class="row g-4 mb-4" id="metrics-row">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <span class="metric-label">Total Cost</span>
+                <h4 class="metric-value" id="metric-total-cost">{{ format_currency(snapshot.summary.total_cost) }}</h4>
+                <p class="metric-subvalue mb-0">Total invested capital</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <span class="metric-label">Current Value</span>
+                <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2">
+                    <h4 class="metric-value mb-0" id="metric-current-value">{{ format_currency(snapshot.summary.current_value) }}</h4>
+                    {% set total_pl = snapshot.summary.total_pl_value %}
+                    <span class="pill pill-compact {{ 'pill-positive' if total_pl >= 0 else 'pill-negative' }}" id="metric-total-pl">
+                        {{ format_signed_currency(total_pl) }}
+                    </span>
+                </div>
+                <p class="metric-subvalue mb-0">Live market valuation vs. invested capital</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        {% set todays_positive = snapshot.summary.dod_value >= 0 %}
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <span class="metric-label" id="metric-today-label">{{ 'Todays Profit' if todays_positive else 'Todays Loss' }}</span>
+                <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2">
+                    <h4 class="metric-value mb-0 {{ 'metric-positive' if todays_positive else 'metric-negative' }}" id="metric-dod-value">
+                        {{ format_signed_currency(snapshot.summary.dod_value) }}
+                    </h4>
+                    <span class="pill {{ 'pill-positive' if todays_positive else 'pill-negative' }}" id="metric-dod-pct">
+                        {{ '+' if todays_positive else '-' }}{{ '%.2f'|format(snapshot.summary.dod_pct|abs) }}%
+                    </span>
+                </div>
+                <p class="metric-subvalue mb-0">Across the entire portfolio</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <span class="metric-label">Top mover today</span>
+                {% if snapshot.summary.top_mover %}
+                    {% set mover = snapshot.summary.top_mover %}
+                    {% set mover_positive = mover.change_value >= 0 %}
+                    <h4 class="metric-value metric-trend {{ 'metric-positive' if mover_positive else 'metric-negative' }}" id="metric-top-mover-ticker">{{ mover.ticker }}</h4>
+                    <p class="metric-subvalue metric-trend-group mb-0" id="metric-top-mover-change">
+                        <span class="metric-trend-value {{ 'metric-positive' if mover_positive else 'metric-negative' }}">
+                            {{ format_signed_currency(mover.change_value) }}
+                        </span>
+                        <span class="metric-trend-pct {{ 'metric-positive' if mover_positive else 'metric-negative' }}">
+                            ({{ '+' if mover_positive else '-' }}{{ '%.2f'|format(mover.change_pct|abs) }}%)
+                        </span>
+                    </p>
+                {% else %}
+                    <h4 class="metric-value text-muted" id="metric-top-mover-ticker">N/A</h4>
+                    <p class="metric-subvalue mb-0" id="metric-top-mover-change">No holdings available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>

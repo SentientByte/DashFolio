@@ -1,0 +1,12 @@
+<div class="card mb-4" id="performance-card">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h5 class="mb-1">Portfolio vs. Benchmark</h5>
+            <small class="text-muted">Relative performance compared with {{ benchmark_ticker }}</small>
+        </div>
+        <span class="badge bg-label-primary">Benchmark: {{ benchmark_ticker }}</span>
+    </div>
+    <div class="card-body">
+        <div id="incomeChart" style="min-height: 320px;"></div>
+    </div>
+</div>
