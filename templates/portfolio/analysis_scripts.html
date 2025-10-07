@@ -10,24 +10,12 @@
     let statusHideTimer = null;
     let latestSnapshot = initialSnapshot;
     const holdingsCache = new Map();
-    let holdingDetailModal = null;
-    let holdingDetailChart = null;
-    let holdingChartData = [];
-    const HOLDING_RANGE_DEFAULT = '6M';
-    let holdingChartRange = HOLDING_RANGE_DEFAULT;
-    let holdingRangeButtons = [];
-
-    const holdingDetailModalEl = document.getElementById('holdingDetailModal');
-    const holdingDetailTitleEl = document.getElementById('holdingDetailTitle');
-    const holdingDetailSubtitleEl = document.getElementById('holdingDetailSubtitle');
-    const holdingDetailLogoEl = document.getElementById('holdingDetailLogo');
-    const holdingDetailPriceEl = document.getElementById('holdingDetailPrice');
-    const holdingDetailChangeEl = document.getElementById('holdingDetailChange');
-    const holdingDetailChangePctEl = document.getElementById('holdingDetailChangePct');
-    const holdingDetailMetaEl = document.getElementById('holdingDetailMeta');
-    const holdingDetailMetricsEl = document.getElementById('holdingDetailMetrics');
-    const holdingDetailRangeGroup = document.getElementById('holdingDetailRange');
-    const holdingPriceChartEl = document.getElementById('holdingPriceChart');
+    if (window.DashFolioHoldingDetail) {
+        window.DashFolioHoldingDetail.configure({
+            currencySettings,
+            defaultRange: '6M',
+        });
+    }
 
     function getThemeColors() {
         const style = getComputedStyle(document.documentElement);
@@ -358,237 +346,15 @@
 
     function updateHoldingsCache(snapshot) {
         holdingsCache.clear();
-        if (!snapshot || !Array.isArray(snapshot.holdings)) {
-            return;
+        const holdings = snapshot && Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
+        if (window.DashFolioHoldingDetail) {
+            window.DashFolioHoldingDetail.setHoldings(holdings);
         }
-        snapshot.holdings.forEach(holding => {
+        holdings.forEach(holding => {
             if (holding && holding.ticker) {
                 holdingsCache.set(holding.ticker, holding);
             }
         });
-    }
-
-    function destroyHoldingChart() {
-        if (holdingDetailChart) {
-            holdingDetailChart.destroy();
-            holdingDetailChart = null;
-        }
-    }
-
-    function setActiveRangeButton(range) {
-        if (!holdingRangeButtons || !holdingRangeButtons.length) {
-            return;
-        }
-        holdingRangeButtons.forEach(button => {
-            const isActive = button.dataset.range === range;
-            button.classList.toggle('active', isActive);
-        });
-    }
-
-    function filterPriceHistory(range) {
-        if (!Array.isArray(holdingChartData) || holdingChartData.length === 0) {
-            return [];
-        }
-        if (!range) {
-            return holdingChartData.slice();
-        }
-        const normalized = String(range).toUpperCase();
-        const now = new Date();
-        if (normalized === 'YTD') {
-            const startOfYear = new Date(now.getFullYear(), 0, 1);
-            return holdingChartData.filter(point => {
-                const parsed = new Date(point.date);
-                return !Number.isNaN(parsed.getTime()) && parsed >= startOfYear;
-            });
-        }
-        const dayLookup = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
-        const days = dayLookup[normalized];
-        if (!days) {
-            return holdingChartData.slice();
-        }
-        const cutoff = new Date(now);
-        cutoff.setDate(cutoff.getDate() - days);
-        return holdingChartData.filter(point => {
-            const parsed = new Date(point.date);
-            return !Number.isNaN(parsed.getTime()) && parsed >= cutoff;
-        });
-    }
-
-    function renderHoldingChart() {
-        if (!holdingPriceChartEl) {
-            return;
-        }
-        const filtered = filterPriceHistory(holdingChartRange);
-        if (!filtered.length) {
-            destroyHoldingChart();
-            holdingPriceChartEl.innerHTML = '<div class="text-muted text-center py-4">No price history available.</div>';
-            return;
-        }
-
-        const seriesData = filtered
-            .map(point => {
-                const numeric = Number(point.close);
-                if (!Number.isFinite(numeric)) {
-                    return null;
-                }
-                return {
-                    x: point.date,
-                    y: Number(numeric.toFixed(2)),
-                };
-            })
-            .filter(Boolean);
-
-        if (!seriesData.length) {
-            destroyHoldingChart();
-            holdingPriceChartEl.innerHTML = '<div class="text-muted text-center py-4">No price history available.</div>';
-            return;
-        }
-
-        const { primary } = getThemeColors();
-        const options = {
-            chart: {
-                type: 'area',
-                height: 260,
-                toolbar: { show: false },
-            },
-            series: [{ name: 'Price', data: seriesData }],
-            dataLabels: { enabled: false },
-            stroke: { curve: 'smooth', width: 2 },
-            fill: {
-                type: 'gradient',
-                gradient: {
-                    shadeIntensity: 1,
-                    opacityFrom: 0.3,
-                    opacityTo: 0.05,
-                    stops: [0, 90, 100],
-                },
-            },
-            colors: [primary],
-            xaxis: {
-                type: 'datetime',
-                labels: { format: 'MMM yy' },
-            },
-            yaxis: {
-                labels: {
-                    formatter: value => formatCurrency(value),
-                },
-            },
-            tooltip: {
-                x: { format: 'MMM dd, yyyy' },
-                y: { formatter: value => formatCurrency(value) },
-            },
-            grid: { strokeDashArray: 4 },
-        };
-
-        if (!holdingDetailChart) {
-            holdingPriceChartEl.innerHTML = '';
-            holdingDetailChart = new ApexCharts(holdingPriceChartEl, options);
-            holdingDetailChart.render();
-        } else {
-            holdingDetailChart.updateOptions({
-                colors: options.colors,
-                stroke: options.stroke,
-                fill: options.fill,
-                xaxis: options.xaxis,
-                yaxis: options.yaxis,
-                tooltip: options.tooltip,
-                grid: options.grid,
-            });
-            holdingDetailChart.updateSeries(options.series);
-        }
-    }
-
-    function setHoldingRange(range) {
-        holdingChartRange = range || HOLDING_RANGE_DEFAULT;
-        setActiveRangeButton(holdingChartRange);
-        renderHoldingChart();
-    }
-
-    function populateHoldingDetail(holding) {
-        if (!holding) {
-            return;
-        }
-
-        if (holdingDetailTitleEl) {
-            holdingDetailTitleEl.textContent = holding.ticker || '';
-        }
-
-        if (holdingDetailSubtitleEl) {
-            const subtitle = holding.name && holding.name !== holding.ticker ? holding.name : '';
-            holdingDetailSubtitleEl.textContent = subtitle;
-            holdingDetailSubtitleEl.classList.toggle('d-none', !subtitle);
-        }
-
-        if (holdingDetailLogoEl) {
-            const logoSrc = holding.logo_url || 'https://via.placeholder.com/64?text=%20';
-            holdingDetailLogoEl.innerHTML = `<img src="${logoSrc}" alt="${holding.ticker || ''} logo" onerror="this.src='https://via.placeholder.com/64?text=%20';">`;
-        }
-
-        if (holdingDetailPriceEl) {
-            holdingDetailPriceEl.textContent = formatCurrencyOrNA(holding.current_price);
-        }
-
-        const changeValue = Number(holding.todays_gain || 0);
-        const changePct = Number(holding.todays_gain_pct || 0);
-
-        if (holdingDetailChangeEl) {
-            holdingDetailChangeEl.textContent = formatSignedCurrency(changeValue);
-            holdingDetailChangeEl.classList.toggle('detail-positive', changeValue > 0);
-            holdingDetailChangeEl.classList.toggle('detail-negative', changeValue < 0);
-        }
-
-        if (holdingDetailChangePctEl) {
-            holdingDetailChangePctEl.textContent = `(${formatPercent(changePct)})`;
-            holdingDetailChangePctEl.classList.toggle('detail-positive', changePct > 0);
-            holdingDetailChangePctEl.classList.toggle('detail-negative', changePct < 0);
-        }
-
-        if (holdingDetailMetaEl) {
-            const parts = [];
-            parts.push(`Quantity ${formatQuantity(holding.quantity || 0)}`);
-            if (isValidNumber(holding.average_cost)) {
-                parts.push(`Avg cost ${formatCurrencyOrNA(holding.average_cost)}`);
-            }
-            parts.push(`Allocation ${formatNumber(holding.allocation_pct || 0)}%`);
-            if (isValidNumber(holding.target_pct)) {
-                parts.push(`Target ${formatNumber(holding.target_pct)}%`);
-            }
-            holdingDetailMetaEl.textContent = parts.join(' · ');
-        }
-
-        if (holdingDetailMetricsEl) {
-            const metrics = [
-                { label: 'Open', value: formatCurrencyOrNA(holding.open_price) },
-                { label: 'Close', value: formatCurrencyOrNA(holding.close_price) },
-                { label: 'Adjusted close', value: formatCurrencyOrNA(holding.adj_close_price) },
-                { label: 'High', value: formatCurrencyOrNA(holding.day_high_price) },
-                { label: 'Low', value: formatCurrencyOrNA(holding.day_low_price) },
-                { label: 'Market cap', value: formatMarketCap(holding.market_cap) },
-                { label: '50-Day EMA', value: formatCurrencyOrNA(holding.ema_50) },
-                { label: '200-Day EMA', value: formatCurrencyOrNA(holding.ema_200) },
-                { label: '250-Day High', value: formatCurrencyOrNA(holding.rolling_high_250) },
-                { label: '250-Day Low', value: formatCurrencyOrNA(holding.rolling_low_250) },
-            ];
-            holdingDetailMetricsEl.innerHTML = metrics
-                .map(metric => `
-                    <div class="holding-detail-metric">
-                        <span class="metric-label">${metric.label}</span>
-                        <span class="metric-value">${metric.value}</span>
-                    </div>
-                `)
-                .join('');
-        }
-
-        holdingChartData = Array.isArray(holding.price_history) ? holding.price_history : [];
-        setHoldingRange(HOLDING_RANGE_DEFAULT);
-    }
-
-    function openHoldingDetail(holding) {
-        if (!holdingDetailModal) {
-            return;
-        }
-        populateHoldingDetail(holding);
-        holdingDetailModal.show();
     }
 
     function refreshTable(snapshot) {
@@ -628,6 +394,7 @@
         holdings.forEach(holding => {
             const row = document.createElement('tr');
             row.dataset.ticker = holding.ticker;
+            row.classList.add('holding-detail-trigger');
             const logoSrc = holding.logo_url || 'https://via.placeholder.com/42?text=%20';
             row.innerHTML = `
                 <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
@@ -647,6 +414,8 @@
 
             if (kpiBody) {
                 const kpiRow = document.createElement('tr');
+                kpiRow.dataset.ticker = holding.ticker;
+                kpiRow.classList.add('holding-detail-trigger');
                 kpiRow.innerHTML = `
                     <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
                     <td class="fw-semibold">${holding.ticker}</td>
@@ -704,29 +473,6 @@
         }
     }
 
-    if (holdingDetailModalEl) {
-        holdingDetailModal = new bootstrap.Modal(holdingDetailModalEl);
-        holdingDetailModalEl.addEventListener('hidden.bs.modal', () => {
-            destroyHoldingChart();
-            holdingChartData = [];
-            holdingChartRange = HOLDING_RANGE_DEFAULT;
-            setActiveRangeButton(HOLDING_RANGE_DEFAULT);
-        });
-    }
-
-    if (holdingDetailRangeGroup) {
-        holdingRangeButtons = Array.from(holdingDetailRangeGroup.querySelectorAll('button'));
-        holdingRangeButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const { range } = button.dataset;
-                if (range) {
-                    setHoldingRange(range);
-                }
-            });
-        });
-        setActiveRangeButton(HOLDING_RANGE_DEFAULT);
-    }
-
     updateHoldingsCache(initialSnapshot);
 
     const holdingsCard = document.getElementById('holdings-card');
@@ -736,8 +482,28 @@
             if (!target) {
                 return;
             }
-            const actionable = target.closest('.ticker-col') || target.closest('.logo-cell');
-            if (!actionable) {
+            const row = target.closest('tr[data-ticker]');
+            if (!row) {
+                return;
+            }
+            const ticker = row.dataset.ticker;
+            if (!ticker || !window.DashFolioHoldingDetail) {
+                return;
+            }
+            const holding = holdingsCache.get(ticker);
+            if (holding) {
+                window.DashFolioHoldingDetail.openHolding(holding);
+            } else {
+                window.DashFolioHoldingDetail.openByTicker(ticker);
+            }
+        });
+    }
+
+    const kpiCard = document.getElementById('portfolio-kpi-card');
+    if (kpiCard) {
+        kpiCard.addEventListener('click', event => {
+            const target = event.target;
+            if (!target) {
                 return;
             }
             const row = target.closest('tr[data-ticker]');
@@ -745,12 +511,14 @@
                 return;
             }
             const ticker = row.dataset.ticker;
-            if (!ticker) {
+            if (!ticker || !window.DashFolioHoldingDetail) {
                 return;
             }
             const holding = holdingsCache.get(ticker);
             if (holding) {
-                openHoldingDetail(holding);
+                window.DashFolioHoldingDetail.openHolding(holding);
+            } else {
+                window.DashFolioHoldingDetail.openByTicker(ticker);
             }
         });
     }

@@ -94,16 +94,24 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
             if lows is not None and not lows.dropna().empty:
                 latest_low = float(lows.dropna().iloc[-1])
                 result["day_low"] = safe_float(latest_low)
+
+            price_for_ema = None
             if adj_close is not None and not adj_close.dropna().empty:
                 adj_close = adj_close.dropna()
                 result["adj_close_price"] = safe_float(adj_close.iloc[-1])
+                price_for_ema = adj_close
 
-                ema_50 = adj_close.ewm(span=50, adjust=False).mean().iloc[-1]
+            if (price_for_ema is None or price_for_ema.empty) and closes is not None:
+                raw_closes = closes.dropna()
+                if not raw_closes.empty:
+                    price_for_ema = raw_closes
+
+            if price_for_ema is not None and not price_for_ema.empty:
+                ema_50 = price_for_ema.ewm(span=50, adjust=False).mean().iloc[-1]
                 result["ema_50"] = safe_float(ema_50)
 
-                if len(adj_close) >= 200:
-                    ema_200 = adj_close.ewm(span=200, adjust=False).mean().iloc[-1]
-                    result["ema_200"] = safe_float(ema_200)
+                ema_200 = price_for_ema.ewm(span=200, adjust=False).mean().iloc[-1]
+                result["ema_200"] = safe_float(ema_200)
 
             if closes is not None and not closes.empty:
                 trimmed = closes.tail(250)

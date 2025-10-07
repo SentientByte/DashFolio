@@ -207,6 +207,14 @@ body {
     background-color: rgba(85, 110, 230, 0.04);
 }
 
+tr.holding-detail-trigger {
+    cursor: pointer;
+}
+
+tr.holding-detail-trigger:hover {
+    background-color: rgba(85, 110, 230, 0.04);
+}
+
 .holding-detail-modal .modal-content {
     border-radius: 18px;
     border: none;

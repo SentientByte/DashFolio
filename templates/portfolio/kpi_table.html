@@ -9,7 +9,7 @@
             <tr>
                 <th class="logo-cell"></th>
                 <th class="text-uppercase text-muted small">Ticker</th>
-                <th class="text-uppercase text-muted small">Volatility (σ)</th>
+                <th class="text-uppercase text-muted small">Volatility</th>
                 <th class="text-uppercase text-muted small">Sharpe Ratio</th>
                 <th class="text-uppercase text-muted small">Max Drawdown</th>
                 <th class="text-uppercase text-muted small">Beta vs. Benchmark</th>
@@ -19,7 +19,7 @@
             <tbody class="table-border-bottom-0" id="kpi-body">
             {% if snapshot.holdings %}
                 {% for holding in snapshot.holdings %}
-                <tr>
+                <tr data-ticker="{{ holding.ticker }}" class="holding-detail-trigger">
                     <td class="logo-cell">
                         {% if holding.logo_url %}
                             <img src="{{ holding.logo_url }}" alt="{{ holding.ticker }} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
