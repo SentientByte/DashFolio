@@ -7,7 +7,7 @@ from typing import Any, Dict
 import pandas as pd
 import yfinance as yf
 
-from .utils import historical_close, normalize_index
+from .utils import historical_close, normalize_index, safe_float
 
 
 BENCHMARK_TICKER = "SPY"
@@ -28,8 +28,13 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
         ticker_obj = yf.Ticker(ticker)
         fast_info = getattr(ticker_obj, "fast_info", None)
         if fast_info:
-            result["current_price"] = fast_info.get("last_price") or fast_info.get("lastPrice")
-            result["previous_close"] = fast_info.get("previous_close") or fast_info.get("previousClose")
+            last_price = fast_info.get("last_price") or fast_info.get("lastPrice")
+            previous_close = fast_info.get("previous_close") or fast_info.get("previousClose")
+
+            if last_price is not None:
+                result["current_price"] = safe_float(last_price)
+            if previous_close is not None:
+                result["previous_close"] = safe_float(previous_close)
 
         history = ticker_obj.history(period="1y", interval="1d")
         if not history.empty:
@@ -39,13 +44,18 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
                 if not closes.empty:
                     closes = normalize_index(closes)
                     result["price_history"] = closes
-                    if result["current_price"] is None:
-                        result["current_price"] = float(closes.iloc[-1])
-                    if result["previous_close"] is None:
-                        if len(closes) > 1:
-                            result["previous_close"] = float(closes.iloc[-2])
-                        else:
-                            result["previous_close"] = float(closes.iloc[-1])
+                    last_close = float(closes.iloc[-1])
+                    if result["current_price"] is None or result["current_price"] <= 0:
+                        result["current_price"] = last_close
+                    if len(closes) > 1:
+                        fallback_previous_close = float(closes.iloc[-2])
+                    else:
+                        fallback_previous_close = last_close
+                    if (
+                        result["previous_close"] is None
+                        or result["previous_close"] <= 0
+                    ):
+                        result["previous_close"] = fallback_previous_close
                     result["week_close"] = historical_close(closes, 7)
                     result["month_close"] = historical_close(closes, 30)
     except Exception as exc:

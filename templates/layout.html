@@ -72,8 +72,8 @@
                         </div>
                     </div>
                     <ul class="navbar-nav flex-row align-items-center ms-auto">
-                        <li class="nav-item lh-1 me-3 text-muted small">
-                            Updated {{ snapshot.generated_at if snapshot and snapshot.generated_at else 'recently' }}
+                        <li class="nav-item lh-1 me-3 text-muted small" id="update-status">
+                            {{ format_snapshot_update(snapshot.generated_at if snapshot else None) }}
                         </li>
                     </ul>
                 </div>
