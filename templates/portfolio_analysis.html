@@ -353,6 +353,51 @@
         return formatNumber(value, 2);
     }
 
+    function formatUpdateTimestamp(isoString) {
+        if (!isoString) {
+            return 'Updated: Recently';
+        }
+        const parsed = new Date(isoString);
+        if (Number.isNaN(parsed.getTime())) {
+            return 'Updated: Recently';
+        }
+
+        const now = new Date();
+        const diffMs = now.getTime() - parsed.getTime();
+        const minuteMs = 60 * 1000;
+        const hourMs = 60 * minuteMs;
+        const dayMs = 24 * hourMs;
+
+        if (diffMs < minuteMs) {
+            return 'Updated: Recently';
+        }
+
+        if (diffMs < hourMs) {
+            const minutes = Math.max(1, Math.floor(diffMs / minuteMs));
+            return `Updated: ${minutes} min ago`;
+        }
+
+        if (diffMs < dayMs) {
+            const hours = Math.max(1, Math.floor(diffMs / hourMs));
+            return `Updated: ${hours} hour${hours === 1 ? '' : 's'} ago`;
+        }
+
+        const utcPlusThreeMs = parsed.getTime() + 3 * hourMs;
+        const utcPlusThree = new Date(utcPlusThreeMs);
+        const datePart = [
+            utcPlusThree.getUTCFullYear(),
+            String(utcPlusThree.getUTCMonth() + 1).padStart(2, '0'),
+            String(utcPlusThree.getUTCDate()).padStart(2, '0'),
+        ].join('-');
+        const timePart = [
+            String(utcPlusThree.getUTCHours()).padStart(2, '0'),
+            String(utcPlusThree.getUTCMinutes()).padStart(2, '0'),
+            String(utcPlusThree.getUTCSeconds()).padStart(2, '0'),
+        ].join(':');
+
+        return `Updated: ${datePart} ${timePart} UTC+3`;
+    }
+
     function destroyIncomeChart() {
         if (incomeChart) {
             incomeChart.destroy();
@@ -380,17 +425,13 @@
             return;
         }
 
-        const portfolioGainSeries = normalized.map(point => ({
+        const portfolioSeries = normalized.map(point => ({
             x: point.x,
-            y: point.portfolio >= 0 ? Number(point.portfolio.toFixed(2)) : null,
-        }));
-        const portfolioLossSeries = normalized.map(point => ({
-            x: point.x,
-            y: point.portfolio < 0 ? Number(point.portfolio.toFixed(2)) : null,
+            y: Number.isFinite(point.portfolio) ? Number(point.portfolio.toFixed(2)) : null,
         }));
         const benchmarkSeries = normalized.map(point => ({
             x: point.x,
-            y: Number(point.benchmark.toFixed(2)),
+            y: Number.isFinite(point.benchmark) ? Number(point.benchmark.toFixed(2)) : null,
         }));
 
         const options = {
@@ -400,16 +441,15 @@
                 toolbar: { show: false },
             },
             series: [
-                { name: 'Portfolio (Gain)', data: portfolioGainSeries },
-                { name: 'Portfolio (Loss)', data: portfolioLossSeries },
-                { name: `${benchmarkTicker} Benchmark`, data: benchmarkSeries },
+                { name: 'Portfolio', data: portfolioSeries },
+                { name: `${benchmarkTicker}`, data: benchmarkSeries },
             ],
-            colors: ['#28c76f', '#ea5455', '#b0b5bd'],
+            colors: ['#28c76f', '#7367f0'],
             dataLabels: { enabled: false },
-            stroke: { curve: 'smooth', width: [3, 3, 3] },
+            stroke: { curve: 'smooth', width: [3, 3] },
             fill: {
                 type: 'solid',
-                opacity: [0.25, 0.25, 0],
+                opacity: [0.25, 0],
             },
             xaxis: {
                 type: 'datetime',
@@ -435,18 +475,7 @@
                     formatter: value => `${Number(value || 0).toFixed(2)}%`,
                 },
             },
-            legend: {
-                position: 'top',
-                formatter: (seriesName) => {
-                    if (seriesName === 'Portfolio (Gain)') {
-                        return 'Portfolio +';
-                    }
-                    if (seriesName === 'Portfolio (Loss)') {
-                        return 'Portfolio -';
-                    }
-                    return seriesName.replace(' Benchmark', '');
-                },
-            },
+            legend: { show: false },
             annotations: {
                 yaxis: [
                     {
@@ -541,6 +570,11 @@
                 topTickerEl.classList.remove('metric-positive', 'metric-negative');
                 topChangeEl.textContent = 'No holdings available';
             }
+        }
+
+        const updateStatusEl = document.getElementById('update-status');
+        if (updateStatusEl) {
+            updateStatusEl.textContent = formatUpdateTimestamp(snapshot.generated_at);
         }
     }
 
