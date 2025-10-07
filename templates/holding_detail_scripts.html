@@ -159,6 +159,30 @@
             return formatCurrency(Number(value));
         }
 
+        function computeTodayChange(holding) {
+            if (!holding) {
+                return { value: 0, pct: 0 };
+            }
+
+            const quantity = Number(holding.quantity) || 0;
+            const currentPrice = Number(holding.current_price);
+            const previousCloseSource = isValidNumber(holding.previous_close)
+                ? Number(holding.previous_close)
+                : (isValidNumber(holding.close_price) ? Number(holding.close_price) : NaN);
+
+            if (Number.isFinite(currentPrice) && Number.isFinite(previousCloseSource)) {
+                const priceDiff = currentPrice - previousCloseSource;
+                const value = priceDiff * quantity;
+                const pct = previousCloseSource !== 0 ? (priceDiff / previousCloseSource) * 100 : 0;
+                return { value, pct };
+            }
+
+            return {
+                value: Number(holding.todays_gain || 0),
+                pct: Number(holding.todays_gain_pct || 0),
+            };
+        }
+
         function setActiveRangeButton(range) {
             if (!state.rangeButtons.length) {
                 return;
@@ -331,9 +355,12 @@
         }
 
         function buildMetrics(holding) {
+            const previousClose = isValidNumber(holding?.previous_close)
+                ? Number(holding.previous_close)
+                : holding.close_price;
             return [
                 { label: 'Open', value: formatCurrencyOrNA(holding.open_price) },
-                { label: 'Close', value: formatCurrencyOrNA(holding.close_price) },
+                { label: 'Close', value: formatCurrencyOrNA(previousClose) },
                 { label: 'High', value: formatCurrencyOrNA(holding.day_high_price) },
                 { label: 'Low', value: formatCurrencyOrNA(holding.day_low_price) },
                 { label: '50-Day EMA', value: formatCurrencyOrNA(holding.ema_50) },
@@ -378,8 +405,7 @@
                 priceEl.textContent = formatCurrencyOrNA(holding.current_price);
             }
 
-            const changeValue = Number(holding.todays_gain || 0);
-            const changePct = Number(holding.todays_gain_pct || 0);
+            const { value: changeValue, pct: changePct } = computeTodayChange(holding);
 
             if (changeEl) {
                 changeEl.textContent = formatSignedCurrency(changeValue);

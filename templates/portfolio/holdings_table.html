@@ -56,7 +56,23 @@
                 </thead>
                 <tbody class="table-border-bottom-0" id="holdings-body">
                 {% for holding in snapshot.holdings %}
-                    {% set gain_class = 'gain-positive' if holding.todays_gain >= 0 else 'gain-negative' %}
+                    {% set current_price = holding.current_price|float %}
+                    {% set quantity = holding.quantity|float %}
+                    {% set stats = namespace(previous_close=holding.previous_close if holding.previous_close is not none else holding.close_price, today_value=0.0, today_pct=0.0) %}
+                    {% if stats.previous_close is not none %}
+                        {% set stats.previous_close = stats.previous_close|float %}
+                        {% set price_diff = current_price - stats.previous_close %}
+                        {% set stats.today_value = price_diff * quantity %}
+                        {% if stats.previous_close != 0 %}
+                            {% set stats.today_pct = (price_diff / stats.previous_close * 100) %}
+                        {% else %}
+                            {% set stats.today_pct = 0 %}
+                        {% endif %}
+                    {% else %}
+                        {% set stats.today_value = holding.todays_gain or 0 %}
+                        {% set stats.today_pct = holding.todays_gain_pct or 0 %}
+                    {% endif %}
+                    {% set gain_class = 'gain-positive' if stats.today_value >= 0 else 'gain-negative' %}
                     {% set week_class = 'gain-positive' if holding.weekly_gain >= 0 else 'gain-negative' %}
                     {% set month_class = 'gain-positive' if holding.monthly_gain >= 0 else 'gain-negative' %}
                     {% set pl_value = holding.current_value - holding.total_cost %}
@@ -85,8 +101,8 @@
                             <span class="fw-semibold">{{ format_currency(holding.current_value) }}</span>
                         </td>
                         <td class="todays-gain compact-col">
-                            <span class="d-block fw-semibold {{ gain_class }}">{{ format_signed_currency(holding.todays_gain) }}</span>
-                            <small class="text-muted">{{ '+' if holding.todays_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.todays_gain_pct|abs) }}%</small>
+                            <span class="d-block fw-semibold {{ gain_class }}">{{ format_signed_currency(stats.today_value) }}</span>
+                            <small class="text-muted">{{ '+' if stats.today_pct >= 0 else '-' }}{{ '%.2f'|format(stats.today_pct|abs) }}%</small>
                         </td>
                         <td class="compact-col">
                             <span class="d-block fw-semibold {{ week_class }}">{{ format_signed_currency(holding.weekly_gain) }}</span>
