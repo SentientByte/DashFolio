@@ -305,7 +305,7 @@
             rawMax = rawMin === 0 ? 2 : rawMin + 2;
         }
 
-        const step = 2;
+        const step = 5;
         const alignDown = value => Math.floor(value / step) * step;
         const alignUp = value => Math.ceil(value / step) * step;
 
@@ -316,7 +316,7 @@
             yMax = yMin + step;
         }
 
-        const tickAmount = Math.max(2, Math.min(61, Math.round((yMax - yMin) / step) + 1));
+        const tickAmount = Math.max(2, Math.min(61, Math.floor((yMax - yMin) / step) + 1));
 
         const portfolioColor = '#1d4ed8';
         const benchmarkColor = '#94a3b8';
