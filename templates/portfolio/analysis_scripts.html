@@ -1,10 +1,11 @@
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 <script>
     const initialSnapshot = {{ snapshot|tojson }} || {};
-    const initialPerformanceData = initialSnapshot.performance_index || [];
+    const initialPerformanceState = initialSnapshot.performance || {};
     const currencySettings = {{ currency_settings|tojson }};
     const autoRefreshInterval = Math.min(900, Math.max(5, Number({{ config['AUTO_REFRESH_INTERVAL']|default(60) }}) || 60));
-    let incomeChart = null;
+    let performanceChart = null;
+    let performanceMode = 'twr';
     let autoRefreshHandle = null;
     let statusHideTimer = null;
     let latestSnapshot = initialSnapshot;
@@ -20,8 +21,19 @@
         const style = getComputedStyle(document.documentElement);
         const primary = style.getPropertyValue('--bs-primary').trim() || '#696cff';
         const success = style.getPropertyValue('--bs-success').trim() || '#71dd37';
-        return { primary, success };
+        const danger = style.getPropertyValue('--bs-danger').trim() || '#ff3e1d';
+        return { primary, success, danger };
     }
+
+    const PERFORMANCE_LABELS = {
+        twr: 'Time-weighted',
+        equity: 'Include flows',
+    };
+
+    const PERFORMANCE_DESCRIPTIONS = {
+        twr: 'Time-weighted return, excluding external cash flows.',
+        equity: 'Portfolio equity including deposits and withdrawals.',
+    };
 
     const currencyFormatter = new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -221,41 +233,91 @@
         return `Updated: ${datePart} ${timePart} UTC+3`;
     }
 
-    function destroyIncomeChart() {
-        if (incomeChart) {
-            incomeChart.destroy();
-            incomeChart = null;
+    function destroyPerformanceChart() {
+        if (performanceChart) {
+            performanceChart.destroy();
+            performanceChart = null;
         }
     }
 
-    function renderIncomeChart(performanceData) {
-        const chartEl = document.getElementById('incomeChart');
+    function updatePerformanceCopy(mode, performance) {
+        const badge = document.getElementById('performance-mode-badge');
+        if (badge) {
+            badge.textContent = PERFORMANCE_LABELS[mode] || 'Performance';
+        }
+
+        const subtitle = document.getElementById('performance-subtitle');
+        if (subtitle) {
+            subtitle.textContent = PERFORMANCE_DESCRIPTIONS[mode] || '';
+        }
+
+        const titleEl = document.getElementById('performance-title');
+        if (titleEl) {
+            const summary = performance && typeof performance === 'object' ? (performance.summary || {}) : {};
+            const key = mode === 'equity' ? 'equity_total_return' : 'twr_total_return';
+            const ratio = Number(summary[key]);
+            if (Number.isFinite(ratio)) {
+                const pctValue = ratio * 100;
+                const prefix = pctValue > 0 ? '+' : (pctValue < 0 ? '-' : '');
+                titleEl.textContent = `Total return since inception: ${prefix}${Math.abs(pctValue).toFixed(2)}%`;
+            } else {
+                titleEl.textContent = 'Total return since inception: N/A';
+            }
+        }
+    }
+
+    function renderPerformanceChart(mode, performance) {
+        const chartEl = document.getElementById('performanceChart');
         if (!chartEl) {
             return;
         }
 
-        const normalized = Array.isArray(performanceData)
-            ? performanceData.map(point => ({
-                x: point.date,
-                index: Number(point.index ?? point.value ?? point.portfolio ?? 0),
-            }))
-            : [];
-
-        const seriesPoints = normalized
-            .filter(point => point.x && Number.isFinite(point.index))
+        const curves = performance && performance.curves ? performance.curves : {};
+        const rawSeries = Array.isArray(curves[mode]) ? curves[mode] : [];
+        const seriesPoints = rawSeries
+            .map(point => {
+                const dateValue = point.date || point.x;
+                const numericValue = Number(point.value ?? point.index ?? point.portfolio ?? 0);
+                return { x: dateValue, y: numericValue };
+            })
+            .filter(point => point.x && Number.isFinite(point.y))
             .map(point => ({
                 x: point.x,
-                y: Number(point.index.toFixed(2)),
+                y: Number(point.y.toFixed(2)),
             }));
 
         if (!seriesPoints.length) {
-            destroyIncomeChart();
+            destroyPerformanceChart();
             chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to display performance yet.</div>';
             return;
         }
 
-        const { success } = getThemeColors();
+        const values = seriesPoints.map(point => point.y);
+        const maxValue = Math.max(100, ...values);
+        const minValue = Math.min(100, ...values);
+        const { primary, success, danger } = getThemeColors();
 
+        const yAnnotations = [];
+        if (maxValue > 100) {
+            yAnnotations.push({
+                y: 100,
+                y2: maxValue,
+                opacity: 0.12,
+                fillColor: success,
+                borderColor: 'transparent',
+            });
+        }
+        if (minValue < 100) {
+            yAnnotations.push({
+                y: minValue,
+                y2: 100,
+                opacity: 0.12,
+                fillColor: danger,
+                borderColor: 'transparent',
+            });
+        }
+
+        const seriesName = mode === 'equity' ? 'Include flows' : 'Time-weighted';
         const options = {
             chart: {
                 type: 'line',
@@ -263,11 +325,12 @@
                 toolbar: { show: false },
             },
             series: [
-                { name: 'Performance (invested only)', data: seriesPoints },
+                { name: seriesName, data: seriesPoints },
             ],
-            colors: [success],
+            colors: [primary],
             dataLabels: { enabled: false },
             stroke: { curve: 'smooth', width: 3 },
+            markers: { size: 0 },
             xaxis: {
                 type: 'datetime',
                 labels: {
@@ -276,9 +339,8 @@
             },
             yaxis: {
                 title: {
-                    text: 'Index value',
+                    text: 'Index (100 = start)',
                 },
-                tickAmount: 6,
                 labels: {
                     formatter: value => {
                         const numeric = Number(value);
@@ -302,14 +364,17 @@
             grid: {
                 strokeDashArray: 4,
             },
+            annotations: {
+                yaxis: yAnnotations,
+            },
         };
 
-        if (!incomeChart) {
+        if (!performanceChart) {
             chartEl.innerHTML = '';
-            incomeChart = new ApexCharts(chartEl, options);
-            incomeChart.render();
+            performanceChart = new ApexCharts(chartEl, options);
+            performanceChart.render();
         } else {
-            incomeChart.updateOptions({
+            performanceChart.updateOptions({
                 xaxis: options.xaxis,
                 yaxis: options.yaxis,
                 stroke: options.stroke,
@@ -317,9 +382,35 @@
                 tooltip: options.tooltip,
                 legend: options.legend,
                 grid: options.grid,
-            });
-            incomeChart.updateSeries(options.series);
+                annotations: options.annotations,
+                markers: options.markers,
+            }, false, true);
+            performanceChart.updateSeries(options.series);
         }
+    }
+
+    function refreshPerformanceCard(mode, performanceOverride = null) {
+        const performance = performanceOverride || latestSnapshot.performance || initialPerformanceState || {};
+        updatePerformanceCopy(mode, performance);
+        renderPerformanceChart(mode, performance);
+    }
+
+    function updatePerformanceModeButtons() {
+        document.querySelectorAll('[data-performance-mode]').forEach(button => {
+            const buttonMode = button.getAttribute('data-performance-mode');
+            const isActive = buttonMode === performanceMode;
+            button.classList.toggle('btn-primary', isActive);
+            button.classList.toggle('btn-outline-primary', !isActive);
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    }
+
+    function setPerformanceMode(mode, performanceOverride = null) {
+        const normalized = mode === 'equity' ? 'equity' : 'twr';
+        performanceMode = normalized;
+        updatePerformanceModeButtons();
+        refreshPerformanceCard(performanceMode, performanceOverride);
     }
 
     function updateMetrics(snapshot) {
@@ -542,7 +633,7 @@
             latestSnapshot = snapshot;
             updateMetrics(snapshot);
             refreshTable(snapshot);
-            renderIncomeChart(snapshot.performance_index || []);
+            refreshPerformanceCard(performanceMode, snapshot.performance || null);
         } catch (err) {
             console.error('Failed to refresh portfolio snapshot', err);
         } finally {
@@ -616,6 +707,15 @@
         });
     }
 
+    document.querySelectorAll('[data-performance-mode]').forEach(button => {
+        button.addEventListener('click', () => {
+            const mode = button.getAttribute('data-performance-mode');
+            if (mode) {
+                setPerformanceMode(mode, latestSnapshot.performance || null);
+            }
+        });
+    });
+
     const manualRefreshButton = document.getElementById('portfolio-refresh-btn');
     if (manualRefreshButton) {
         manualRefreshButton.addEventListener('click', () => {
@@ -623,7 +723,7 @@
         });
     }
 
-    renderIncomeChart(initialPerformanceData);
+    setPerformanceMode(performanceMode, initialPerformanceState);
     fetchSnapshot({ force: true });
     scheduleAutoRefresh();
 </script>
