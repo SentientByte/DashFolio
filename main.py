@@ -38,7 +38,7 @@ def main() -> None:
         f"using start date {start_date_str} ({period_reason})"
     )
 
-    df_portfolio = load_portfolio(portfolio_file)
+    df_portfolio = load_portfolio(portfolio_file, database_path)
     df_portfolio = update_portfolio_prices(df_portfolio, portfolio_file)
     tickers = df_portfolio["Ticker"].unique()
 
