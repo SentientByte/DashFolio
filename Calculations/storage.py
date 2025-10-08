@@ -72,6 +72,13 @@ CREATE TABLE IF NOT EXISTS derived_holdings (
 )
 """
 
+CASH_BALANCE_TABLE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS cash_balances (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    balance REAL NOT NULL
+)
+"""
+
 
 def ensure_directory(db_path: str) -> None:
     """Ensure the parent directory for the database exists."""
@@ -115,6 +122,30 @@ def ensure_transactions_table(conn: sqlite3.Connection) -> None:
 
 def ensure_derived_holdings_table(conn: sqlite3.Connection) -> None:
     conn.execute(DERIVED_HOLDINGS_TABLE_SCHEMA)
+    conn.commit()
+
+
+def ensure_cash_balance_table(conn: sqlite3.Connection) -> None:
+    conn.execute(CASH_BALANCE_TABLE_SCHEMA)
+    conn.commit()
+
+
+def read_cash_balance(conn: sqlite3.Connection) -> float:
+    cursor = conn.execute("SELECT balance FROM cash_balances WHERE id = 1")
+    row = cursor.fetchone()
+    if not row:
+        return 0.0
+    try:
+        return float(row[0])
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def write_cash_balance(conn: sqlite3.Connection, balance: float) -> None:
+    conn.execute(
+        "REPLACE INTO cash_balances (id, balance) VALUES (1, ?)",
+        (float(balance),),
+    )
     conn.commit()
 
 

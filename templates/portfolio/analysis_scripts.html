@@ -308,6 +308,16 @@
             totalPlEl.classList.toggle('pill-negative', !totalPlPositive);
         }
 
+        const investedEl = document.getElementById('metric-invested-value');
+        if (investedEl) {
+            investedEl.textContent = `Invested value: ${formatCurrency(summary.invested_value || 0)}`;
+        }
+
+        const cashEl = document.getElementById('metric-cash-balance');
+        if (cashEl) {
+            cashEl.textContent = `Cash balance: ${formatCurrency(summary.cash_balance || 0)}`;
+        }
+
         const labelEl = document.getElementById('metric-today-label');
         if (labelEl) {
             labelEl.textContent = dodPositive ? 'Todays Profit' : 'Todays Loss';

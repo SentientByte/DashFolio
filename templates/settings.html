@@ -43,6 +43,37 @@
     </div>
 
     <div class="col-12">
+        <div class="card" id="settings-logos-card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h5 class="mb-1">Holding logos</h5>
+                    <small class="text-muted">Manage optional display names and logo URLs for each ticker.</small>
+                </div>
+                <button class="btn btn-primary" type="button" id="settings-save-logos">
+                    <i class="bx bx-save me-1"></i>
+                    Save logos
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive mb-3">
+                    <table class="table align-middle">
+                        <thead>
+                        <tr>
+                            <th style="min-width: 120px;">Ticker</th>
+                            <th style="min-width: 200px;">Display name</th>
+                            <th style="min-width: 240px;">Logo URL</th>
+                            <th class="text-center" style="width: 80px;">Preview</th>
+                        </tr>
+                        </thead>
+                        <tbody id="settings-logos-body"></tbody>
+                    </table>
+                </div>
+                <small id="settings-logos-status" class="text-muted"></small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
         <div class="card" id="settings-target-card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <div>
@@ -148,8 +179,10 @@
 {% block scripts %}
 <script>
     let targetMap = {{ target_allocations|tojson }} || {};
-    let snapshotHoldings = {{ snapshot.holdings|tojson }} || [];
+    let snapshotHoldings = {{ (snapshot.holdings if snapshot else [])|tojson }} || [];
+    let holdingsMetadata = {{ holdings_metadata|tojson }} || [];
     const currencySettings = {{ currency_settings|tojson }};
+    let logoMap = {};
 
     let statusHideTimer = null;
 
@@ -178,6 +211,95 @@
     function getTotalValueFromSnapshot(data) {
         if (!Array.isArray(data)) return 0;
         return data.reduce((sum, holding) => sum + Number(holding.current_value || 0), 0);
+    }
+
+    function escapeHtml(value) {
+        return (value || '')
+            .toString()
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function normalizeTicker(value) {
+        return (value || '').toString().trim().toUpperCase();
+    }
+
+    function buildLogoState() {
+        logoMap = {};
+        const metadataList = Array.isArray(holdingsMetadata) ? holdingsMetadata : [];
+        metadataList.forEach(entry => {
+            const ticker = normalizeTicker(entry?.ticker);
+            if (!ticker) return;
+            logoMap[ticker] = {
+                ticker,
+                name: (entry?.name || '').toString(),
+                logo_url: (entry?.logo_url || '').toString(),
+            };
+        });
+
+        const holdingsList = Array.isArray(snapshotHoldings) ? snapshotHoldings : [];
+        holdingsList.forEach(holding => {
+            const ticker = normalizeTicker(holding?.ticker);
+            if (!ticker) return;
+            const existing = logoMap[ticker] || { ticker, name: '', logo_url: '' };
+            if (!existing.name && holding?.name) {
+                existing.name = holding.name;
+            }
+            if (!existing.logo_url && holding?.logo_url) {
+                existing.logo_url = holding.logo_url;
+            }
+            logoMap[ticker] = existing;
+        });
+
+        holdingsMetadata = Object.values(logoMap).sort((a, b) => a.ticker.localeCompare(b.ticker));
+        return logoMap;
+    }
+
+    function populateLogoTable() {
+        const tbody = document.getElementById('settings-logos-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        if (!Array.isArray(holdingsMetadata) || holdingsMetadata.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="4" class="text-center text-muted">No holdings available.</td>';
+            tbody.appendChild(row);
+            const saveBtn = document.getElementById('settings-save-logos');
+            if (saveBtn) {
+                saveBtn.disabled = true;
+            }
+            return;
+        }
+
+        holdingsMetadata.forEach(entry => {
+            const ticker = normalizeTicker(entry?.ticker);
+            if (!ticker) return;
+            const nameValue = (entry?.name || '').toString();
+            const logoUrlValue = (entry?.logo_url || '').toString();
+            const row = document.createElement('tr');
+            row.dataset.ticker = ticker;
+            row.innerHTML = `
+                <td class="fw-semibold">${escapeHtml(ticker)}</td>
+                <td>
+                    <input type="text" class="form-control settings-logo-input settings-logo-name" value="${escapeHtml(nameValue)}">
+                </td>
+                <td>
+                    <input type="url" class="form-control settings-logo-input settings-logo-url" placeholder="https://example.com/logo.png" value="${escapeHtml(logoUrlValue)}">
+                </td>
+                <td class="text-center">
+                    <img src="${escapeHtml(logoUrlValue)}" alt="${escapeHtml(ticker)} logo" class="img-fluid rounded settings-logo-preview${logoUrlValue ? '' : ' d-none'}" style="max-height: 32px;">
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        const saveBtn = document.getElementById('settings-save-logos');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+        }
     }
 
     function populateTargetTable() {
@@ -226,6 +348,94 @@
         }
     }
 
+    function handleLogoInputChange(event) {
+        const target = event.target;
+        if (!target.classList.contains('settings-logo-input')) {
+            return;
+        }
+        const row = target.closest('tr');
+        if (!row) return;
+        const ticker = row.dataset.ticker;
+        if (!ticker) return;
+        const entry = logoMap[ticker] || { ticker, name: '', logo_url: '' };
+        if (target.classList.contains('settings-logo-name')) {
+            entry.name = target.value?.trim() || '';
+        } else if (target.classList.contains('settings-logo-url')) {
+            entry.logo_url = target.value?.trim() || '';
+            const preview = row.querySelector('.settings-logo-preview');
+            if (preview) {
+                if (entry.logo_url) {
+                    preview.src = entry.logo_url;
+                    preview.classList.remove('d-none');
+                } else {
+                    preview.src = '';
+                    preview.classList.add('d-none');
+                }
+            }
+        }
+        logoMap[ticker] = entry;
+    }
+
+    async function saveLogos() {
+        const statusEl = document.getElementById('settings-logos-status');
+        if (statusEl) {
+            statusEl.classList.remove('text-danger', 'text-success');
+            statusEl.classList.add('text-muted');
+            statusEl.textContent = 'Saving logo preferences…';
+        }
+        showStatus('Saving settings...');
+
+        const payload = Object.values(logoMap || {})
+            .filter(entry => entry && entry.ticker)
+            .map(entry => ({
+                ticker: entry.ticker,
+                name: (entry?.name || '').toString(),
+                logo_url: (entry?.logo_url || '').toString(),
+            }));
+
+        try {
+            const response = await fetch('{{ url_for('api_update_logos') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ logos: payload }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to save logos.');
+            }
+
+            if (Array.isArray(data.holdings_metadata)) {
+                holdingsMetadata = data.holdings_metadata;
+            }
+            if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
+                snapshotHoldings = data.snapshot.holdings;
+            } else if (Array.isArray(data.holdings)) {
+                snapshotHoldings = data.holdings;
+            }
+            buildLogoState();
+            populateLogoTable();
+            populateTargetTable();
+            updateTargetTotalBadge();
+
+            if (statusEl) {
+                statusEl.classList.remove('text-muted', 'text-danger');
+                statusEl.classList.add('text-success');
+                statusEl.textContent = 'Logos saved successfully.';
+            }
+        } catch (error) {
+            console.error(error);
+            if (statusEl) {
+                statusEl.classList.remove('text-muted', 'text-success');
+                statusEl.classList.add('text-danger');
+                statusEl.textContent = error.message || 'Unable to save logos.';
+            } else {
+                alert(error.message || 'Unable to save logos.');
+            }
+        } finally {
+            hideStatus(400);
+        }
+    }
+
     async function saveTargets() {
         const inputs = document.querySelectorAll('.settings-target-input');
         const payload = [];
@@ -254,7 +464,9 @@
             }
             if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
                 snapshotHoldings = data.snapshot.holdings;
+                buildLogoState();
                 populateTargetTable();
+                populateLogoTable();
             }
             updateTargetTotalBadge();
             if (statusEl) {
@@ -396,6 +608,17 @@
             saveTargetsBtn.addEventListener('click', saveTargets);
         }
 
+        const logosBody = document.getElementById('settings-logos-body');
+        if (logosBody) {
+            logosBody.addEventListener('input', handleLogoInputChange);
+            logosBody.addEventListener('change', handleLogoInputChange);
+        }
+
+        const saveLogosBtn = document.getElementById('settings-save-logos');
+        if (saveLogosBtn) {
+            saveLogosBtn.addEventListener('click', saveLogos);
+        }
+
         const riskForm = document.getElementById('settings-risk-form');
         if (riskForm) {
             riskForm.addEventListener('submit', saveRiskParameters);
@@ -417,7 +640,9 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        buildLogoState();
         populateTargetTable();
+        populateLogoTable();
         setupEventListeners();
         updateTargetTotalBadge();
     });

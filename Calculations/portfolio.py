@@ -64,6 +64,9 @@ def load_portfolio(portfolio_file: str, database_path: str | None = None) -> pd.
     if "Average Cost" not in df.columns:
         df["Average Cost"] = np.nan
 
+    if "Quantity" in df.columns:
+        df = df[df["Quantity"].abs() > 1e-9]
+
     return df
 
 

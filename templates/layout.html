@@ -37,12 +37,6 @@
                         <div data-i18n="Portfolio">Portfolio Overview</div>
                     </a>
                 </li>
-                <li class="menu-item {% if active_page == 'transactions' %}active{% endif %}">
-                    <a href="{{ url_for('transactions_page') }}" class="menu-link">
-                        <i class="menu-icon bx bx-transfer"></i>
-                        <div data-i18n="Transactions">Transactions</div>
-                    </a>
-                </li>
                 <li class="menu-item {% if active_page == 'allocation' %}active{% endif %}">
                     <a href="{{ url_for('allocation_planner') }}" class="menu-link">
                         <i class="menu-icon bx bx-adjust"></i>
@@ -53,6 +47,12 @@
                     <a href="{{ url_for('risk_analysis') }}" class="menu-link">
                         <i class="menu-icon bx bx-shield-quarter"></i>
                         <div data-i18n="Risk">Risk Analysis</div>
+                    </a>
+                </li>
+                <li class="menu-item {% if active_page == 'transactions' %}active{% endif %}">
+                    <a href="{{ url_for('transactions_page') }}" class="menu-link">
+                        <i class="menu-icon bx bx-transfer"></i>
+                        <div data-i18n="Transactions">Transactions</div>
                     </a>
                 </li>
                 <li class="menu-item {% if active_page == 'settings' %}active{% endif %}">

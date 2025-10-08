@@ -11,8 +11,11 @@ import pandas as pd
 from .market_data import get_market_snapshot
 from .storage import (
     connect,
+    ensure_cash_balance_table,
     ensure_derived_holdings_table,
     ensure_transactions_table,
+    read_cash_balance,
+    write_cash_balance,
 )
 from .utils import safe_float
 
@@ -125,16 +128,18 @@ def _sort_transactions(transactions: Sequence[TransactionRecord]) -> List[Transa
 
 def compute_holdings_from_transactions(
     transactions: Sequence[TransactionRecord],
-) -> List[HoldingRecord]:
-    """Derive holdings from a sequence of transaction records."""
+) -> Tuple[List[HoldingRecord], float]:
+    """Derive holdings and cash balance from a sequence of transaction records."""
 
     ledger: Dict[str, Dict[str, Any]] = {}
+    cash_balance = 0.0
 
     for record in _sort_transactions(transactions):
         ticker = record["ticker"]
         quantity = safe_float(record.get("quantity"))
         price = safe_float(record.get("price"))
-        commission = safe_float(record.get("commission"))
+        commission_raw = safe_float(record.get("commission"))
+        commission_cost = abs(commission_raw)
         timestamp = record.get("timestamp")
 
         entry = ledger.setdefault(
@@ -146,14 +151,17 @@ def compute_holdings_from_transactions(
             entry["last_transaction_at"] = timestamp
 
         if quantity > 0:
-            entry["total_cost"] += quantity * price + commission
+            entry["total_cost"] += quantity * price + commission_cost
             entry["quantity"] += quantity
+            cash_balance -= quantity * price + commission_cost
         else:
             sell_qty = min(entry["quantity"], abs(quantity))
             avg_cost = entry["total_cost"] / entry["quantity"] if entry["quantity"] else 0.0
             entry["total_cost"] -= avg_cost * sell_qty
-            entry["total_cost"] += commission
+            entry["total_cost"] += commission_cost
             entry["quantity"] -= sell_qty
+            sale_value = abs(quantity) * price
+            cash_balance += sale_value - commission_cost
 
             remaining = abs(quantity) - sell_qty
             if remaining > 0:
@@ -181,7 +189,9 @@ def compute_holdings_from_transactions(
         )
 
     holdings.sort(key=lambda rec: rec["ticker"])
-    return holdings
+    if cash_balance < 0:
+        cash_balance = 0.0
+    return holdings, cash_balance
 
 
 def load_transactions(db_path: str) -> List[TransactionRecord]:
@@ -212,16 +222,21 @@ def load_current_holdings(db_path: str) -> List[HoldingRecord]:
             "FROM derived_holdings ORDER BY ticker"
         )
         rows = cursor.fetchall()
-    return [
-        {
-            "ticker": row[0],
-            "quantity": float(row[1]),
-            "average_cost": float(row[2] or 0.0),
-            "total_cost": float(row[3] or 0.0),
-            "last_transaction_at": row[4],
-        }
-        for row in rows
-    ]
+    holdings: List[HoldingRecord] = []
+    for row in rows:
+        quantity = float(row[1])
+        if abs(quantity) < 1e-9:
+            continue
+        holdings.append(
+            {
+                "ticker": row[0],
+                "quantity": quantity,
+                "average_cost": float(row[2] or 0.0),
+                "total_cost": float(row[3] or 0.0),
+                "last_transaction_at": row[4],
+            }
+        )
+    return holdings
 
 
 def _persist_transactions(conn, transactions: Sequence[TransactionRecord]) -> None:
@@ -255,11 +270,17 @@ def _append_transactions(conn, transactions: Sequence[TransactionRecord]) -> Non
         )
 
 
-def _persist_holdings(conn, holdings: Sequence[HoldingRecord]) -> None:
+def _persist_holdings(
+    conn,
+    holdings: Sequence[HoldingRecord],
+    cash_balance: float,
+) -> None:
     ensure_derived_holdings_table(conn)
     conn.execute("DELETE FROM derived_holdings")
     timestamp = datetime.utcnow().isoformat() + "Z"
     for record in holdings:
+        if abs(record.get("quantity", 0.0)) < 1e-9:
+            continue
         conn.execute(
             "INSERT INTO derived_holdings (ticker, quantity, average_cost, total_cost, last_transaction_at, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
@@ -272,43 +293,49 @@ def _persist_holdings(conn, holdings: Sequence[HoldingRecord]) -> None:
                 timestamp,
             ),
         )
+    ensure_cash_balance_table(conn)
+    write_cash_balance(conn, cash_balance)
 
 
-def replace_transactions(db_path: str, transactions: Sequence[TransactionRecord]) -> List[HoldingRecord]:
+def replace_transactions(
+    db_path: str, transactions: Sequence[TransactionRecord]
+) -> Tuple[List[HoldingRecord], float]:
     normalised = _sort_transactions([
         _normalise_transaction(record) for record in transactions
     ])
-    holdings = compute_holdings_from_transactions(normalised)
+    holdings, cash_balance = compute_holdings_from_transactions(normalised)
     with connect(db_path) as conn:
         ensure_transactions_table(conn)
         ensure_derived_holdings_table(conn)
         _persist_transactions(conn, normalised)
-        _persist_holdings(conn, holdings)
+        _persist_holdings(conn, holdings, cash_balance)
         conn.commit()
-    return holdings
+    return holdings, cash_balance
 
 
-def append_transactions(db_path: str, transactions: Sequence[TransactionRecord]) -> List[HoldingRecord]:
+def append_transactions(
+    db_path: str, transactions: Sequence[TransactionRecord]
+) -> Tuple[List[HoldingRecord], float]:
     normalised = _sort_transactions([
         _normalise_transaction(record) for record in transactions
     ])
     existing = load_transactions(db_path)
     combined = _sort_transactions(existing + normalised)
-    holdings = compute_holdings_from_transactions(combined)
+    holdings, cash_balance = compute_holdings_from_transactions(combined)
     with connect(db_path) as conn:
         ensure_transactions_table(conn)
         ensure_derived_holdings_table(conn)
         _append_transactions(conn, normalised)
-        _persist_holdings(conn, holdings)
+        _persist_holdings(conn, holdings, cash_balance)
         conn.commit()
-    return holdings
+    return holdings, cash_balance
 
 
 def preview_holdings(
     db_path: str,
     transactions: Sequence[TransactionRecord],
     mode: str,
-) -> Tuple[List[TransactionRecord], List[HoldingRecord]]:
+) -> Tuple[List[TransactionRecord], List[HoldingRecord], float]:
     """Return the resulting transactions and holdings for a preview operation."""
 
     new_records = _sort_transactions([
@@ -323,8 +350,8 @@ def preview_holdings(
     else:
         combined = _sort_transactions(load_transactions(db_path) + new_records)
 
-    holdings = compute_holdings_from_transactions(combined)
-    return combined, holdings
+    holdings, cash_balance = compute_holdings_from_transactions(combined)
+    return combined, holdings, cash_balance
 
 
 def fetch_holdings_with_market_values(
@@ -344,3 +371,9 @@ def fetch_holdings_with_market_values(
             }
         )
     return enriched
+
+
+def load_cash_balance(db_path: str) -> float:
+    with connect(db_path) as conn:
+        ensure_cash_balance_table(conn)
+        return read_cash_balance(conn)
