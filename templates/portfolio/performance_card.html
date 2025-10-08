@@ -1,19 +1,12 @@
 <div class="card mb-4" id="performance-card">
-    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
-            <h5 class="mb-1">Portfolio Performance</h5>
-            <small class="text-muted" id="performance-subtitle">Time-weighted return, excluding external cash flows.</small>
+            <h5 class="mb-1">Performance (invested only)</h5>
+            <small class="text-muted">Time-weighted index for invested assets, excluding cash and external flows.</small>
         </div>
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <span class="badge bg-label-primary" id="performance-mode-badge">Time-weighted</span>
-            <div class="btn-group" role="group" aria-label="Performance mode">
-                <button type="button" class="btn btn-primary" data-performance-mode="twr">Time-weighted</button>
-                <button type="button" class="btn btn-outline-primary" data-performance-mode="equity">Include flows</button>
-            </div>
-        </div>
+        <span class="badge bg-label-primary">Flow-neutral index</span>
     </div>
     <div class="card-body">
-        <h6 class="mb-3" id="performance-title">Total return since inception: +0.00%</h6>
-        <div id="performanceChart" style="min-height: 320px;"></div>
+        <div id="incomeChart" style="min-height: 320px;"></div>
     </div>
 </div>

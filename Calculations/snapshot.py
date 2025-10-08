@@ -12,7 +12,6 @@ from .market_data import (
     get_benchmark_returns,
     get_market_snapshot,
 )
-from .performance import build_daily_table, compute_equity_index, compute_twr
 from .risk_metrics import compute_risk_metrics
 from .utils import historical_close, normalize_index, safe_float
 
@@ -130,7 +129,6 @@ def build_portfolio_snapshot(
     cash_balance = max(safe_float(cash_balance), 0.0)
     transactions = transactions or []
     cash_adjustments = cash_adjustments or []
-    price_history_series: Dict[str, pd.Series] = {}
 
     def build_quantity_curves() -> Dict[str, pd.Series]:
         if not transactions:
@@ -265,7 +263,6 @@ def build_portfolio_snapshot(
         price_history_points: List[Dict[str, Any]] = []
         if price_history is not None and not price_history.empty:
             normalized_history = normalize_index(price_history.astype(float))
-            price_history_series[ticker] = normalized_history.astype(float)
             qty_series = quantity_curves.get(ticker)
             if qty_series is not None and not qty_series.empty:
                 qty_series = qty_series.reindex(normalized_history.index, method="ffill")
@@ -363,6 +360,14 @@ def build_portfolio_snapshot(
         invested_series = invested_series.ffill()
         invested_series = _series_with_flow_days(invested_series, flow_days)
 
+    invested_series_map = _series_to_iso_map(invested_series) if invested_series is not None else {}
+    invested_days = list(invested_series_map.keys())
+    twr_index_map = _build_twr_index(invested_days, invested_series_map, flow_days)
+    performance_index = [
+        {"date": day, "index": float(twr_index_map[day])}
+        for day in invested_days
+    ]
+
     if invested_series is not None and not invested_series.empty:
         invested_current = float(invested_series.iloc[-1])
         previous_invested = float(invested_series.iloc[-2]) if len(invested_series) > 1 else None
@@ -402,143 +407,6 @@ def build_portfolio_snapshot(
     total_pl_value = invested_current - total_cost
     total_pl_pct = (total_pl_value / total_cost * 100) if total_cost else 0.0
 
-    performance_daily: List[Dict[str, Any]] = []
-    performance_curves: Dict[str, List[Dict[str, Any]]] = {
-        "twr": [],
-        "equity": [],
-    }
-    performance_summary: Dict[str, Any] = {}
-
-    def _performance_records(df_like: Any) -> List[Dict[str, Any]]:
-        if df_like is None:
-            return []
-        if hasattr(df_like, "to_dict"):
-            try:
-                return df_like.to_dict(orient="records")  # type: ignore[call-arg]
-            except TypeError:
-                pass
-        if hasattr(df_like, "to_dicts"):
-            return df_like.to_dicts()  # type: ignore[attr-defined]
-        if isinstance(df_like, list):
-            return list(df_like)
-        return []
-
-    try:
-        trade_payload: List[Dict[str, Any]] = []
-        for trade in transactions:
-            ts = pd.to_datetime(trade.get("timestamp"), utc=False, errors="coerce")
-            if pd.isna(ts):
-                continue
-            quantity = safe_float(trade.get("quantity"))
-            side = "buy" if quantity >= 0 else "sell"
-            trade_payload.append(
-                {
-                    "timestamp": ts,
-                    "symbol": str(trade.get("ticker", "")).upper(),
-                    "side": side,
-                    "qty": abs(quantity),
-                    "price": safe_float(trade.get("price")),
-                    "commission": safe_float(trade.get("commission")),
-                    "fees": safe_float(trade.get("fees")),
-                }
-            )
-
-        cash_payload: List[Dict[str, Any]] = []
-        for event in cash_adjustments:
-            ts = pd.to_datetime(event.get("timestamp"), utc=False, errors="coerce")
-            if pd.isna(ts):
-                continue
-            cash_payload.append(
-                {
-                    "date": ts,
-                    "type": event.get("type"),
-                    "amount": safe_float(event.get("amount")),
-                }
-            )
-
-        price_payload: List[Dict[str, Any]] = []
-        for symbol, series in price_history_series.items():
-            if series is None or series.empty:
-                continue
-            for idx, value in series.dropna().items():
-                price_payload.append(
-                    {
-                        "symbol": symbol,
-                        "date": idx,
-                        "close": float(value),
-                    }
-                )
-
-        if trade_payload or cash_payload:
-            base_table = build_daily_table(trade_payload, price_payload, cash_payload)
-            performance_df = compute_equity_index(compute_twr(base_table))
-            for row in _performance_records(performance_df):
-                raw_date = row.get("date")
-                if isinstance(raw_date, pd.Timestamp):
-                    date_value = raw_date.to_pydatetime().date()
-                elif isinstance(raw_date, datetime):
-                    date_value = raw_date.date()
-                else:
-                    date_value = raw_date
-                if isinstance(date_value, str):
-                    iso_date = date_value
-                elif isinstance(date_value, datetime):
-                    iso_date = date_value.date().isoformat()
-                elif hasattr(date_value, "isoformat"):
-                    iso_date = date_value.isoformat()  # type: ignore[assignment]
-                else:
-                    iso_date = str(date_value)
-
-                daily_entry: Dict[str, Any] = {}
-                for key, value in row.items():
-                    if key == "date":
-                        daily_entry[key] = iso_date
-                    elif value is None:
-                        daily_entry[key] = None
-                    elif isinstance(value, bool):
-                        daily_entry[key] = value
-                    elif isinstance(value, str):
-                        daily_entry[key] = value
-                    else:
-                        daily_entry[key] = safe_float(value)
-                daily_entry.setdefault("date", iso_date)
-                performance_daily.append(daily_entry)
-
-                index_twr = row.get("index_twr")
-                if index_twr is not None:
-                    performance_curves["twr"].append(
-                        {
-                            "date": iso_date,
-                            "index": safe_float(index_twr),
-                            "value": safe_float(index_twr),
-                            "daily_return": safe_float(row.get("daily_return_twr")),
-                        }
-                    )
-
-                index_equity = row.get("index_equity")
-                if index_equity is not None:
-                    performance_curves["equity"].append(
-                        {
-                            "date": iso_date,
-                            "index": safe_float(index_equity),
-                            "value": safe_float(index_equity),
-                        }
-                    )
-
-            if performance_curves["twr"]:
-                last_twr = performance_curves["twr"][-1]["value"]
-                performance_summary["twr_total_return"] = last_twr / 100.0 - 1.0
-            if performance_curves["equity"]:
-                last_equity = performance_curves["equity"][-1]["value"]
-                performance_summary["equity_total_return"] = last_equity / 100.0 - 1.0
-            if performance_daily:
-                performance_summary["start_date"] = performance_daily[0]["date"]
-                performance_summary["end_date"] = performance_daily[-1]["date"]
-    except Exception:
-        performance_daily = []
-        performance_curves = {"twr": [], "equity": []}
-        performance_summary = {}
-
     summary = {
         "total_cost": total_cost,
         "current_value": invested_current + cash_balance,
@@ -563,19 +431,11 @@ def build_portfolio_snapshot(
             "change_pct": top_mover.get("change_pct"),
         }
 
-    performance_payload = {
-        "daily": performance_daily,
-        "curves": performance_curves,
-        "summary": performance_summary,
-    }
-    performance_index = performance_curves.get("twr", [])
-
     return {
         "summary": summary,
         "holdings": computed_holdings,
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "target_allocations": normalized_targets,
         "performance_index": performance_index,
-        "performance": performance_payload,
         "cash_balance": cash_balance,
     }
