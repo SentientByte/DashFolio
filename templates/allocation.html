@@ -339,6 +339,8 @@
             return total ? (value / total) * 100 : 0;
         });
 
+        const totalPercent = series.reduce((sum, value) => sum + (Number(value) || 0), 0);
+
         if (!series.length) {
             destroyAllocationChart();
             container.innerHTML = '<div class="text-muted text-center py-4">No allocation data available.</div>';
@@ -347,17 +349,42 @@
 
         const options = {
             chart: {
-                type: 'pie',
+                type: 'donut',
                 height: 320,
             },
             colors: chartColors,
             series,
             labels,
+            stroke: {
+                width: 4,
+                colors: ['#fff'],
+            },
             dataLabels: {
-                enabled: true,
-                formatter: (val, opts) => {
-                    const label = opts.w.globals.labels[opts.seriesIndex] || '';
-                    return `${label}: ${Number(val || 0).toFixed(1)}%`;
+                enabled: false,
+            },
+            plotOptions: {
+                pie: {
+                    donut: {
+                        size: '70%',
+                        labels: {
+                            show: true,
+                            name: {
+                                show: true,
+                                fontSize: '15px',
+                                offsetY: 8,
+                            },
+                            value: {
+                                show: true,
+                                fontSize: '20px',
+                                formatter: (val) => `${Number(val || 0).toFixed(1)}%`,
+                            },
+                            total: {
+                                show: true,
+                                label: 'Allocation',
+                                formatter: () => `${totalPercent.toFixed(0)}%`
+                            }
+                        }
+                    }
                 }
             },
             legend: {
@@ -380,9 +407,11 @@
             allocationChart.updateOptions({
                 labels,
                 colors: chartColors,
+                stroke: options.stroke,
                 dataLabels: options.dataLabels,
                 legend: options.legend,
                 tooltip: options.tooltip,
+                plotOptions: options.plotOptions,
             });
             allocationChart.updateSeries(series);
         }

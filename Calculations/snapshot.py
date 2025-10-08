@@ -14,7 +14,7 @@ from .market_data import (
     get_market_snapshot,
 )
 from .risk_metrics import compute_risk_metrics
-from .utils import safe_float
+from .utils import historical_close, safe_float
 
 
 def build_portfolio_snapshot(
@@ -34,6 +34,19 @@ def build_portfolio_snapshot(
     benchmark_history = get_benchmark_history(benchmark=benchmark_ticker)
     portfolio_history: pd.Series | None = None
 
+    def resolve_reference_price(raw_value, history: pd.Series | None, days_back: int) -> float | None:
+        if raw_value is not None:
+            candidate = safe_float(raw_value)
+            if candidate > 0:
+                return candidate
+        if history is not None and not history.empty:
+            fallback = historical_close(history, days_back)
+            if fallback is not None:
+                candidate = safe_float(fallback)
+                if candidate > 0:
+                    return candidate
+        return None
+
     for holding in holdings:
         ticker = str(holding.get("ticker", "")).upper().strip()
         quantity = safe_float(holding.get("quantity"))
@@ -45,8 +58,9 @@ def build_portfolio_snapshot(
         market = get_market_snapshot(ticker)
         current_price = safe_float(market.get("current_price"), default=0.0)
         previous_close = safe_float(market.get("previous_close"), default=current_price)
-        week_close = safe_float(market.get("week_close"), default=previous_close)
-        month_close = safe_float(market.get("month_close"), default=previous_close)
+        price_history = market.get("price_history")
+        week_close = resolve_reference_price(market.get("week_close"), price_history, 7)
+        month_close = resolve_reference_price(market.get("month_close"), price_history, 30)
         open_price_raw = market.get("open_price")
         close_price_raw = market.get("close_price")
         adj_close_price_raw = market.get("adj_close_price")
@@ -78,24 +92,30 @@ def build_portfolio_snapshot(
         todays_gain = current_value - prev_value
         todays_gain_pct = (todays_gain / prev_value * 100) if prev_value else 0.0
 
-        weekly_value = quantity * week_close if week_close else 0.0
-        weekly_gain = current_value - weekly_value
-        weekly_gain_pct = (weekly_gain / weekly_value * 100) if weekly_value else 0.0
+        weekly_reference_value = 0.0
+        weekly_gain = 0.0
+        weekly_gain_pct = 0.0
+        if week_close is not None and week_close > 0:
+            weekly_reference_value = quantity * week_close
+            weekly_gain = (current_price - week_close) * quantity
+            weekly_gain_pct = ((current_price - week_close) / week_close * 100) if week_close else 0.0
 
-        monthly_value = quantity * month_close if month_close else 0.0
-        monthly_gain = current_value - monthly_value
-        monthly_gain_pct = (monthly_gain / monthly_value * 100) if monthly_value else 0.0
+        monthly_reference_value = 0.0
+        monthly_gain = 0.0
+        monthly_gain_pct = 0.0
+        if month_close is not None and month_close > 0:
+            monthly_reference_value = quantity * month_close
+            monthly_gain = (current_price - month_close) * quantity
+            monthly_gain_pct = ((current_price - month_close) / month_close * 100) if month_close else 0.0
 
         pl_value = current_value - total_cost_value
         pl_pct = (pl_value / total_cost_value * 100) if total_cost_value else 0.0
         yield_on_cost_pct = (pl_value / total_cost_value * 100) if total_cost_value else 0.0
 
-        annualized_vol, sharpe, max_drawdown, beta = compute_risk_metrics(
-            market.get("price_history"),
+        annualized_vol, sharpe, max_drawdown, beta, ewma_var_pct = compute_risk_metrics(
+            price_history,
             benchmark_returns,
         )
-
-        price_history = market.get("price_history")
         price_history_points: List[Dict[str, Any]] = []
         if price_history is not None and not price_history.empty:
             value_series = price_history.astype(float) * quantity
@@ -136,6 +156,7 @@ def build_portfolio_snapshot(
                 "sharpe_ratio": sharpe,
                 "max_drawdown_pct": max_drawdown,
                 "beta_vs_benchmark": beta,
+                "ewma_var_pct": ewma_var_pct,
                 "yield_on_cost_pct": yield_on_cost_pct,
                 "open_price": open_price,
                 "close_price": close_price,
@@ -154,8 +175,8 @@ def build_portfolio_snapshot(
         total_cost += total_cost_value
         total_prev_value += prev_value
         total_current_value += current_value
-        total_week_reference_value += weekly_value
-        total_month_reference_value += monthly_value
+        total_week_reference_value += weekly_reference_value
+        total_month_reference_value += monthly_reference_value
 
         change_value = todays_gain
         change_pct = ((current_price - previous_close) / previous_close * 100) if previous_close else 0.0
