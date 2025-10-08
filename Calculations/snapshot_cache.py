@@ -8,6 +8,8 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+import pandas as pd
+
 from .snapshot import build_portfolio_snapshot
 from .storage import (
     connect,
@@ -63,17 +65,77 @@ def _canonical_targets(targets: Dict[str, Any] | None) -> Dict[str, float]:
     return {ticker: value for ticker, value in cleaned}
 
 
+def _normalize_timestamp_for_cache(value: Any) -> str:
+    if value is None:
+        return ""
+    parsed = pd.to_datetime(value, utc=True, errors="coerce")
+    if pd.isna(parsed):
+        return str(value)
+    return parsed.isoformat()
+
+
+def _canonical_transactions(transactions: List[Dict[str, Any]] | None) -> List[Dict[str, Any]]:
+    if not transactions:
+        return []
+    canonical: List[Dict[str, Any]] = []
+    for entry in transactions:
+        canonical.append(
+            {
+                "timestamp": _normalize_timestamp_for_cache(entry.get("timestamp")),
+                "ticker": str(entry.get("ticker", "")).upper().strip(),
+                "quantity": round(safe_float(entry.get("quantity")), 6),
+                "price": round(safe_float(entry.get("price")), 6),
+                "commission": round(safe_float(entry.get("commission")), 6),
+            }
+        )
+    canonical.sort(
+        key=lambda item: (
+            item["timestamp"],
+            item["ticker"],
+            item["price"],
+            item["quantity"],
+        )
+    )
+    return canonical
+
+
+def _canonical_cash_adjustments(
+    adjustments: List[Dict[str, Any]] | None,
+) -> List[Dict[str, Any]]:
+    if not adjustments:
+        return []
+    canonical: List[Dict[str, Any]] = []
+    for entry in adjustments:
+        adj_type = str(entry.get("type", "deposit")).strip().lower()
+        amount = round(safe_float(entry.get("amount")), 6)
+        signed = round(safe_float(entry.get("signed_amount")), 6)
+        canonical.append(
+            {
+                "timestamp": _normalize_timestamp_for_cache(entry.get("timestamp")),
+                "type": adj_type,
+                "amount": amount,
+                "signed": signed,
+            }
+        )
+    canonical.sort(key=lambda item: (item["timestamp"], item["type"], item["amount"]))
+    return canonical
+
+
 def _generate_cache_key(
     holdings: List[Dict[str, Any]],
     targets: Dict[str, Any] | None,
     benchmark: str | None,
     cash_balance: float,
+    transactions: List[Dict[str, Any]] | None,
+    cash_adjustments: List[Dict[str, Any]] | None,
 ) -> Tuple[str, str]:
     canonical_payload = {
         "benchmark": (benchmark or "").upper().strip(),
         "holdings": _canonical_holdings(holdings),
         "targets": _canonical_targets(targets),
         "cash": round(safe_float(cash_balance), 6),
+        "transactions": _canonical_transactions(transactions),
+        "cash_adjustments": _canonical_cash_adjustments(cash_adjustments),
     }
     encoded = json.dumps(canonical_payload, sort_keys=True, separators=(",", ":"))
     cache_key = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -99,9 +161,18 @@ def _refresh_worker(
     targets: Dict[str, Any] | None,
     benchmark: str | None,
     cash_balance: float,
+    transactions: List[Dict[str, Any]] | None,
+    cash_adjustments: List[Dict[str, Any]] | None,
 ) -> None:
     try:
-        snapshot = build_portfolio_snapshot(holdings, targets, benchmark, cash_balance)
+        snapshot = build_portfolio_snapshot(
+            holdings,
+            targets,
+            benchmark,
+            cash_balance,
+            transactions=transactions,
+            cash_adjustments=cash_adjustments,
+        )
         with connect(db_path) as conn:
             ensure_snapshot_cache_table(conn)
             write_cached_snapshot(conn, cache_key, fingerprint, benchmark, snapshot)
@@ -120,6 +191,8 @@ def _schedule_refresh_if_needed(
     targets: Dict[str, Any] | None,
     benchmark: str | None,
     cash_balance: float,
+    transactions: List[Dict[str, Any]] | None,
+    cash_adjustments: List[Dict[str, Any]] | None,
     existing_timestamp: Optional[str],
 ) -> None:
     if not _should_refresh(existing_timestamp):
@@ -130,7 +203,17 @@ def _schedule_refresh_if_needed(
             return
         thread = threading.Thread(
             target=_refresh_worker,
-            args=(cache_key, fingerprint, db_path, holdings, targets, benchmark, cash_balance),
+            args=(
+                cache_key,
+                fingerprint,
+                db_path,
+                holdings,
+                targets,
+                benchmark,
+                cash_balance,
+                transactions,
+                cash_adjustments,
+            ),
             daemon=True,
         )
         _refresh_threads[cache_key] = thread
@@ -143,6 +226,8 @@ def get_portfolio_snapshot(
     targets: Dict[str, Any] | None,
     benchmark: str | None,
     cash_balance: float = 0.0,
+    transactions: List[Dict[str, Any]] | None = None,
+    cash_adjustments: List[Dict[str, Any]] | None = None,
     *,
     refresh_async: bool = True,
     force_recompute: bool = False,
@@ -155,7 +240,9 @@ def get_portfolio_snapshot(
     scheduled when the data is considered stale.
     """
 
-    cache_key, fingerprint = _generate_cache_key(holdings, targets, benchmark, cash_balance)
+    cache_key, fingerprint = _generate_cache_key(
+        holdings, targets, benchmark, cash_balance, transactions, cash_adjustments
+    )
     cached_snapshot: Optional[Dict[str, Any]] = None
     cached_generated_at: Optional[str] = None
 
@@ -168,7 +255,14 @@ def get_portfolio_snapshot(
                 cached_generated_at = cached_row["generated_at"]
 
     if cached_snapshot is None:
-        snapshot = build_portfolio_snapshot(holdings, targets, benchmark, cash_balance)
+        snapshot = build_portfolio_snapshot(
+            holdings,
+            targets,
+            benchmark,
+            cash_balance,
+            transactions=transactions,
+            cash_adjustments=cash_adjustments,
+        )
         cached_snapshot = snapshot
         cached_generated_at = snapshot.get("generated_at")
         with connect(db_path) as conn:
@@ -183,6 +277,8 @@ def get_portfolio_snapshot(
             targets,
             benchmark,
             cash_balance,
+            transactions,
+            cash_adjustments,
             cached_generated_at,
         )
 
@@ -197,6 +293,8 @@ def get_portfolio_snapshot(
             targets,
             benchmark,
             cash_balance,
+            transactions,
+            cash_adjustments,
             cached_generated_at,
         )
 

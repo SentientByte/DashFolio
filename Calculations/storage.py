@@ -79,6 +79,15 @@ CREATE TABLE IF NOT EXISTS cash_balances (
 )
 """
 
+CASH_ADJUSTMENTS_TABLE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS cash_adjustments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    amount REAL NOT NULL CHECK (amount >= 0),
+    type TEXT NOT NULL CHECK (type IN ('deposit', 'withdraw'))
+)
+"""
+
 
 def ensure_directory(db_path: str) -> None:
     """Ensure the parent directory for the database exists."""
@@ -130,6 +139,11 @@ def ensure_cash_balance_table(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def ensure_cash_adjustments_table(conn: sqlite3.Connection) -> None:
+    conn.execute(CASH_ADJUSTMENTS_TABLE_SCHEMA)
+    conn.commit()
+
+
 def read_cash_balance(conn: sqlite3.Connection) -> float:
     cursor = conn.execute("SELECT balance FROM cash_balances WHERE id = 1")
     row = cursor.fetchone()
@@ -146,6 +160,40 @@ def write_cash_balance(conn: sqlite3.Connection, balance: float) -> None:
         "REPLACE INTO cash_balances (id, balance) VALUES (1, ?)",
         (float(balance),),
     )
+    conn.commit()
+
+
+def read_cash_adjustments(conn: sqlite3.Connection) -> list[dict]:
+    cursor = conn.execute(
+        "SELECT id, timestamp, amount, type FROM cash_adjustments ORDER BY timestamp, id"
+    )
+    rows = cursor.fetchall()
+    adjustments: list[dict] = []
+    for row in rows:
+        adjustments.append(
+            {
+                "id": int(row[0]),
+                "timestamp": row[1],
+                "amount": float(row[2] or 0.0),
+                "type": str(row[3] or "deposit"),
+            }
+        )
+    return adjustments
+
+
+def insert_cash_adjustment(
+    conn: sqlite3.Connection, timestamp: str, amount: float, adj_type: str
+) -> int:
+    cursor = conn.execute(
+        "INSERT INTO cash_adjustments (timestamp, amount, type) VALUES (?, ?, ?)",
+        (timestamp, float(amount), adj_type),
+    )
+    conn.commit()
+    return int(cursor.lastrowid)
+
+
+def delete_cash_adjustment_record(conn: sqlite3.Connection, adjustment_id: int) -> None:
+    conn.execute("DELETE FROM cash_adjustments WHERE id = ?", (int(adjustment_id),))
     conn.commit()
 
 

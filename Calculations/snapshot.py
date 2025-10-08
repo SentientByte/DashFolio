@@ -14,7 +14,7 @@ from .market_data import (
     get_market_snapshot,
 )
 from .risk_metrics import compute_risk_metrics
-from .utils import historical_close, safe_float
+from .utils import historical_close, normalize_index, safe_float
 
 
 def build_portfolio_snapshot(
@@ -22,6 +22,8 @@ def build_portfolio_snapshot(
     target_allocations: Dict[str, Any] | None = None,
     benchmark_ticker: str | None = None,
     cash_balance: float = 0.0,
+    transactions: List[Dict[str, Any]] | None = None,
+    cash_adjustments: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     computed_holdings: List[Dict[str, Any]] = []
     total_cost = 0.0
@@ -35,6 +37,116 @@ def build_portfolio_snapshot(
     benchmark_history = get_benchmark_history(benchmark=benchmark_ticker)
     portfolio_history: pd.Series | None = None
     cash_balance = max(safe_float(cash_balance), 0.0)
+    transactions = transactions or []
+    cash_adjustments = cash_adjustments or []
+
+    def build_quantity_curves() -> Dict[str, pd.Series]:
+        if not transactions:
+            return {}
+        try:
+            df = pd.DataFrame(transactions)
+        except Exception:
+            return {}
+        if df.empty or "timestamp" not in df.columns:
+            return {}
+        df = df.copy()
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=False, errors="coerce")
+        df.dropna(subset=["timestamp"], inplace=True)
+        if df.empty:
+            return {}
+        df.sort_values("timestamp", inplace=True)
+        if "ticker" not in df.columns or "quantity" not in df.columns:
+            return {}
+        df["ticker"] = df["ticker"].astype(str).str.upper().str.strip()
+        df["quantity"] = df["quantity"].apply(safe_float)
+        curves: Dict[str, pd.Series] = {}
+        for ticker, group in df.groupby("ticker"):
+            if not ticker or group.empty:
+                continue
+            daily = (
+                group.set_index("timestamp")["quantity"].resample("D").sum().cumsum()
+            )
+            if daily.empty:
+                continue
+            series = normalize_index(daily.astype(float))
+            curves[ticker] = series
+        return curves
+
+    def build_cash_value_series(index: pd.DatetimeIndex | None) -> pd.Series | None:
+        events: List[tuple[pd.Timestamp, float]] = []
+        for adjustment in cash_adjustments:
+            timestamp = pd.to_datetime(
+                adjustment.get("timestamp"), utc=False, errors="coerce"
+            )
+            if pd.isna(timestamp):
+                continue
+            delta = safe_float(adjustment.get("signed_amount"))
+            if delta == 0:
+                continue
+            events.append((timestamp, delta))
+
+        for transaction in transactions:
+            timestamp = pd.to_datetime(
+                transaction.get("timestamp"), utc=False, errors="coerce"
+            )
+            if pd.isna(timestamp):
+                continue
+            quantity = safe_float(transaction.get("quantity"))
+            price = safe_float(transaction.get("price"))
+            commission = abs(safe_float(transaction.get("commission")))
+            if quantity > 0:
+                delta = -(quantity * price + commission)
+            else:
+                delta = abs(quantity) * price - commission
+            if delta == 0:
+                continue
+            events.append((timestamp, delta))
+
+        if not events:
+            if index is None or len(index) == 0:
+                return None
+            return pd.Series(float(cash_balance), index=index, dtype=float)
+
+        df_events = pd.DataFrame(events, columns=["timestamp", "amount"])
+        df_events.dropna(subset=["timestamp"], inplace=True)
+        if df_events.empty:
+            if index is None or len(index) == 0:
+                return None
+            return pd.Series(float(cash_balance), index=index, dtype=float)
+
+        df_events["timestamp"] = pd.to_datetime(
+            df_events["timestamp"], utc=False, errors="coerce"
+        )
+        df_events.dropna(subset=["timestamp"], inplace=True)
+        if df_events.empty:
+            if index is None or len(index) == 0:
+                return None
+            return pd.Series(float(cash_balance), index=index, dtype=float)
+
+        df_events.sort_values("timestamp", inplace=True)
+        df_events["amount"] = df_events["amount"].apply(safe_float)
+        daily = (
+            df_events.set_index("timestamp")["amount"].resample("D").sum().cumsum()
+        )
+        daily = normalize_index(daily.astype(float))
+
+        if index is None or len(index) == 0:
+            return daily
+
+        series = daily.reindex(index, method="ffill")
+        if series is None:
+            series = pd.Series(dtype=float, index=index)
+        series = series.ffill().fillna(0.0)
+        if not series.empty:
+            final_difference = cash_balance - float(series.iloc[-1])
+            if abs(final_difference) > 1e-6:
+                series = series + final_difference
+        else:
+            series = pd.Series(float(cash_balance), index=index, dtype=float)
+
+        return series
+
+    quantity_curves = build_quantity_curves()
 
     def resolve_reference_price(raw_value, history: pd.Series | None, days_back: int) -> float | None:
         if raw_value is not None:
@@ -120,13 +232,22 @@ def build_portfolio_snapshot(
         )
         price_history_points: List[Dict[str, Any]] = []
         if price_history is not None and not price_history.empty:
-            value_series = price_history.astype(float) * quantity
+            normalized_history = normalize_index(price_history.astype(float))
+            qty_series = quantity_curves.get(ticker)
+            if qty_series is not None and not qty_series.empty:
+                qty_series = qty_series.reindex(normalized_history.index, method="ffill")
+                qty_series = qty_series.ffill().fillna(0.0)
+            else:
+                qty_series = pd.Series(
+                    quantity, index=normalized_history.index, dtype=float
+                )
+            value_series = normalized_history.astype(float) * qty_series
             portfolio_history = (
                 value_series
                 if portfolio_history is None
                 else portfolio_history.add(value_series, fill_value=0)
             )
-            trimmed_history = price_history.tail(260)
+            trimmed_history = normalized_history.tail(260)
             price_history_points = [
                 {
                     "date": idx.strftime("%Y-%m-%d") if isinstance(idx, pd.Timestamp) else str(idx),
@@ -201,9 +322,13 @@ def build_portfolio_snapshot(
             holding["current_value"] / allocation_denominator * 100 if allocation_denominator else 0.0
         )
 
+    cash_series: pd.Series | None = None
     if portfolio_history is not None and not portfolio_history.empty:
         portfolio_history = portfolio_history.sort_index()
-        if cash_balance:
+        cash_series = build_cash_value_series(portfolio_history.index)
+        if cash_series is not None and not cash_series.empty:
+            portfolio_history = portfolio_history.add(cash_series, fill_value=0.0)
+        elif cash_balance:
             portfolio_history = portfolio_history + cash_balance
 
     normalized_targets = normalize_target_allocations(computed_holdings, target_allocations)
@@ -270,30 +395,50 @@ def build_portfolio_snapshot(
 
     performance_vs_benchmark: List[Dict[str, Any]] = []
     if portfolio_history is not None and not portfolio_history.empty:
-        portfolio_returns = portfolio_history.pct_change().fillna(0.0)
-        if not portfolio_returns.empty:
-            portfolio_curve = (1 + portfolio_returns).cumprod() * 100
-
+        portfolio_series = portfolio_history.ffill().dropna()
+        if not portfolio_series.empty:
             benchmark_curve = None
+            initial_value = float(portfolio_series.iloc[0]) if len(portfolio_series) else 0.0
+
             if benchmark_history is not None and not benchmark_history.empty:
                 benchmark_history = benchmark_history.sort_index()
-                benchmark_history = benchmark_history.reindex(portfolio_curve.index, method="ffill")
-                benchmark_returns_curve = benchmark_history.pct_change().fillna(0.0)
-                benchmark_curve = (1 + benchmark_returns_curve).cumprod() * 100
-            elif not benchmark_returns.empty:
-                aligned_returns = benchmark_returns.reindex(portfolio_curve.index).fillna(0.0)
-                benchmark_curve = (1 + aligned_returns).cumprod() * 100
+                benchmark_aligned = benchmark_history.reindex(
+                    portfolio_series.index, method="ffill"
+                ).dropna()
+                if not benchmark_aligned.empty:
+                    base_price = float(benchmark_aligned.iloc[0])
+                    if base_price != 0:
+                        benchmark_curve = (
+                            benchmark_aligned / base_price
+                        ) * initial_value
+                        benchmark_curve = benchmark_curve.reindex(
+                            portfolio_series.index
+                        ).ffill()
 
+            if (benchmark_curve is None or benchmark_curve.empty) and not benchmark_returns.empty:
+                aligned_returns = benchmark_returns.reindex(
+                    portfolio_series.index
+                ).fillna(0.0)
+                benchmark_curve = (1 + aligned_returns).cumprod() * initial_value
+                benchmark_curve = benchmark_curve.reindex(portfolio_series.index).ffill()
+
+            combined = pd.DataFrame(index=portfolio_series.index)
+            combined["portfolio"] = portfolio_series.astype(float)
             if benchmark_curve is not None and not benchmark_curve.empty:
-                benchmark_curve = benchmark_curve.reindex(portfolio_curve.index).ffill().fillna(100.0)
-                performance_vs_benchmark = [
-                    {
-                        "date": idx.strftime("%Y-%m-%d") if isinstance(idx, pd.Timestamp) else str(idx),
-                        "portfolio": float(portfolio_curve.loc[idx]),
-                        "benchmark": float(benchmark_curve.loc[idx]),
-                    }
-                    for idx in portfolio_curve.index
-                ]
+                combined["benchmark"] = benchmark_curve.astype(float)
+            else:
+                combined["benchmark"] = pd.NA
+
+            performance_vs_benchmark = [
+                {
+                    "date": idx.strftime("%Y-%m-%d") if isinstance(idx, pd.Timestamp) else str(idx),
+                    "portfolio": float(row["portfolio"]),
+                    "benchmark": float(row["benchmark"])
+                    if pd.notna(row["benchmark"])
+                    else None,
+                }
+                for idx, row in combined.iterrows()
+            ]
 
     return {
         "summary": summary,

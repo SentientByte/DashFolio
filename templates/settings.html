@@ -43,6 +43,57 @@
     </div>
 
     <div class="col-12">
+        <div class="card" id="settings-cash-card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-3">
+                <div>
+                    <h5 class="mb-1">Cash adjustments</h5>
+                    <small class="text-muted">Track deposits and withdrawals to keep the cash balance accurate.</small>
+                </div>
+                <span class="badge bg-label-secondary" id="settings-cash-balance-badge"></span>
+            </div>
+            <div class="card-body">
+                <form id="settings-cash-form" class="row g-3 align-items-end">
+                    <div class="col-sm-6 col-lg-4">
+                        <label for="settings-cash-datetime" class="form-label">Date &amp; time</label>
+                        <input type="datetime-local" class="form-control" id="settings-cash-datetime" required>
+                    </div>
+                    <div class="col-sm-3 col-lg-2">
+                        <label for="settings-cash-type" class="form-label">Type</label>
+                        <select id="settings-cash-type" class="form-select" required>
+                            <option value="deposit" selected>Deposit</option>
+                            <option value="withdraw">Withdraw</option>
+                        </select>
+                    </div>
+                    <div class="col-sm-3 col-lg-3">
+                        <label for="settings-cash-amount" class="form-label">Amount</label>
+                        <input type="number" class="form-control" id="settings-cash-amount" min="0" step="0.01" required>
+                    </div>
+                    <div class="col-lg-3 col-12">
+                        <button class="btn btn-primary w-100" type="submit">
+                            <i class="bx bx-plus me-1"></i>
+                            Add entry
+                        </button>
+                    </div>
+                </form>
+                <div class="table-responsive mt-4">
+                    <table class="table align-middle mb-2" id="settings-cash-table">
+                        <thead>
+                        <tr>
+                            <th style="min-width: 180px;">Date &amp; time</th>
+                            <th style="min-width: 120px;">Type</th>
+                            <th class="text-end" style="min-width: 140px;">Amount</th>
+                            <th class="text-end" style="min-width: 120px;">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody id="settings-cash-body"></tbody>
+                    </table>
+                </div>
+                <small class="text-muted" id="settings-cash-status"></small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
         <div class="card" id="settings-logos-card">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
@@ -182,7 +233,16 @@
     let snapshotHoldings = {{ (snapshot.holdings if snapshot else [])|tojson }} || [];
     let holdingsMetadata = {{ holdings_metadata|tojson }} || [];
     const currencySettings = {{ currency_settings|tojson }};
+    const cashAdjustmentsEndpoint = {{ url_for('api_add_cash_adjustment_route')|tojson }};
+    const initialCashAdjustments = {{ cash_adjustments|tojson }} || [];
+    let cashAdjustments = Array.isArray(initialCashAdjustments) ? initialCashAdjustments.slice() : [];
+    let currentCashBalance = Number({{ cash_balance|tojson }}) || 0;
     let logoMap = {};
+
+    const currencyFormatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencySettings?.code === 'BHD' ? 'BHD' : 'USD'
+    });
 
     let statusHideTimer = null;
 
@@ -208,6 +268,34 @@
         }, delay);
     }
 
+    function applyCurrencyConversion(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        const rate = Number(currencySettings?.rate) || 1;
+        return numeric * rate;
+    }
+
+    function formatCurrency(value) {
+        let formatted = currencyFormatter.format(applyCurrencyConversion(value));
+        if (currencySettings?.code === 'BHD') {
+            formatted = formatted.replace('BHD', currencySettings.symbol || 'BD').replace(/\u00a0/g, '');
+        }
+        return formatted;
+    }
+
+    function formatDateTime(value) {
+        if (!value) {
+            return '—';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return String(value);
+        }
+        return date.toLocaleString();
+    }
+
     function getTotalValueFromSnapshot(data) {
         if (!Array.isArray(data)) return 0;
         return data.reduce((sum, holding) => sum + Number(holding.current_value || 0), 0);
@@ -225,6 +313,144 @@
 
     function normalizeTicker(value) {
         return (value || '').toString().trim().toUpperCase();
+    }
+
+    function setCashStatus(message = '', isError = false) {
+        const statusEl = document.getElementById('settings-cash-status');
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.classList.remove('text-danger', 'text-success', 'text-muted');
+        if (!message) {
+            statusEl.classList.add('text-muted');
+        } else if (isError) {
+            statusEl.classList.add('text-danger');
+        } else {
+            statusEl.classList.add('text-success');
+        }
+    }
+
+    function updateCashBalanceBadge() {
+        const badge = document.getElementById('settings-cash-balance-badge');
+        if (!badge) return;
+        badge.textContent = `Cash balance: ${formatCurrency(currentCashBalance)}`;
+    }
+
+    function renderCashAdjustments() {
+        const tbody = document.getElementById('settings-cash-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!Array.isArray(cashAdjustments) || cashAdjustments.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="4" class="text-center text-muted">No cash adjustments recorded yet.</td>';
+            tbody.appendChild(row);
+            updateCashBalanceBadge();
+            return;
+        }
+
+        cashAdjustments
+            .slice()
+            .sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')))
+            .forEach(entry => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${escapeHtml(formatDateTime(entry.timestamp))}</td>
+                    <td class="text-capitalize">${escapeHtml(entry.type || 'deposit')}</td>
+                    <td class="text-end">${formatCurrency(entry.amount || 0)}</td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-text text-danger settings-cash-delete" data-id="${entry.id}">
+                            <i class="bx bx-trash"></i><span class="visually-hidden">Delete</span>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        updateCashBalanceBadge();
+    }
+
+    function resetCashForm() {
+        const datetimeInput = document.getElementById('settings-cash-datetime');
+        const amountInput = document.getElementById('settings-cash-amount');
+        const typeSelect = document.getElementById('settings-cash-type');
+        if (datetimeInput) datetimeInput.value = '';
+        if (amountInput) amountInput.value = '';
+        if (typeSelect) typeSelect.value = 'deposit';
+    }
+
+    async function submitCashAdjustment(event) {
+        event.preventDefault();
+        const datetimeInput = document.getElementById('settings-cash-datetime');
+        const amountInput = document.getElementById('settings-cash-amount');
+        const typeSelect = document.getElementById('settings-cash-type');
+        const timestampValue = datetimeInput?.value;
+        const typeValue = typeSelect?.value || 'deposit';
+        const amountValue = parseFloat(amountInput?.value || '0');
+
+        if (!timestampValue || !Number.isFinite(amountValue) || amountValue <= 0) {
+            setCashStatus('Enter a valid date and positive amount before adding an entry.', true);
+            return;
+        }
+
+        setCashStatus('');
+        showStatus('Saving cash adjustment...');
+        try {
+            const response = await fetch(cashAdjustmentsEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    timestamp: timestampValue,
+                    amount: amountValue,
+                    type: typeValue,
+                }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Unable to save cash adjustment.');
+            }
+            cashAdjustments = Array.isArray(data.adjustments) ? data.adjustments : [];
+            currentCashBalance = Number(data.cash_balance || 0);
+            if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
+                snapshotHoldings = data.snapshot.holdings;
+                populateTargetTable();
+            }
+            renderCashAdjustments();
+            resetCashForm();
+            setCashStatus('Cash adjustment recorded.', false);
+        } catch (error) {
+            console.error(error);
+            setCashStatus(error.message || 'Unable to save cash adjustment.', true);
+        } finally {
+            hideStatus(400);
+        }
+    }
+
+    async function deleteCashAdjustmentById(adjustmentId) {
+        if (!Number.isFinite(adjustmentId)) {
+            return;
+        }
+        setCashStatus('');
+        showStatus('Removing cash adjustment...');
+        try {
+            const response = await fetch(`${cashAdjustmentsEndpoint}/${adjustmentId}`, {
+                method: 'DELETE',
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to remove cash adjustment.');
+            }
+            cashAdjustments = Array.isArray(data.adjustments) ? data.adjustments : [];
+            currentCashBalance = Number(data.cash_balance || 0);
+            if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
+                snapshotHoldings = data.snapshot.holdings;
+                populateTargetTable();
+            }
+            renderCashAdjustments();
+            setCashStatus('Cash adjustment removed.', false);
+        } catch (error) {
+            console.error(error);
+            setCashStatus(error.message || 'Unable to remove cash adjustment.', true);
+        } finally {
+            hideStatus(400);
+        }
     }
 
     function buildLogoState() {
@@ -637,14 +863,32 @@
                     : '<i class="bx bx-show me-1"></i>Show log';
             });
         }
+
+        const cashForm = document.getElementById('settings-cash-form');
+        if (cashForm) {
+            cashForm.addEventListener('submit', submitCashAdjustment);
+        }
+
+        const cashTableBody = document.getElementById('settings-cash-body');
+        if (cashTableBody) {
+            cashTableBody.addEventListener('click', event => {
+                const deleteButton = event.target.closest('.settings-cash-delete');
+                if (deleteButton) {
+                    const adjustmentId = Number(deleteButton.dataset.id);
+                    deleteCashAdjustmentById(adjustmentId);
+                }
+            });
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
         buildLogoState();
         populateTargetTable();
         populateLogoTable();
+        renderCashAdjustments();
         setupEventListeners();
         updateTargetTotalBadge();
+        updateCashBalanceBadge();
     });
 </script>
 {% endblock %}
