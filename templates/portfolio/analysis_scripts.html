@@ -29,6 +29,13 @@
         currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD'
     });
 
+    const compactCurrencyFormatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD',
+        notation: 'compact',
+        maximumFractionDigits: 1,
+    });
+
     function showStatus(message = 'Refreshing data...') {
         const pill = document.getElementById('status-pill');
         const text = document.getElementById('status-text');
@@ -62,6 +69,14 @@
 
     function formatCurrency(value) {
         let formatted = currencyFormatter.format(applyCurrencyConversion(value));
+        if (currencySettings.code === 'BHD') {
+            formatted = formatted.replace('BHD', currencySettings.symbol).replace(/\u00a0/g, '');
+        }
+        return formatted;
+    }
+
+    function formatCompactCurrency(value) {
+        let formatted = compactCurrencyFormatter.format(applyCurrencyConversion(value));
         if (currencySettings.code === 'BHD') {
             formatted = formatted.replace('BHD', currencySettings.symbol).replace(/\u00a0/g, '');
         }
@@ -254,9 +269,12 @@
             },
             yaxis: {
                 title: {
-                    text: 'Indexed performance (base = 100)',
+                    text: `Portfolio value (${currencySettings.symbol || currencySettings.code})`,
                 },
                 tickAmount: 6,
+                labels: {
+                    formatter: value => formatCompactCurrency(value),
+                },
             },
             tooltip: {
                 shared: true,
@@ -264,7 +282,7 @@
                     format: 'MMM dd, yyyy',
                 },
                 y: {
-                    formatter: value => `${Number(value || 0).toFixed(2)}`,
+                    formatter: value => formatCurrency(value),
                 },
             },
             legend: { show: true },

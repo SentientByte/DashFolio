@@ -21,10 +21,13 @@ from Calculations.storage import connect, ensure_risk_results_table
 from Calculations.transactions import (
     append_transactions,
     fetch_holdings_with_market_values,
+    add_cash_adjustment,
     load_cash_balance,
+    load_cash_adjustments,
     load_current_holdings,
     load_transactions,
     parse_transactions_csv,
+    remove_cash_adjustment,
     preview_holdings as build_preview_holdings,
     replace_transactions,
 )
@@ -248,6 +251,8 @@ def load_portfolio_state() -> Dict[str, Any]:
         }
 
     holdings = load_current_holdings(DATA_STORE)
+    transactions = load_transactions(DATA_STORE)
+    cash_adjustments = load_cash_adjustments(DATA_STORE)
     for holding in holdings:
         ticker = str(holding.get('ticker', '')).upper()
         if not ticker:
@@ -271,6 +276,8 @@ def load_portfolio_state() -> Dict[str, Any]:
         'target_allocations': normalized_targets,
         'cash_balance': cash_balance,
         'metadata': metadata_list,
+        'transactions': transactions,
+        'cash_adjustments': cash_adjustments,
     }
 
 
@@ -296,12 +303,16 @@ def portfolio_analysis():
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
     cash_balance = portfolio_state.get('cash_balance', 0.0)
+    transactions = portfolio_state.get('transactions', [])
+    cash_adjustments = portfolio_state.get('cash_adjustments', [])
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         holdings,
         targets,
         benchmark_ticker,
         cash_balance,
+        transactions=transactions,
+        cash_adjustments=cash_adjustments,
     )
     return render_template(
         'portfolio_analysis.html',
@@ -325,12 +336,16 @@ def allocation_planner():
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
     cash_balance = portfolio_state.get('cash_balance', 0.0)
+    transactions = portfolio_state.get('transactions', [])
+    cash_adjustments = portfolio_state.get('cash_adjustments', [])
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         holdings,
         targets,
         benchmark_ticker,
         cash_balance,
+        transactions=transactions,
+        cash_adjustments=cash_adjustments,
     )
     return render_template(
         'allocation.html',
@@ -377,12 +392,16 @@ def settings():
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
     cash_balance = portfolio_state.get('cash_balance', 0.0)
+    transactions = portfolio_state.get('transactions', [])
+    cash_adjustments = portfolio_state.get('cash_adjustments', [])
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         holdings,
         targets,
         benchmark_ticker,
         cash_balance,
+        transactions=transactions,
+        cash_adjustments=cash_adjustments,
     )
 
     return render_template(
@@ -391,6 +410,7 @@ def settings():
         target_allocations=targets,
         cash_balance=cash_balance,
         holdings_metadata=portfolio_state.get('metadata', []),
+        cash_adjustments=cash_adjustments,
         config=config,
         currency_settings=currency_settings,
         benchmark_ticker=benchmark_ticker,
@@ -409,6 +429,8 @@ def api_get_portfolio():
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
     cash_balance = portfolio_state.get('cash_balance', 0.0)
+    transactions = portfolio_state.get('transactions', [])
+    cash_adjustments = portfolio_state.get('cash_adjustments', [])
     force_refresh = str(request.args.get('force', '')).lower() in {'1', 'true', 'yes'}
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
@@ -416,6 +438,8 @@ def api_get_portfolio():
         targets,
         benchmark_ticker,
         cash_balance,
+        transactions=transactions,
+        cash_adjustments=cash_adjustments,
         refresh_async=not force_refresh,
         force_recompute=force_refresh,
     )
@@ -455,12 +479,16 @@ def api_save_transactions():
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
     cash_balance = state.get('cash_balance', 0.0)
+    transactions_state = state.get('transactions', [])
+    cash_adjustments = state.get('cash_adjustments', [])
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         state.get('holdings', []),
         state.get('target_allocations', {}),
         benchmark_ticker,
         cash_balance,
+        transactions=transactions_state,
+        cash_adjustments=cash_adjustments,
         refresh_async=True,
         force_recompute=True,
     )
@@ -531,12 +559,16 @@ def api_apply_transactions():
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
     cash_balance = state.get('cash_balance', 0.0)
+    transactions_state = state.get('transactions', [])
+    cash_adjustments = state.get('cash_adjustments', [])
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         state.get('holdings', []),
         state.get('target_allocations', {}),
         benchmark_ticker,
         cash_balance,
+        transactions=transactions_state,
+        cash_adjustments=cash_adjustments,
         refresh_async=True,
         force_recompute=True,
     )
@@ -594,12 +626,16 @@ def api_update_targets():
     })
 
     cash_balance = state.get('cash_balance', 0.0)
+    transactions_state = state.get('transactions', [])
+    cash_adjustments = state.get('cash_adjustments', [])
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         holdings,
         normalized,
         benchmark_ticker,
         cash_balance,
+        transactions=transactions_state,
+        cash_adjustments=cash_adjustments,
         refresh_async=True,
         force_recompute=True,
     )
@@ -729,12 +765,16 @@ def api_update_logos():
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
     cash_balance = state.get('cash_balance', 0.0)
+    transactions_state = state.get('transactions', [])
+    cash_adjustments = state.get('cash_adjustments', [])
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         state.get('holdings', []),
         state.get('target_allocations', {}),
         benchmark_ticker,
         cash_balance,
+        transactions=transactions_state,
+        cash_adjustments=cash_adjustments,
         refresh_async=True,
         force_recompute=True,
     )
@@ -743,6 +783,79 @@ def api_update_logos():
         'status': 'ok',
         'holdings_metadata': state.get('metadata', []),
         'holdings': state.get('holdings', []),
+        'cash_balance': cash_balance,
+        'snapshot': snapshot,
+    })
+
+
+@app.route('/api/cash-adjustments', methods=['GET'])
+def api_get_cash_adjustments():
+    adjustments = load_cash_adjustments(DATA_STORE)
+    state = load_portfolio_state()
+    return jsonify({
+        'adjustments': adjustments,
+        'cash_balance': state.get('cash_balance', 0.0),
+    })
+
+
+@app.route('/api/cash-adjustments', methods=['POST'])
+def api_add_cash_adjustment_route():
+    payload = request.get_json(silent=True) or {}
+    try:
+        add_cash_adjustment(DATA_STORE, payload)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    state = load_portfolio_state()
+    config = load_config()
+    benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
+    cash_balance = state.get('cash_balance', 0.0)
+    snapshot = get_cached_portfolio_snapshot(
+        DATA_STORE,
+        state.get('holdings', []),
+        state.get('target_allocations', {}),
+        benchmark_ticker,
+        cash_balance,
+        transactions=state.get('transactions', []),
+        cash_adjustments=state.get('cash_adjustments', []),
+        refresh_async=True,
+        force_recompute=True,
+    )
+
+    return jsonify({
+        'status': 'ok',
+        'adjustments': state.get('cash_adjustments', []),
+        'cash_balance': cash_balance,
+        'snapshot': snapshot,
+    })
+
+
+@app.route('/api/cash-adjustments/<int:adjustment_id>', methods=['DELETE'])
+def api_delete_cash_adjustment_route(adjustment_id: int):
+    try:
+        remove_cash_adjustment(DATA_STORE, adjustment_id)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    state = load_portfolio_state()
+    config = load_config()
+    benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
+    cash_balance = state.get('cash_balance', 0.0)
+    snapshot = get_cached_portfolio_snapshot(
+        DATA_STORE,
+        state.get('holdings', []),
+        state.get('target_allocations', {}),
+        benchmark_ticker,
+        cash_balance,
+        transactions=state.get('transactions', []),
+        cash_adjustments=state.get('cash_adjustments', []),
+        refresh_async=True,
+        force_recompute=True,
+    )
+
+    return jsonify({
+        'status': 'ok',
+        'adjustments': state.get('cash_adjustments', []),
         'cash_balance': cash_balance,
         'snapshot': snapshot,
     })

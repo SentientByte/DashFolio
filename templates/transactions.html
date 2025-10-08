@@ -37,18 +37,37 @@
                     <small class="text-muted">Edit trades manually or capture new activity. Saving overwrites the current dataset.</small>
                 </div>
                 <div class="d-flex gap-2 flex-wrap">
-                    <button class="btn btn-outline-secondary btn-sm" type="button" id="transactions-add-row">
-                        <i class="bx bx-plus me-1"></i>
-                        Add row
-                    </button>
                     <button class="btn btn-primary" type="button" id="transactions-save-button">
                         <i class="bx bx-save me-1"></i>
                         Save changes
                     </button>
+                    <button class="btn btn-outline-secondary" type="button" id="transactions-edit-button">
+                        <i class="bx bx-edit me-1"></i>
+                        Edit
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" id="transactions-add-row">
+                        <i class="bx bx-plus me-1"></i>
+                        Add row
+                    </button>
                 </div>
             </div>
             <div class="card-body">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0" id="transactions-table">
+                        <thead>
+                        <tr>
+                            <th>Date &amp; time</th>
+                            <th>Ticker</th>
+                            <th>Quantity</th>
+                            <th>Price</th>
+                            <th>Commission</th>
+                        </tr>
+                        </thead>
+                        <tbody id="transactions-table-body"></tbody>
+                    </table>
+                </div>
+                <small class="text-muted" id="transactions-save-status"></small>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
                     <div class="d-flex align-items-center gap-2">
                         <label class="form-label text-muted small mb-0" for="transactions-page-size">Rows per page</label>
                         <select id="transactions-page-size" class="form-select form-select-sm w-auto">
@@ -62,22 +81,6 @@
                         <ul class="pagination pagination-sm mb-0" id="transactions-pagination"></ul>
                     </nav>
                 </div>
-                <div class="table-responsive">
-                    <table class="table align-middle mb-0" id="transactions-table">
-                        <thead>
-                        <tr>
-                            <th>Date &amp; time</th>
-                            <th>Ticker</th>
-                            <th>Quantity</th>
-                            <th>Price</th>
-                            <th>Commission</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                        </thead>
-                        <tbody id="transactions-table-body"></tbody>
-                    </table>
-                </div>
-                <small class="text-muted" id="transactions-save-status"></small>
             </div>
         </div>
     </div>
@@ -169,7 +172,6 @@
             quantity: Number(record && record.quantity !== undefined ? record.quantity : 0) || 0,
             price: Number(record && record.price !== undefined ? record.price : 0) || 0,
             commission: Number(record && record.commission !== undefined ? record.commission : 0) || 0,
-            __editing: Boolean(record && record.__editing),
         };
     }
 
@@ -189,6 +191,7 @@
     let currentPage = 1;
     let pendingFocusIndex = null;
     let holdingsTotalValue = 0;
+    let isEditing = false;
 
     function ensureModal() {
         if (!previewModal) {
@@ -347,11 +350,10 @@
 
     function updateTransactionsState(data, newCashBalance) {
         transactionData = Array.isArray(data) ? data.map(item => normalizeTransaction(item)) : [];
-        transactionData.forEach(record => {
-            record.__editing = false;
-        });
         currentPage = 1;
         pendingFocusIndex = null;
+        isEditing = false;
+        updateEditButtonState();
         if (typeof newCashBalance === 'number') {
             updateCashBalance(newCashBalance);
         }
@@ -414,13 +416,26 @@
             row.dataset.index = String(index);
             row.classList.add('transaction-row');
 
+            const editable = isEditing;
+
             const timestampCell = document.createElement('td');
+            const timestampWrapper = document.createElement('div');
+            timestampWrapper.className = 'd-flex align-items-center gap-2';
             const timestampInput = document.createElement('input');
             timestampInput.type = 'datetime-local';
             timestampInput.className = 'form-control transaction-timestamp';
             timestampInput.value = toInputDate(record.timestamp);
-            timestampInput.disabled = !record.__editing;
-            timestampCell.appendChild(timestampInput);
+            timestampInput.disabled = !editable;
+            timestampWrapper.appendChild(timestampInput);
+            if (editable) {
+                const removeButton = document.createElement('button');
+                removeButton.type = 'button';
+                removeButton.className = 'btn btn-text text-danger transaction-remove-row';
+                removeButton.innerHTML = '<i class="bx bx-trash"></i>';
+                removeButton.setAttribute('aria-label', 'Remove row');
+                timestampWrapper.appendChild(removeButton);
+            }
+            timestampCell.appendChild(timestampWrapper);
             row.appendChild(timestampCell);
 
             const tickerCell = document.createElement('td');
@@ -429,7 +444,7 @@
             tickerInput.className = 'form-control transaction-ticker';
             tickerInput.value = record.ticker || '';
             tickerInput.placeholder = 'GLD';
-            tickerInput.disabled = !record.__editing;
+            tickerInput.disabled = !editable;
             tickerCell.appendChild(tickerInput);
             row.appendChild(tickerCell);
 
@@ -439,7 +454,7 @@
             quantityInput.step = '0.0001';
             quantityInput.className = 'form-control transaction-quantity';
             quantityInput.value = formatPlainNumber(record.quantity, 4);
-            quantityInput.disabled = !record.__editing;
+            quantityInput.disabled = !editable;
             quantityCell.appendChild(quantityInput);
             row.appendChild(quantityCell);
 
@@ -449,7 +464,7 @@
             priceInput.step = '0.0001';
             priceInput.className = 'form-control transaction-price';
             priceInput.value = formatPlainNumber(record.price, 4);
-            priceInput.disabled = !record.__editing;
+            priceInput.disabled = !editable;
             priceCell.appendChild(priceInput);
             row.appendChild(priceCell);
 
@@ -459,27 +474,13 @@
             commissionInput.step = '0.000001';
             commissionInput.className = 'form-control transaction-commission';
             commissionInput.value = formatPlainNumber(record.commission, 6);
-            commissionInput.disabled = !record.__editing;
+            commissionInput.disabled = !editable;
             commissionCell.appendChild(commissionInput);
             row.appendChild(commissionCell);
 
-            const actionCell = document.createElement('td');
-            actionCell.className = 'text-end';
-            const editButton = document.createElement('button');
-            editButton.type = 'button';
-            editButton.className = 'btn btn-outline-primary btn-sm me-2 transaction-edit-row';
-            editButton.textContent = record.__editing ? 'Save' : 'Edit';
-            const removeButton = document.createElement('button');
-            removeButton.type = 'button';
-            removeButton.className = 'btn btn-outline-danger btn-sm transaction-remove-row';
-            removeButton.textContent = 'Remove';
-            actionCell.appendChild(editButton);
-            actionCell.appendChild(removeButton);
-            row.appendChild(actionCell);
-
             tbody.appendChild(row);
 
-            if (record.__editing && pendingFocusIndex === index) {
+            if (editable && pendingFocusIndex === index) {
                 setTimeout(() => {
                     timestampInput.focus();
                 }, 0);
@@ -522,13 +523,16 @@
     }
 
     function addNewTransactionRecord() {
+        if (!isEditing) {
+            isEditing = true;
+            updateEditButtonState();
+        }
         const record = normalizeTransaction({
             timestamp: '',
             ticker: '',
             quantity: 0,
             price: 0,
             commission: 0,
-            __editing: true,
         });
         transactionData.push(record);
         pendingFocusIndex = transactionData.length - 1;
@@ -560,26 +564,6 @@
         };
     }
 
-    function toggleRowEditing(index, row) {
-        const record = transactionData[index];
-        if (!record) {
-            return;
-        }
-        if (record.__editing) {
-            const updated = readRowInputs(row);
-            if (!updated) {
-                return;
-            }
-            Object.assign(record, updated);
-            record.__editing = false;
-            pendingFocusIndex = null;
-        } else {
-            record.__editing = true;
-            pendingFocusIndex = index;
-        }
-        renderTransactionsTable();
-    }
-
     function removeTransaction(index) {
         if (index < 0 || index >= transactionData.length) {
             return;
@@ -596,6 +580,29 @@
         renderTransactionsTable();
     }
 
+    function updateEditButtonState() {
+        const editButton = document.getElementById('transactions-edit-button');
+        if (!editButton) {
+            return;
+        }
+        if (isEditing) {
+            editButton.classList.remove('btn-outline-secondary');
+            editButton.classList.add('btn-outline-danger');
+            editButton.innerHTML = '<i class="bx bx-x me-1"></i>Cancel edit';
+        } else {
+            editButton.classList.remove('btn-outline-danger');
+            editButton.classList.add('btn-outline-secondary');
+            editButton.innerHTML = '<i class="bx bx-edit me-1"></i>Edit';
+        }
+    }
+
+    function toggleEditMode() {
+        isEditing = !isEditing;
+        pendingFocusIndex = isEditing ? 0 : null;
+        updateEditButtonState();
+        renderTransactionsTable();
+    }
+
     function getSerializableTransactions() {
         return transactionData
             .map(record => ({
@@ -608,11 +615,34 @@
             .filter(record => record.ticker && record.timestamp && Number.isFinite(record.quantity) && record.quantity !== 0 && Number.isFinite(record.price) && record.price > 0);
     }
 
+    function commitEdits() {
+        if (!isEditing) {
+            return true;
+        }
+        const rows = document.querySelectorAll('#transactions-table-body tr.transaction-row');
+        for (const row of rows) {
+            const index = Number(row.dataset.index);
+            if (!Number.isFinite(index) || !transactionData[index]) {
+                continue;
+            }
+            const updated = readRowInputs(row);
+            if (!updated) {
+                return false;
+            }
+            Object.assign(transactionData[index], updated);
+        }
+        isEditing = false;
+        pendingFocusIndex = null;
+        updateEditButtonState();
+        renderTransactionsTable();
+        return true;
+    }
+
     async function saveTransactions() {
         const statusEl = document.getElementById('transactions-save-status');
-        if (transactionData.some(record => record.__editing)) {
+        if (!commitEdits()) {
             if (statusEl) {
-                statusEl.textContent = 'Save or cancel all edits before committing transactions.';
+                statusEl.textContent = 'Resolve input errors before saving transactions.';
                 statusEl.classList.remove('text-success');
                 statusEl.classList.add('text-danger');
             }
@@ -736,6 +766,7 @@
         const uploadInput = document.getElementById('transactions-upload-input');
         const addRowButton = document.getElementById('transactions-add-row');
         const saveButton = document.getElementById('transactions-save-button');
+        const editButton = document.getElementById('transactions-edit-button');
         const tableBody = document.getElementById('transactions-table-body');
         const confirmButton = document.getElementById('transactions-confirm-upload');
         const pageSizeSelect = document.getElementById('transactions-page-size');
@@ -760,17 +791,22 @@
             saveButton.addEventListener('click', saveTransactions);
         }
 
+        if (editButton) {
+            editButton.addEventListener('click', toggleEditMode);
+        }
+
         if (tableBody) {
             tableBody.addEventListener('click', event => {
-                const target = event.target;
-                const row = target.closest('tr.transaction-row');
+                const removeButton = event.target.closest('.transaction-remove-row');
+                if (!removeButton) {
+                    return;
+                }
+                const row = removeButton.closest('tr.transaction-row');
                 if (!row) {
                     return;
                 }
                 const index = Number(row.dataset.index);
-                if (target.classList.contains('transaction-edit-row')) {
-                    toggleRowEditing(index, row);
-                } else if (target.classList.contains('transaction-remove-row')) {
+                if (Number.isFinite(index)) {
                     removeTransaction(index);
                 }
             });
@@ -812,6 +848,7 @@
         } else {
             renderTransactionsTable();
         }
+        updateEditButtonState();
         renderHoldingsSummary(holdingsSummary);
         setupEventListeners();
     });

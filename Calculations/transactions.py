@@ -11,10 +11,14 @@ import pandas as pd
 from .market_data import get_market_snapshot
 from .storage import (
     connect,
+    ensure_cash_adjustments_table,
     ensure_cash_balance_table,
     ensure_derived_holdings_table,
     ensure_transactions_table,
+    insert_cash_adjustment,
+    read_cash_adjustments,
     read_cash_balance,
+    delete_cash_adjustment_record,
     write_cash_balance,
 )
 from .utils import safe_float
@@ -62,6 +66,23 @@ def _normalise_transaction(record: Dict[str, Any]) -> TransactionRecord:
         "quantity": quantity,
         "price": price,
         "commission": commission,
+    }
+
+
+def _normalize_adjustment(record: Dict[str, Any]) -> Dict[str, Any]:
+    timestamp = _normalize_timestamp(record.get("timestamp"))
+    amount = safe_float(record.get("amount"))
+    if amount <= 0:
+        raise ValueError("Adjustment amount must be greater than zero")
+    adj_type = str(record.get("type", "deposit")).strip().lower()
+    if adj_type not in {"deposit", "withdraw"}:
+        raise ValueError("Adjustment type must be either 'deposit' or 'withdraw'")
+    signed_amount = amount if adj_type == "deposit" else -amount
+    return {
+        "timestamp": timestamp,
+        "amount": amount,
+        "type": adj_type,
+        "signed_amount": signed_amount,
     }
 
 
@@ -128,11 +149,16 @@ def _sort_transactions(transactions: Sequence[TransactionRecord]) -> List[Transa
 
 def compute_holdings_from_transactions(
     transactions: Sequence[TransactionRecord],
+    cash_adjustments: Sequence[Dict[str, Any]] | None = None,
 ) -> Tuple[List[HoldingRecord], float]:
     """Derive holdings and cash balance from a sequence of transaction records."""
 
     ledger: Dict[str, Dict[str, Any]] = {}
     cash_balance = 0.0
+    if cash_adjustments:
+        for adjustment in cash_adjustments:
+            signed_amount = safe_float(adjustment.get("signed_amount"))
+            cash_balance += signed_amount
 
     for record in _sort_transactions(transactions):
         ticker = record["ticker"]
@@ -303,7 +329,8 @@ def replace_transactions(
     normalised = _sort_transactions([
         _normalise_transaction(record) for record in transactions
     ])
-    holdings, cash_balance = compute_holdings_from_transactions(normalised)
+    adjustments = load_cash_adjustments(db_path)
+    holdings, cash_balance = compute_holdings_from_transactions(normalised, adjustments)
     with connect(db_path) as conn:
         ensure_transactions_table(conn)
         ensure_derived_holdings_table(conn)
@@ -321,7 +348,8 @@ def append_transactions(
     ])
     existing = load_transactions(db_path)
     combined = _sort_transactions(existing + normalised)
-    holdings, cash_balance = compute_holdings_from_transactions(combined)
+    adjustments = load_cash_adjustments(db_path)
+    holdings, cash_balance = compute_holdings_from_transactions(combined, adjustments)
     with connect(db_path) as conn:
         ensure_transactions_table(conn)
         ensure_derived_holdings_table(conn)
@@ -350,7 +378,8 @@ def preview_holdings(
     else:
         combined = _sort_transactions(load_transactions(db_path) + new_records)
 
-    holdings, cash_balance = compute_holdings_from_transactions(combined)
+    adjustments = load_cash_adjustments(db_path)
+    holdings, cash_balance = compute_holdings_from_transactions(combined, adjustments)
     return combined, holdings, cash_balance
 
 
@@ -377,3 +406,70 @@ def load_cash_balance(db_path: str) -> float:
     with connect(db_path) as conn:
         ensure_cash_balance_table(conn)
         return read_cash_balance(conn)
+
+
+def load_cash_adjustments(db_path: str) -> List[Dict[str, Any]]:
+    with connect(db_path) as conn:
+        ensure_cash_adjustments_table(conn)
+        raw = read_cash_adjustments(conn)
+
+    adjustments: List[Dict[str, Any]] = []
+    for entry in raw:
+        adj_type = str(entry.get("type", "deposit")).strip().lower()
+        amount = safe_float(entry.get("amount"))
+        signed_amount = amount if adj_type == "deposit" else -amount
+        adjustments.append(
+            {
+                "id": int(entry.get("id")) if entry.get("id") is not None else None,
+                "timestamp": entry.get("timestamp"),
+                "amount": amount,
+                "type": adj_type,
+                "signed_amount": signed_amount,
+            }
+        )
+    adjustments.sort(key=lambda item: (item.get("timestamp") or "", item.get("id") or 0))
+    return adjustments
+
+
+def _recompute_portfolio_state(
+    db_path: str,
+    *,
+    adjustments: Sequence[Dict[str, Any]] | None = None,
+) -> Tuple[List[HoldingRecord], float]:
+    transactions = load_transactions(db_path)
+    if adjustments is None:
+        adjustments = load_cash_adjustments(db_path)
+    holdings, cash_balance = compute_holdings_from_transactions(transactions, adjustments)
+    with connect(db_path) as conn:
+        ensure_derived_holdings_table(conn)
+        _persist_holdings(conn, holdings, cash_balance)
+        conn.commit()
+    return holdings, cash_balance
+
+
+def add_cash_adjustment(
+    db_path: str, payload: Dict[str, Any]
+) -> Tuple[List[Dict[str, Any]], float]:
+    adjustment = _normalize_adjustment(payload)
+    with connect(db_path) as conn:
+        ensure_cash_adjustments_table(conn)
+        insert_cash_adjustment(
+            conn,
+            adjustment["timestamp"],
+            adjustment["amount"],
+            adjustment["type"],
+        )
+    adjustments = load_cash_adjustments(db_path)
+    _, cash_balance = _recompute_portfolio_state(db_path, adjustments=adjustments)
+    return adjustments, cash_balance
+
+
+def remove_cash_adjustment(
+    db_path: str, adjustment_id: int
+) -> Tuple[List[Dict[str, Any]], float]:
+    with connect(db_path) as conn:
+        ensure_cash_adjustments_table(conn)
+        delete_cash_adjustment_record(conn, adjustment_id)
+    adjustments = load_cash_adjustments(db_path)
+    _, cash_balance = _recompute_portfolio_state(db_path, adjustments=adjustments)
+    return adjustments, cash_balance
