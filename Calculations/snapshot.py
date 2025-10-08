@@ -142,21 +142,40 @@ def _build_daily_performance_history(
 
     tx_df = tx_df.copy()
     if "timestamp" in tx_df.columns:
-        tx_df["timestamp"] = pd.to_datetime(tx_df["timestamp"], utc=False, errors="coerce")
+        tx_df["timestamp"] = pd.to_datetime(
+            tx_df["timestamp"], utc=True, errors="coerce"
+        ).dt.tz_convert("UTC").dt.tz_localize(None)
         tx_df.dropna(subset=["timestamp"], inplace=True)
         tx_df.sort_values("timestamp", inplace=True)
         tx_df["date"] = tx_df["timestamp"].dt.normalize()
     else:
         tx_df["date"] = pd.NaT
 
-    tx_df["ticker"] = tx_df.get("ticker", "").astype(str).str.upper().str.strip()
-    tx_df["quantity"] = tx_df.get("quantity", 0).apply(safe_float)
-    tx_df["price"] = tx_df.get("price", 0).apply(safe_float)
-    tx_df["commission"] = tx_df.get("commission", 0).apply(safe_float).abs()
+    if "ticker" in tx_df.columns:
+        tx_df["ticker"] = tx_df["ticker"].astype(str).str.upper().str.strip()
+    else:
+        tx_df["ticker"] = ""
+
+    if "quantity" in tx_df.columns:
+        tx_df["quantity"] = tx_df["quantity"].apply(safe_float)
+    else:
+        tx_df["quantity"] = 0.0
+
+    if "price" in tx_df.columns:
+        tx_df["price"] = tx_df["price"].apply(safe_float)
+    else:
+        tx_df["price"] = 0.0
+
+    if "commission" in tx_df.columns:
+        tx_df["commission"] = tx_df["commission"].apply(safe_float).abs()
+    else:
+        tx_df["commission"] = 0.0
 
     adj_df = adj_df.copy()
     if "timestamp" in adj_df.columns:
-        adj_df["timestamp"] = pd.to_datetime(adj_df["timestamp"], utc=False, errors="coerce")
+        adj_df["timestamp"] = pd.to_datetime(
+            adj_df["timestamp"], utc=True, errors="coerce"
+        ).dt.tz_convert("UTC").dt.tz_localize(None)
         adj_df.dropna(subset=["timestamp"], inplace=True)
         adj_df.sort_values("timestamp", inplace=True)
         adj_df["date"] = adj_df["timestamp"].dt.normalize()
