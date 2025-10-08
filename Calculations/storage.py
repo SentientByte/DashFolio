@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from contextlib import contextmanager
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Sequence, Tuple
 
 import json
 from datetime import datetime, timezone
@@ -57,6 +57,16 @@ CREATE TABLE IF NOT EXISTS transactions (
     quantity REAL NOT NULL,
     price REAL NOT NULL,
     commission REAL DEFAULT 0
+)
+"""
+
+
+PERFORMANCE_HISTORY_TABLE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS performance_history (
+    date TEXT PRIMARY KEY,
+    equity REAL NOT NULL,
+    cash REAL NOT NULL,
+    daily_return REAL NOT NULL
 )
 """
 
@@ -142,6 +152,40 @@ def ensure_cash_balance_table(conn: sqlite3.Connection) -> None:
 def ensure_cash_adjustments_table(conn: sqlite3.Connection) -> None:
     conn.execute(CASH_ADJUSTMENTS_TABLE_SCHEMA)
     conn.commit()
+
+
+def ensure_performance_history_table(conn: sqlite3.Connection) -> None:
+    conn.execute(PERFORMANCE_HISTORY_TABLE_SCHEMA)
+    conn.commit()
+
+
+def replace_performance_history(
+    conn: sqlite3.Connection, rows: Sequence[Tuple[str, float, float, float]]
+) -> None:
+    conn.execute("DELETE FROM performance_history")
+    if rows:
+        conn.executemany(
+            "INSERT INTO performance_history (date, equity, cash, daily_return) VALUES (?, ?, ?, ?)",
+            rows,
+        )
+    conn.commit()
+
+
+def read_performance_history(conn: sqlite3.Connection) -> list[dict]:
+    cursor = conn.execute(
+        "SELECT date, equity, cash, daily_return FROM performance_history ORDER BY date"
+    )
+    rows = []
+    for date, equity, cash, daily_return in cursor.fetchall():
+        rows.append(
+            {
+                "date": str(date),
+                "equity": float(equity or 0.0),
+                "cash": float(cash or 0.0),
+                "daily_return": float(daily_return or 0.0),
+            }
+        )
+    return rows
 
 
 def read_cash_balance(conn: sqlite3.Connection) -> float:

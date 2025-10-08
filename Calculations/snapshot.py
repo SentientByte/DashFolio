@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional, Sequence, Set
 
 import pandas as pd
@@ -11,6 +11,12 @@ from .allocations import normalize_target_allocations
 from .market_data import (
     get_benchmark_returns,
     get_market_snapshot,
+)
+from .price_data import load_price_data
+from .storage import (
+    connect,
+    ensure_performance_history_table,
+    replace_performance_history,
 )
 from .risk_metrics import compute_risk_metrics
 from .utils import historical_close, normalize_index, safe_float
@@ -111,6 +117,214 @@ def _series_to_iso_map(series: pd.Series) -> Dict[str, float]:
     return mapping
 
 
+def _build_daily_performance_history(
+    transactions: Sequence[Dict[str, Any]] | None,
+    cash_adjustments: Sequence[Dict[str, Any]] | None,
+    database_path: str | None,
+) -> List[Dict[str, float]]:
+    """Construct daily performance metrics for the portfolio."""
+
+    transactions = transactions or []
+    cash_adjustments = cash_adjustments or []
+
+    try:
+        tx_df = pd.DataFrame(transactions)
+    except Exception:
+        tx_df = pd.DataFrame()
+
+    try:
+        adj_df = pd.DataFrame(cash_adjustments)
+    except Exception:
+        adj_df = pd.DataFrame()
+
+    if tx_df.empty and adj_df.empty:
+        return []
+
+    tx_df = tx_df.copy()
+    if "timestamp" in tx_df.columns:
+        tx_df["timestamp"] = pd.to_datetime(tx_df["timestamp"], utc=False, errors="coerce")
+        tx_df.dropna(subset=["timestamp"], inplace=True)
+        tx_df.sort_values("timestamp", inplace=True)
+        tx_df["date"] = tx_df["timestamp"].dt.normalize()
+    else:
+        tx_df["date"] = pd.NaT
+
+    tx_df["ticker"] = tx_df.get("ticker", "").astype(str).str.upper().str.strip()
+    tx_df["quantity"] = tx_df.get("quantity", 0).apply(safe_float)
+    tx_df["price"] = tx_df.get("price", 0).apply(safe_float)
+    tx_df["commission"] = tx_df.get("commission", 0).apply(safe_float).abs()
+
+    adj_df = adj_df.copy()
+    if "timestamp" in adj_df.columns:
+        adj_df["timestamp"] = pd.to_datetime(adj_df["timestamp"], utc=False, errors="coerce")
+        adj_df.dropna(subset=["timestamp"], inplace=True)
+        adj_df.sort_values("timestamp", inplace=True)
+        adj_df["date"] = adj_df["timestamp"].dt.normalize()
+    else:
+        adj_df["date"] = pd.NaT
+
+    def _signed_adjustment(row: pd.Series) -> float:
+        if "signed_amount" in row and pd.notna(row["signed_amount"]):
+            return safe_float(row["signed_amount"])
+        amount = safe_float(row.get("amount"))
+        adj_type = _canonical_flow_type(row.get("type"))
+        if adj_type in {"deposit", "dividend", "interest"}:
+            return amount
+        return -amount
+
+    if not adj_df.empty:
+        adj_df["signed_amount"] = adj_df.apply(_signed_adjustment, axis=1)
+
+    candidate_dates: List[pd.Timestamp] = []
+    if not tx_df.empty and tx_df["date"].notna().any():
+        candidate_dates.append(tx_df.loc[tx_df["date"].notna(), "date"].iloc[0])
+    if not adj_df.empty and adj_df["date"].notna().any():
+        candidate_dates.append(adj_df.loc[adj_df["date"].notna(), "date"].iloc[0])
+
+    if not candidate_dates:
+        return []
+
+    start_date = min(candidate_dates)
+    today = pd.Timestamp.utcnow().normalize()
+    last_tx_date = (
+        tx_df.loc[tx_df["date"].notna(), "date"].iloc[-1]
+        if not tx_df.empty and tx_df["date"].notna().any()
+        else start_date
+    )
+    last_adj_date = (
+        adj_df.loc[adj_df["date"].notna(), "date"].iloc[-1]
+        if not adj_df.empty and adj_df["date"].notna().any()
+        else start_date
+    )
+    end_date = max(today, last_tx_date, last_adj_date)
+
+    date_index = pd.date_range(start=start_date, end=end_date, freq="D")
+
+    tickers = [
+        ticker
+        for ticker in sorted(tx_df["ticker"].dropna().unique())
+        if ticker and ticker != "nan"
+    ]
+
+    price_history: Dict[str, pd.Series] = {}
+    if tickers and database_path:
+        try:
+            price_frames = load_price_data(
+                tickers,
+                start_date.to_pydatetime(),
+                (end_date + timedelta(days=1)).to_pydatetime(),
+                database_path,
+            )
+        except Exception as exc:
+            print(f"Warning: failed to load price history for performance chart: {exc}")
+            price_frames = {}
+        for ticker in tickers:
+            df = price_frames.get(ticker)
+            if df is None or df.empty:
+                continue
+            if "Adj Close" in df.columns:
+                closes = df["Adj Close"].copy()
+            elif "Close" in df.columns:
+                closes = df["Close"].copy()
+            else:
+                continue
+            closes = closes.reindex(date_index).ffill().bfill()
+            price_history[ticker] = closes
+
+    tx_by_day: Dict[pd.Timestamp, List[pd.Series]] = {}
+    if not tx_df.empty:
+        for _, row in tx_df.iterrows():
+            date = row.get("date")
+            if pd.isna(date):
+                continue
+            tx_by_day.setdefault(date, []).append(row)
+
+    adj_by_day: Dict[pd.Timestamp, float] = {}
+    if not adj_df.empty:
+        for _, row in adj_df.iterrows():
+            date = row.get("date")
+            if pd.isna(date):
+                continue
+            adj_by_day[date] = adj_by_day.get(date, 0.0) + safe_float(row.get("signed_amount"))
+
+    holdings: Dict[str, float] = {ticker: 0.0 for ticker in tickers}
+    last_trade_price: Dict[str, float] = {ticker: 0.0 for ticker in tickers}
+    cash_balance = 0.0
+    previous_value: Optional[float] = None
+    cumulative_factor = 1.0
+    history: List[Dict[str, float]] = []
+
+    for day in date_index:
+        cash_balance += adj_by_day.get(day, 0.0)
+
+        for row in tx_by_day.get(day, []):
+            ticker = row.get("ticker")
+            if not ticker:
+                continue
+            quantity = safe_float(row.get("quantity"))
+            price = safe_float(row.get("price"))
+            commission = safe_float(row.get("commission"))
+            current_qty = holdings.get(ticker, 0.0)
+            updated_qty = current_qty + quantity
+            if abs(updated_qty) < 1e-9:
+                updated_qty = 0.0
+            holdings[ticker] = updated_qty
+            if price > 0:
+                last_trade_price[ticker] = price
+            if quantity > 0:
+                cash_balance -= quantity * price + abs(commission)
+            else:
+                sale_value = abs(quantity) * price
+                cash_balance += sale_value - abs(commission)
+
+        if abs(cash_balance) < 1e-9:
+            cash_balance = 0.0
+
+        equity_value = 0.0
+        for ticker, quantity in holdings.items():
+            if abs(quantity) < 1e-9:
+                continue
+            price_series = price_history.get(ticker)
+            price_value = None
+            if price_series is not None:
+                try:
+                    candidate = price_series.loc[day]
+                except KeyError:
+                    candidate = None
+                if candidate is not None and not pd.isna(candidate):
+                    price_value = float(candidate)
+            if price_value is None:
+                price_value = last_trade_price.get(ticker, 0.0)
+            equity_value += quantity * price_value
+
+        portfolio_value = equity_value + cash_balance
+        if abs(portfolio_value) < 1e-9:
+            portfolio_value = 0.0
+
+        if previous_value is not None and abs(previous_value) > 1e-9:
+            daily_return = (portfolio_value - previous_value) / previous_value
+        else:
+            daily_return = 0.0
+
+        cumulative_factor *= 1.0 + daily_return
+        cumulative_return = cumulative_factor - 1.0
+
+        history.append(
+            {
+                "date": day.strftime("%Y-%m-%d"),
+                "equity": float(equity_value),
+                "cash": float(cash_balance),
+                "portfolio_value": float(portfolio_value),
+                "daily_return": float(daily_return),
+                "cumulative_return": float(cumulative_return),
+            }
+        )
+
+        previous_value = portfolio_value
+
+    return history
+
+
 def build_portfolio_snapshot(
     holdings: List[Dict[str, Any]],
     target_allocations: Dict[str, Any] | None = None,
@@ -118,6 +332,7 @@ def build_portfolio_snapshot(
     cash_balance: float = 0.0,
     transactions: List[Dict[str, Any]] | None = None,
     cash_adjustments: List[Dict[str, Any]] | None = None,
+    database_path: str | None = None,
 ) -> Dict[str, Any]:
     computed_holdings: List[Dict[str, Any]] = []
     total_cost = 0.0
@@ -360,14 +575,6 @@ def build_portfolio_snapshot(
         invested_series = invested_series.ffill()
         invested_series = _series_with_flow_days(invested_series, flow_days)
 
-    invested_series_map = _series_to_iso_map(invested_series) if invested_series is not None else {}
-    invested_days = list(invested_series_map.keys())
-    twr_index_map = _build_twr_index(invested_days, invested_series_map, flow_days)
-    performance_index = [
-        {"date": day, "index": float(twr_index_map[day])}
-        for day in invested_days
-    ]
-
     if invested_series is not None and not invested_series.empty:
         invested_current = float(invested_series.iloc[-1])
         previous_invested = float(invested_series.iloc[-2]) if len(invested_series) > 1 else None
@@ -431,11 +638,37 @@ def build_portfolio_snapshot(
             "change_pct": top_mover.get("change_pct"),
         }
 
+    performance_history = _build_daily_performance_history(
+        transactions,
+        cash_adjustments,
+        database_path,
+    )
+
+    if database_path:
+        try:
+            with connect(database_path) as conn:
+                ensure_performance_history_table(conn)
+                replace_performance_history(
+                    conn,
+                    [
+                        (
+                            entry["date"],
+                            entry["equity"],
+                            entry["cash"],
+                            entry["daily_return"],
+                        )
+                        for entry in performance_history
+                    ],
+                )
+        except Exception as exc:
+            print(f"Warning: failed to persist performance history: {exc}")
+
     return {
         "summary": summary,
         "holdings": computed_holdings,
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "target_allocations": normalized_targets,
-        "performance_index": performance_index,
+        "performance_history": performance_history,
+        "performance_index": performance_history,
         "cash_balance": cash_balance,
     }
