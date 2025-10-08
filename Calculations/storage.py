@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS cash_adjustments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
     amount REAL NOT NULL CHECK (amount >= 0),
-    type TEXT NOT NULL CHECK (type IN ('deposit', 'withdraw'))
+    type TEXT NOT NULL CHECK (type IN ('deposit', 'withdraw', 'withdrawal', 'dividend', 'interest'))
 )
 """
 

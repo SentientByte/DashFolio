@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Tuple, Literal
 
 import pandas as pd
 
@@ -26,6 +26,22 @@ from .utils import safe_float
 
 TransactionRecord = Dict[str, Any]
 HoldingRecord = Dict[str, Any]
+FlowKind = Literal["deposit", "withdrawal", "dividend", "interest"]
+
+
+def _canonical_adjustment_type(raw: Any) -> FlowKind:
+    value = str(raw or "deposit").strip().lower()
+    mapping = {
+        "deposit": "deposit",
+        "withdraw": "withdrawal",
+        "withdrawal": "withdrawal",
+        "dividend": "dividend",
+        "interest": "interest",
+    }
+    canonical = mapping.get(value)
+    if canonical is None:
+        raise ValueError("Adjustment type must be deposit, withdrawal, dividend, or interest")
+    return canonical  # type: ignore[return-value]
 
 
 def _normalize_timestamp(value: Any) -> str:
@@ -74,10 +90,11 @@ def _normalize_adjustment(record: Dict[str, Any]) -> Dict[str, Any]:
     amount = safe_float(record.get("amount"))
     if amount <= 0:
         raise ValueError("Adjustment amount must be greater than zero")
-    adj_type = str(record.get("type", "deposit")).strip().lower()
-    if adj_type not in {"deposit", "withdraw"}:
-        raise ValueError("Adjustment type must be either 'deposit' or 'withdraw'")
-    signed_amount = amount if adj_type == "deposit" else -amount
+    adj_type = _canonical_adjustment_type(record.get("type"))
+    if adj_type == "withdrawal":
+        signed_amount = -amount
+    else:
+        signed_amount = amount
     return {
         "timestamp": timestamp,
         "amount": amount,
@@ -415,9 +432,9 @@ def load_cash_adjustments(db_path: str) -> List[Dict[str, Any]]:
 
     adjustments: List[Dict[str, Any]] = []
     for entry in raw:
-        adj_type = str(entry.get("type", "deposit")).strip().lower()
+        adj_type = _canonical_adjustment_type(entry.get("type"))
         amount = safe_float(entry.get("amount"))
-        signed_amount = amount if adj_type == "deposit" else -amount
+        signed_amount = amount if adj_type in {"deposit", "dividend", "interest"} else -amount
         adjustments.append(
             {
                 "id": int(entry.get("id")) if entry.get("id") is not None else None,

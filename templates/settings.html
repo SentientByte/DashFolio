@@ -47,7 +47,7 @@
             <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-3">
                 <div>
                     <h5 class="mb-1">Cash adjustments</h5>
-                    <small class="text-muted">Track deposits and withdrawals to keep the cash balance accurate.</small>
+                    <small class="text-muted">Track deposits, withdrawals, dividends, and interest to keep the cash balance accurate.</small>
                 </div>
                 <span class="badge bg-label-secondary" id="settings-cash-balance-badge"></span>
             </div>
@@ -61,7 +61,9 @@
                         <label for="settings-cash-type" class="form-label">Type</label>
                         <select id="settings-cash-type" class="form-select" required>
                             <option value="deposit" selected>Deposit</option>
-                            <option value="withdraw">Withdraw</option>
+                            <option value="withdrawal">Withdrawal</option>
+                            <option value="dividend">Dividend</option>
+                            <option value="interest">Interest</option>
                         </select>
                     </div>
                     <div class="col-sm-3 col-lg-3">
