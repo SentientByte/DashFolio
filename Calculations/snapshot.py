@@ -247,30 +247,48 @@ def _build_daily_performance_history(
     )
     end_date = max(today, last_tx_date, last_adj_date)
 
-    date_index = pd.date_range(start=start_date, end=end_date, freq="D")
+    base_index = pd.bdate_range(start=start_date, end=end_date)
+
+    extra_days: Set[pd.Timestamp] = set()
+    if "date" in tx_df.columns and tx_df["date"].notna().any():
+        extra_days.update(tx_df.loc[tx_df["date"].notna(), "date"].tolist())
+    if "date" in adj_df.columns and adj_df["date"].notna().any():
+        extra_days.update(adj_df.loc[adj_df["date"].notna(), "date"].tolist())
+
+    if extra_days:
+        extra_index = pd.DatetimeIndex(sorted(extra_days))
+        date_index = base_index.union(extra_index)
+    else:
+        date_index = base_index
+
+    date_index = date_index.sort_values()
 
     benchmark_prices: Optional[pd.Series]
     benchmark_cumulative: Optional[pd.Series]
     benchmark_daily: Optional[pd.Series]
+    benchmark_valid_series: Optional[pd.Series]
     if benchmark_history is not None and not benchmark_history.empty:
         series = normalize_index(benchmark_history.astype(float)).sort_index()
         if isinstance(series.index, pd.DatetimeIndex):
             series.index = series.index.normalize()
         series = series.reindex(date_index)
-        if series.notna().any():
-            first_valid = series.dropna().iloc[0]
-            series = series.fillna(first_valid)
-            benchmark_prices = series.ffill()
+        benchmark_valid_series = series.notna()
+        if benchmark_valid_series.any():
+            first_valid = series[benchmark_valid_series].iloc[0]
+            filled = series.fillna(first_valid).ffill()
+            benchmark_prices = filled
             benchmark_daily = benchmark_prices.pct_change().fillna(0.0)
             benchmark_cumulative = (1.0 + benchmark_daily).cumprod() - 1.0
         else:
             benchmark_prices = pd.Series(0.0, index=date_index)
             benchmark_daily = pd.Series(0.0, index=date_index)
             benchmark_cumulative = pd.Series(0.0, index=date_index)
+            benchmark_valid_series = pd.Series(False, index=date_index)
     else:
         benchmark_prices = None
         benchmark_cumulative = None
         benchmark_daily = None
+        benchmark_valid_series = None
 
     tickers = [
         ticker
@@ -279,12 +297,13 @@ def _build_daily_performance_history(
     ]
 
     price_history: Dict[str, pd.Series] = {}
+    price_history_valid: Dict[str, pd.Series] = {}
     if tickers and database_path:
         try:
             price_frames = load_price_data(
                 tickers,
                 datetime.combine(start_date.date(), datetime.min.time(), tzinfo=ny_zone),
-                datetime.combine((end_date + timedelta(days=1)).date(), datetime.min.time(), tzinfo=ny_zone),
+                datetime.combine(end_date.date(), datetime.min.time(), tzinfo=ny_zone),
                 database_path,
             )
         except Exception as exc:
@@ -300,8 +319,16 @@ def _build_daily_performance_history(
                 closes = df["Close"].copy()
             else:
                 continue
-            closes = closes.reindex(date_index).ffill().bfill()
-            price_history[ticker] = closes
+            aligned = closes.reindex(date_index)
+            valid_mask = aligned.notna()
+            if valid_mask.any():
+                first_valid_value = aligned[valid_mask].iloc[0]
+                filled = aligned.fillna(first_valid_value).ffill()
+            else:
+                filled = pd.Series(0.0, index=date_index)
+                valid_mask = pd.Series(False, index=date_index)
+            price_history[ticker] = filled
+            price_history_valid[ticker] = valid_mask
 
     tx_by_day: Dict[pd.Timestamp, List[pd.Series]] = {}
     if not tx_df.empty:
@@ -327,6 +354,8 @@ def _build_daily_performance_history(
     history: List[Dict[str, float]] = []
 
     for day in date_index:
+        had_market_price = not tickers
+        benchmark_has_price = False
         cash_balance += adj_by_day.get(day, 0.0)
 
         for row in tx_by_day.get(day, []):
@@ -358,6 +387,7 @@ def _build_daily_performance_history(
                 continue
             price_series = price_history.get(ticker)
             price_value = None
+            valid_series = price_history_valid.get(ticker)
             if price_series is not None:
                 try:
                     candidate = price_series.loc[day]
@@ -365,6 +395,12 @@ def _build_daily_performance_history(
                     candidate = None
                 if candidate is not None and not pd.isna(candidate):
                     price_value = float(candidate)
+                    if valid_series is not None:
+                        try:
+                            if bool(valid_series.loc[day]):
+                                had_market_price = True
+                        except KeyError:
+                            pass
             if price_value is None:
                 price_value = last_trade_price.get(ticker, 0.0)
             equity_value += quantity * price_value
@@ -381,6 +417,12 @@ def _build_daily_performance_history(
         cumulative_factor *= 1.0 + daily_return
         cumulative_return = cumulative_factor - 1.0
 
+        if benchmark_cumulative is not None and benchmark_daily is not None:
+            try:
+                benchmark_has_price = bool(benchmark_valid_series is not None and bool(benchmark_valid_series.loc[day]))
+            except KeyError:
+                benchmark_has_price = False
+
         entry: Dict[str, float] = {
             "date": day.strftime("%Y-%m-%d"),
             "equity": float(equity_value),
@@ -394,11 +436,23 @@ def _build_daily_performance_history(
             entry["benchmark_daily_return"] = float(benchmark_daily.loc[day])
             entry["benchmark_cumulative_return"] = float(benchmark_cumulative.loc[day])
 
+        entry["_had_market_price"] = had_market_price
+        entry["_had_benchmark_price"] = benchmark_has_price
+        entry["_had_activity"] = bool(tx_by_day.get(day) or adj_by_day.get(day))
+
         history.append(entry)
 
         previous_value = portfolio_value
 
-    return history
+    filtered_history: List[Dict[str, float]] = []
+    for idx, entry in enumerate(history):
+        had_market_price = bool(entry.pop("_had_market_price", False))
+        had_benchmark_price = bool(entry.pop("_had_benchmark_price", False))
+        had_activity = bool(entry.pop("_had_activity", False))
+        if idx == 0 or had_market_price or had_benchmark_price or had_activity:
+            filtered_history.append(entry)
+
+    return filtered_history
 
 
 def build_portfolio_snapshot(
