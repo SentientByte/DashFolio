@@ -48,6 +48,20 @@
                 </div>
             </div>
             <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label text-muted small mb-0" for="transactions-page-size">Rows per page</label>
+                        <select id="transactions-page-size" class="form-select form-select-sm w-auto">
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="all">All</option>
+                        </select>
+                    </div>
+                    <nav class="transactions-pagination-wrapper" aria-label="Transaction pagination">
+                        <ul class="pagination pagination-sm mb-0" id="transactions-pagination"></ul>
+                    </nav>
+                </div>
                 <div class="table-responsive">
                     <table class="table align-middle mb-0" id="transactions-table">
                         <thead>
@@ -57,7 +71,7 @@
                             <th>Quantity</th>
                             <th>Price</th>
                             <th>Commission</th>
-                            <th></th>
+                            <th class="text-end">Actions</th>
                         </tr>
                         </thead>
                         <tbody id="transactions-table-body"></tbody>
@@ -75,7 +89,10 @@
                     <h5 class="mb-1">Derived holdings</h5>
                     <small class="text-muted">Quantities and costs calculated from the current transaction history.</small>
                 </div>
-                <div class="text-muted small" id="transactions-holdings-total"></div>
+                <div class="text-muted small" id="transactions-holdings-totals">
+                    <div id="transactions-holdings-total"></div>
+                    <div id="transactions-cash-balance"></div>
+                </div>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -128,6 +145,7 @@
                         <tbody id="transactions-preview-body"></tbody>
                     </table>
                 </div>
+                <div class="text-muted small mt-2" id="transactions-preview-cash"></div>
                 <div class="alert alert-warning mt-3 mb-0" role="alert" id="transactions-preview-warning" style="display: none;"></div>
             </div>
             <div class="modal-footer">
@@ -144,8 +162,20 @@
 
 {% block scripts %}
 <script>
-    let transactionData = {{ transactions|tojson }} || [];
+    function normalizeTransaction(record) {
+        return {
+            timestamp: record && record.timestamp ? String(record.timestamp) : '',
+            ticker: record && record.ticker ? String(record.ticker).toUpperCase().trim() : '',
+            quantity: Number(record && record.quantity !== undefined ? record.quantity : 0) || 0,
+            price: Number(record && record.price !== undefined ? record.price : 0) || 0,
+            commission: Number(record && record.commission !== undefined ? record.commission : 0) || 0,
+            __editing: Boolean(record && record.__editing),
+        };
+    }
+
+    let transactionData = ({{ transactions|tojson }} || []).map(record => normalizeTransaction(record));
     let holdingsSummary = {{ holdings_summary|tojson }} || [];
+    let cashBalance = Number({{ cash_balance|tojson }}) || 0;
     const currencySettings = {{ currency_settings|tojson }};
     const currencyFormatter = new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -155,6 +185,10 @@
     let statusHideTimer = null;
     let pendingUpload = null;
     let previewModal = null;
+    let pageSize = 20;
+    let currentPage = 1;
+    let pendingFocusIndex = null;
+    let holdingsTotalValue = 0;
 
     function ensureModal() {
         if (!previewModal) {
@@ -188,11 +222,17 @@
         }, delay);
     }
 
-    function formatCurrency(value) {
-        const rate = Number(currencySettings?.rate) || 1;
+    function applyCurrencyConversion(value) {
         const numeric = Number(value);
-        const converted = Number.isFinite(numeric) ? numeric * rate : 0;
-        let formatted = currencyFormatter.format(converted);
+        if (!Number.isFinite(numeric)) {
+            return 0;
+        }
+        const rate = Number(currencySettings?.rate) || 1;
+        return numeric * rate;
+    }
+
+    function formatCurrency(value) {
+        let formatted = currencyFormatter.format(applyCurrencyConversion(value));
         if (currencySettings?.code === 'BHD') {
             formatted = formatted.replace('BHD', currencySettings.symbol || 'BD').replace(/\u00a0/g, '');
         }
@@ -201,7 +241,18 @@
 
     function formatNumber(value, digits = 4) {
         const numeric = Number(value);
-        return Number.isFinite(numeric) ? numeric.toFixed(digits) : '0.0000';
+        return Number.isFinite(numeric) ? numeric.toFixed(digits) : (0).toFixed(digits);
+    }
+
+    function formatPlainNumber(value, decimals = 6) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return '';
+        }
+        if (Math.abs(numeric) < Math.pow(10, -decimals)) {
+            return '0';
+        }
+        return numeric.toFixed(decimals).replace(/\.?0+$/, '');
     }
 
     function toInputDate(value) {
@@ -223,74 +274,35 @@
         return date.toISOString();
     }
 
-    function renderTransactionsTable() {
-        const tbody = document.getElementById('transactions-table-body');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        if (!Array.isArray(transactionData) || transactionData.length === 0) {
-            addTransactionRow();
-            return;
+    function updateHoldingsTotals() {
+        const totalEl = document.getElementById('transactions-holdings-total');
+        const cashEl = document.getElementById('transactions-cash-balance');
+        if (totalEl) {
+            totalEl.textContent = `Holdings value: ${formatCurrency(holdingsTotalValue)}`;
         }
-        transactionData.forEach(record => addTransactionRow(record));
-    }
-
-    function addTransactionRow(record = {}) {
-        const tbody = document.getElementById('transactions-table-body');
-        if (!tbody) return;
-        const row = document.createElement('tr');
-        row.classList.add('transaction-row');
-        row.innerHTML = `
-            <td><input type="datetime-local" class="form-control transaction-timestamp" value="${toInputDate(record.timestamp)}"></td>
-            <td><input type="text" class="form-control transaction-ticker" value="${record.ticker || ''}" placeholder="GLD"></td>
-            <td><input type="number" step="0.0001" class="form-control transaction-quantity" value="${Number(record.quantity || 0)}"></td>
-            <td><input type="number" step="0.0001" class="form-control transaction-price" value="${Number(record.price || 0)}"></td>
-            <td><input type="number" step="0.0001" class="form-control transaction-commission" value="${Number(record.commission || 0)}"></td>
-            <td class="text-end"><button type="button" class="btn btn-link text-danger transaction-remove-row">Remove</button></td>
-        `;
-        tbody.appendChild(row);
-    }
-
-    function collectTransactionRows() {
-        const rows = document.querySelectorAll('#transactions-table-body .transaction-row');
-        const result = [];
-        rows.forEach(row => {
-            const timestamp = fromInputDate(row.querySelector('.transaction-timestamp')?.value || '');
-            const ticker = row.querySelector('.transaction-ticker')?.value?.toUpperCase().trim();
-            const quantity = parseFloat(row.querySelector('.transaction-quantity')?.value || '0');
-            const price = parseFloat(row.querySelector('.transaction-price')?.value || '0');
-            const commission = parseFloat(row.querySelector('.transaction-commission')?.value || '0');
-            if (!ticker || !timestamp || !Number.isFinite(quantity) || quantity === 0 || !Number.isFinite(price)) {
-                return;
-            }
-            result.push({
-                timestamp,
-                ticker,
-                quantity,
-                price,
-                commission: Number.isFinite(commission) ? commission : 0,
-            });
-        });
-        return result;
+        if (cashEl) {
+            cashEl.textContent = `Cash balance: ${formatCurrency(cashBalance)} • Total equity: ${formatCurrency(holdingsTotalValue + cashBalance)}`;
+        }
     }
 
     function renderHoldingsSummary(data) {
         const tbody = document.getElementById('transactions-holdings-body');
         const emptyState = document.getElementById('transactions-holdings-empty');
-        const totalEl = document.getElementById('transactions-holdings-total');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        let totalValue = 0;
+        if (tbody) {
+            tbody.innerHTML = '';
+        }
+        holdingsTotalValue = 0;
         if (Array.isArray(data) && data.length > 0) {
             data.forEach(record => {
                 const quantity = Number(record.quantity || 0);
-                const avgCost = Number(record.average_cost || 0);
                 const currentValue = Number(record.current_value || 0);
-                totalValue += currentValue;
+                holdingsTotalValue += currentValue;
+                if (!tbody) return;
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td class="fw-semibold">${record.ticker}</td>
                     <td>${formatNumber(quantity, 4)}</td>
-                    <td>${formatCurrency(avgCost)}</td>
+                    <td>${formatCurrency(record.average_cost)}</td>
                     <td>${formatCurrency(currentValue)}</td>
                 `;
                 tbody.appendChild(row);
@@ -301,9 +313,7 @@
         } else if (emptyState) {
             emptyState.style.display = 'block';
         }
-        if (totalEl) {
-            totalEl.textContent = `Total value: ${formatCurrency(totalValue)}`;
-        }
+        updateHoldingsTotals();
     }
 
     function renderPreviewHoldings(data) {
@@ -328,9 +338,28 @@
         });
     }
 
-    function updateTransactionsState(data) {
-        transactionData = Array.isArray(data) ? data.slice() : [];
-        renderTransactionsTable();
+    function updatePreviewCashBalance(value) {
+        const previewCashEl = document.getElementById('transactions-preview-cash');
+        if (previewCashEl) {
+            previewCashEl.textContent = `Projected cash balance: ${formatCurrency(value)}`;
+        }
+    }
+
+    function updateTransactionsState(data, newCashBalance) {
+        transactionData = Array.isArray(data) ? data.map(item => normalizeTransaction(item)) : [];
+        transactionData.forEach(record => {
+            record.__editing = false;
+        });
+        currentPage = 1;
+        pendingFocusIndex = null;
+        if (typeof newCashBalance === 'number') {
+            updateCashBalance(newCashBalance);
+        }
+        if (!transactionData.length) {
+            addNewTransactionRecord();
+        } else {
+            renderTransactionsTable();
+        }
     }
 
     function updateHoldingsState(data) {
@@ -338,9 +367,259 @@
         renderHoldingsSummary(holdingsSummary);
     }
 
+    function updateCashBalance(value) {
+        const numeric = Number(value);
+        cashBalance = Number.isFinite(numeric) ? numeric : 0;
+        updateHoldingsTotals();
+    }
+
+    function getPageSizeValue() {
+        if (pageSize === 'all') {
+            return transactionData.length || 1;
+        }
+        const numeric = Number(pageSize);
+        return Number.isFinite(numeric) && numeric > 0 ? numeric : 20;
+    }
+
+    function getTotalPages() {
+        if (!transactionData.length) {
+            return 1;
+        }
+        if (pageSize === 'all') {
+            return 1;
+        }
+        const perPage = getPageSizeValue();
+        return Math.max(1, Math.ceil(transactionData.length / perPage));
+    }
+
+    function renderTransactionsTable() {
+        const tbody = document.getElementById('transactions-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!transactionData.length) {
+            renderPagination(1);
+            return;
+        }
+        const perPage = getPageSizeValue();
+        const totalPages = getTotalPages();
+        if (currentPage > totalPages) {
+            currentPage = totalPages;
+        }
+        const startIndex = pageSize === 'all' ? 0 : (currentPage - 1) * perPage;
+        const endIndex = pageSize === 'all' ? transactionData.length : Math.min(startIndex + perPage, transactionData.length);
+
+        transactionData.slice(startIndex, endIndex).forEach((record, offset) => {
+            const index = startIndex + offset;
+            const row = document.createElement('tr');
+            row.dataset.index = String(index);
+            row.classList.add('transaction-row');
+
+            const timestampCell = document.createElement('td');
+            const timestampInput = document.createElement('input');
+            timestampInput.type = 'datetime-local';
+            timestampInput.className = 'form-control transaction-timestamp';
+            timestampInput.value = toInputDate(record.timestamp);
+            timestampInput.disabled = !record.__editing;
+            timestampCell.appendChild(timestampInput);
+            row.appendChild(timestampCell);
+
+            const tickerCell = document.createElement('td');
+            const tickerInput = document.createElement('input');
+            tickerInput.type = 'text';
+            tickerInput.className = 'form-control transaction-ticker';
+            tickerInput.value = record.ticker || '';
+            tickerInput.placeholder = 'GLD';
+            tickerInput.disabled = !record.__editing;
+            tickerCell.appendChild(tickerInput);
+            row.appendChild(tickerCell);
+
+            const quantityCell = document.createElement('td');
+            const quantityInput = document.createElement('input');
+            quantityInput.type = 'number';
+            quantityInput.step = '0.0001';
+            quantityInput.className = 'form-control transaction-quantity';
+            quantityInput.value = formatPlainNumber(record.quantity, 4);
+            quantityInput.disabled = !record.__editing;
+            quantityCell.appendChild(quantityInput);
+            row.appendChild(quantityCell);
+
+            const priceCell = document.createElement('td');
+            const priceInput = document.createElement('input');
+            priceInput.type = 'number';
+            priceInput.step = '0.0001';
+            priceInput.className = 'form-control transaction-price';
+            priceInput.value = formatPlainNumber(record.price, 4);
+            priceInput.disabled = !record.__editing;
+            priceCell.appendChild(priceInput);
+            row.appendChild(priceCell);
+
+            const commissionCell = document.createElement('td');
+            const commissionInput = document.createElement('input');
+            commissionInput.type = 'number';
+            commissionInput.step = '0.000001';
+            commissionInput.className = 'form-control transaction-commission';
+            commissionInput.value = formatPlainNumber(record.commission, 6);
+            commissionInput.disabled = !record.__editing;
+            commissionCell.appendChild(commissionInput);
+            row.appendChild(commissionCell);
+
+            const actionCell = document.createElement('td');
+            actionCell.className = 'text-end';
+            const editButton = document.createElement('button');
+            editButton.type = 'button';
+            editButton.className = 'btn btn-outline-primary btn-sm me-2 transaction-edit-row';
+            editButton.textContent = record.__editing ? 'Save' : 'Edit';
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'btn btn-outline-danger btn-sm transaction-remove-row';
+            removeButton.textContent = 'Remove';
+            actionCell.appendChild(editButton);
+            actionCell.appendChild(removeButton);
+            row.appendChild(actionCell);
+
+            tbody.appendChild(row);
+
+            if (record.__editing && pendingFocusIndex === index) {
+                setTimeout(() => {
+                    timestampInput.focus();
+                }, 0);
+            }
+        });
+
+        pendingFocusIndex = null;
+        renderPagination(totalPages);
+    }
+
+    function renderPagination(totalPages) {
+        const pagination = document.getElementById('transactions-pagination');
+        const wrapper = document.querySelector('.transactions-pagination-wrapper');
+        if (!pagination) return;
+        pagination.innerHTML = '';
+        if (wrapper) {
+            wrapper.classList.toggle('d-none', totalPages <= 1);
+        }
+        if (totalPages <= 1) {
+            return;
+        }
+
+        const createItem = (label, page, disabled = false, active = false) => {
+            const li = document.createElement('li');
+            li.className = `page-item${disabled ? ' disabled' : ''}${active ? ' active' : ''}`;
+            const link = document.createElement('a');
+            link.className = 'page-link';
+            link.href = '#';
+            link.dataset.page = String(page);
+            link.textContent = label;
+            li.appendChild(link);
+            pagination.appendChild(li);
+        };
+
+        createItem('Prev', Math.max(1, currentPage - 1), currentPage === 1, false);
+        for (let page = 1; page <= totalPages; page++) {
+            createItem(String(page), page, false, page === currentPage);
+        }
+        createItem('Next', Math.min(totalPages, currentPage + 1), currentPage === totalPages, false);
+    }
+
+    function addNewTransactionRecord() {
+        const record = normalizeTransaction({
+            timestamp: '',
+            ticker: '',
+            quantity: 0,
+            price: 0,
+            commission: 0,
+            __editing: true,
+        });
+        transactionData.push(record);
+        pendingFocusIndex = transactionData.length - 1;
+        if (pageSize === 'all') {
+            currentPage = 1;
+        } else {
+            const perPage = getPageSizeValue();
+            currentPage = Math.max(1, Math.ceil(transactionData.length / perPage));
+        }
+        renderTransactionsTable();
+    }
+
+    function readRowInputs(row) {
+        const timestampValue = fromInputDate(row.querySelector('.transaction-timestamp')?.value || '');
+        const tickerValue = row.querySelector('.transaction-ticker')?.value?.toUpperCase().trim();
+        const quantityValue = parseFloat(row.querySelector('.transaction-quantity')?.value || '0');
+        const priceValue = parseFloat(row.querySelector('.transaction-price')?.value || '0');
+        const commissionValue = parseFloat(row.querySelector('.transaction-commission')?.value || '0');
+        if (!timestampValue || !tickerValue || !Number.isFinite(quantityValue) || quantityValue === 0 || !Number.isFinite(priceValue) || priceValue <= 0) {
+            alert('Please provide a valid date, ticker, quantity, and price before saving.');
+            return null;
+        }
+        return {
+            timestamp: timestampValue,
+            ticker: tickerValue,
+            quantity: quantityValue,
+            price: priceValue,
+            commission: Number.isFinite(commissionValue) ? commissionValue : 0,
+        };
+    }
+
+    function toggleRowEditing(index, row) {
+        const record = transactionData[index];
+        if (!record) {
+            return;
+        }
+        if (record.__editing) {
+            const updated = readRowInputs(row);
+            if (!updated) {
+                return;
+            }
+            Object.assign(record, updated);
+            record.__editing = false;
+            pendingFocusIndex = null;
+        } else {
+            record.__editing = true;
+            pendingFocusIndex = index;
+        }
+        renderTransactionsTable();
+    }
+
+    function removeTransaction(index) {
+        if (index < 0 || index >= transactionData.length) {
+            return;
+        }
+        transactionData.splice(index, 1);
+        if (!transactionData.length) {
+            addNewTransactionRecord();
+            return;
+        }
+        const totalPages = getTotalPages();
+        if (currentPage > totalPages) {
+            currentPage = totalPages;
+        }
+        renderTransactionsTable();
+    }
+
+    function getSerializableTransactions() {
+        return transactionData
+            .map(record => ({
+                timestamp: record.timestamp,
+                ticker: record.ticker,
+                quantity: Number(record.quantity || 0),
+                price: Number(record.price || 0),
+                commission: Number(record.commission || 0),
+            }))
+            .filter(record => record.ticker && record.timestamp && Number.isFinite(record.quantity) && record.quantity !== 0 && Number.isFinite(record.price) && record.price > 0);
+    }
+
     async function saveTransactions() {
         const statusEl = document.getElementById('transactions-save-status');
-        const payload = collectTransactionRows();
+        if (transactionData.some(record => record.__editing)) {
+            if (statusEl) {
+                statusEl.textContent = 'Save or cancel all edits before committing transactions.';
+                statusEl.classList.remove('text-success');
+                statusEl.classList.add('text-danger');
+            }
+            return;
+        }
+
+        const payload = getSerializableTransactions();
         if (payload.length === 0) {
             if (statusEl) {
                 statusEl.textContent = 'Add at least one valid transaction before saving.';
@@ -361,7 +640,7 @@
             if (!response.ok) {
                 throw new Error(data.error || 'Failed to save transactions.');
             }
-            updateTransactionsState(data.transactions);
+            updateTransactionsState(data.transactions, data.cash_balance);
             updateHoldingsState(data.holdings);
             if (statusEl) {
                 statusEl.textContent = 'Transactions saved successfully.';
@@ -402,8 +681,10 @@
                 mode: data.mode,
                 transactions: data.uploaded_transactions || [],
                 holdings: data.preview_holdings || [],
+                cashBalance: Number(data.preview_cash_balance || 0),
             };
             renderPreviewHoldings(pendingUpload.holdings);
+            updatePreviewCashBalance(pendingUpload.cashBalance);
             const warning = document.getElementById('transactions-preview-warning');
             if (warning) {
                 if (pendingUpload.mode === 'replace') {
@@ -413,8 +694,7 @@
                     warning.style.display = 'none';
                 }
             }
-            const modal = ensureModal();
-            modal?.show();
+            ensureModal()?.show();
         } catch (error) {
             console.error(error);
             alert(error.message || 'Unable to process the uploaded file.');
@@ -439,7 +719,7 @@
             if (!response.ok) {
                 throw new Error(data.error || 'Failed to apply uploaded transactions.');
             }
-            updateTransactionsState(data.transactions);
+            updateTransactionsState(data.transactions, data.cash_balance);
             updateHoldingsState(data.holdings);
             ensureModal()?.hide();
             pendingUpload = null;
@@ -458,6 +738,8 @@
         const saveButton = document.getElementById('transactions-save-button');
         const tableBody = document.getElementById('transactions-table-body');
         const confirmButton = document.getElementById('transactions-confirm-upload');
+        const pageSizeSelect = document.getElementById('transactions-page-size');
+        const pagination = document.getElementById('transactions-pagination');
 
         if (uploadButton && uploadInput) {
             uploadButton.addEventListener('click', () => uploadInput.click());
@@ -471,7 +753,7 @@
         }
 
         if (addRowButton) {
-            addRowButton.addEventListener('click', () => addTransactionRow());
+            addRowButton.addEventListener('click', addNewTransactionRecord);
         }
 
         if (saveButton) {
@@ -480,9 +762,16 @@
 
         if (tableBody) {
             tableBody.addEventListener('click', event => {
-                if (event.target.classList.contains('transaction-remove-row')) {
-                    const row = event.target.closest('tr');
-                    row?.remove();
+                const target = event.target;
+                const row = target.closest('tr.transaction-row');
+                if (!row) {
+                    return;
+                }
+                const index = Number(row.dataset.index);
+                if (target.classList.contains('transaction-edit-row')) {
+                    toggleRowEditing(index, row);
+                } else if (target.classList.contains('transaction-remove-row')) {
+                    removeTransaction(index);
                 }
             });
         }
@@ -490,12 +779,42 @@
         if (confirmButton) {
             confirmButton.addEventListener('click', confirmUpload);
         }
+
+        if (pageSizeSelect) {
+            pageSizeSelect.value = String(pageSize);
+            pageSizeSelect.addEventListener('change', event => {
+                const value = event.target.value;
+                pageSize = value === 'all' ? 'all' : (parseInt(value, 10) || 20);
+                currentPage = 1;
+                renderTransactionsTable();
+            });
+        }
+
+        if (pagination) {
+            pagination.addEventListener('click', event => {
+                const link = event.target.closest('a[data-page]');
+                if (!link) {
+                    return;
+                }
+                event.preventDefault();
+                const targetPage = Number(link.dataset.page);
+                if (Number.isFinite(targetPage)) {
+                    currentPage = targetPage;
+                    renderTransactionsTable();
+                }
+            });
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        renderTransactionsTable();
+        if (!transactionData.length) {
+            addNewTransactionRecord();
+        } else {
+            renderTransactionsTable();
+        }
         renderHoldingsSummary(holdingsSummary);
         setupEventListeners();
     });
+
 </script>
 {% endblock %}

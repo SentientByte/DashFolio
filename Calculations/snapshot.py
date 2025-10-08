@@ -21,6 +21,7 @@ def build_portfolio_snapshot(
     holdings: List[Dict[str, Any]],
     target_allocations: Dict[str, Any] | None = None,
     benchmark_ticker: str | None = None,
+    cash_balance: float = 0.0,
 ) -> Dict[str, Any]:
     computed_holdings: List[Dict[str, Any]] = []
     total_cost = 0.0
@@ -33,6 +34,7 @@ def build_portfolio_snapshot(
     benchmark_returns = get_benchmark_returns(benchmark=benchmark_ticker)
     benchmark_history = get_benchmark_history(benchmark=benchmark_ticker)
     portfolio_history: pd.Series | None = None
+    cash_balance = max(safe_float(cash_balance), 0.0)
 
     def resolve_reference_price(raw_value, history: pd.Series | None, days_back: int) -> float | None:
         if raw_value is not None:
@@ -191,6 +193,8 @@ def build_portfolio_snapshot(
                 "metric": mover_metric,
             }
 
+    computed_holdings.sort(key=lambda record: record.get("current_value", 0.0), reverse=True)
+
     allocation_denominator = total_current_value if total_current_value else 1
     for holding in computed_holdings:
         holding["allocation_pct"] = (
@@ -199,10 +203,24 @@ def build_portfolio_snapshot(
 
     if portfolio_history is not None and not portfolio_history.empty:
         portfolio_history = portfolio_history.sort_index()
+        if cash_balance:
+            portfolio_history = portfolio_history + cash_balance
 
     normalized_targets = normalize_target_allocations(computed_holdings, target_allocations)
     for holding in computed_holdings:
         holding["target_pct"] = normalized_targets.get(holding["ticker"], 0.0)
+
+    invested_value = total_current_value
+    total_prev_value += cash_balance
+    if total_week_reference_value:
+        total_week_reference_value += cash_balance
+    else:
+        total_week_reference_value = cash_balance
+    if total_month_reference_value:
+        total_month_reference_value += cash_balance
+    else:
+        total_month_reference_value = cash_balance
+    total_current_value += cash_balance
 
     dod_value = total_current_value - total_prev_value
     dod_pct = (dod_value / total_prev_value * 100) if total_prev_value else 0.0
@@ -238,6 +256,8 @@ def build_portfolio_snapshot(
         "total_pl_value": total_pl_value,
         "total_pl_pct": total_pl_pct,
         "top_mover": None,
+        "cash_balance": cash_balance,
+        "invested_value": invested_value,
     }
 
     if top_mover:
@@ -281,4 +301,5 @@ def build_portfolio_snapshot(
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "target_allocations": normalized_targets,
         "performance_vs_benchmark": performance_vs_benchmark,
+        "cash_balance": cash_balance,
     }

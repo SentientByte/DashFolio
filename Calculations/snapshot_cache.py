@@ -31,11 +31,19 @@ def _canonical_holdings(holdings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         ticker = str(entry.get("ticker", "")).upper().strip()
         if not ticker:
             continue
+        logo_url = entry.get("logo_url")
+        if logo_url is not None:
+            logo_url = str(logo_url).strip()
+        name = entry.get("name")
+        if name is not None:
+            name = str(name).strip()
         canonical.append(
             {
                 "ticker": ticker,
                 "quantity": safe_float(entry.get("quantity")),
                 "average_cost": safe_float(entry.get("average_cost")),
+                "logo_url": logo_url,
+                "name": name,
             }
         )
     canonical.sort(key=lambda item: item["ticker"])
@@ -59,11 +67,13 @@ def _generate_cache_key(
     holdings: List[Dict[str, Any]],
     targets: Dict[str, Any] | None,
     benchmark: str | None,
+    cash_balance: float,
 ) -> Tuple[str, str]:
     canonical_payload = {
         "benchmark": (benchmark or "").upper().strip(),
         "holdings": _canonical_holdings(holdings),
         "targets": _canonical_targets(targets),
+        "cash": round(safe_float(cash_balance), 6),
     }
     encoded = json.dumps(canonical_payload, sort_keys=True, separators=(",", ":"))
     cache_key = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -88,9 +98,10 @@ def _refresh_worker(
     holdings: List[Dict[str, Any]],
     targets: Dict[str, Any] | None,
     benchmark: str | None,
+    cash_balance: float,
 ) -> None:
     try:
-        snapshot = build_portfolio_snapshot(holdings, targets, benchmark)
+        snapshot = build_portfolio_snapshot(holdings, targets, benchmark, cash_balance)
         with connect(db_path) as conn:
             ensure_snapshot_cache_table(conn)
             write_cached_snapshot(conn, cache_key, fingerprint, benchmark, snapshot)
@@ -108,6 +119,7 @@ def _schedule_refresh_if_needed(
     holdings: List[Dict[str, Any]],
     targets: Dict[str, Any] | None,
     benchmark: str | None,
+    cash_balance: float,
     existing_timestamp: Optional[str],
 ) -> None:
     if not _should_refresh(existing_timestamp):
@@ -118,7 +130,7 @@ def _schedule_refresh_if_needed(
             return
         thread = threading.Thread(
             target=_refresh_worker,
-            args=(cache_key, fingerprint, db_path, holdings, targets, benchmark),
+            args=(cache_key, fingerprint, db_path, holdings, targets, benchmark, cash_balance),
             daemon=True,
         )
         _refresh_threads[cache_key] = thread
@@ -130,6 +142,7 @@ def get_portfolio_snapshot(
     holdings: List[Dict[str, Any]],
     targets: Dict[str, Any] | None,
     benchmark: str | None,
+    cash_balance: float = 0.0,
     *,
     refresh_async: bool = True,
     force_recompute: bool = False,
@@ -142,7 +155,7 @@ def get_portfolio_snapshot(
     scheduled when the data is considered stale.
     """
 
-    cache_key, fingerprint = _generate_cache_key(holdings, targets, benchmark)
+    cache_key, fingerprint = _generate_cache_key(holdings, targets, benchmark, cash_balance)
     cached_snapshot: Optional[Dict[str, Any]] = None
     cached_generated_at: Optional[str] = None
 
@@ -155,7 +168,7 @@ def get_portfolio_snapshot(
                 cached_generated_at = cached_row["generated_at"]
 
     if cached_snapshot is None:
-        snapshot = build_portfolio_snapshot(holdings, targets, benchmark)
+        snapshot = build_portfolio_snapshot(holdings, targets, benchmark, cash_balance)
         cached_snapshot = snapshot
         cached_generated_at = snapshot.get("generated_at")
         with connect(db_path) as conn:
@@ -169,6 +182,7 @@ def get_portfolio_snapshot(
             holdings,
             targets,
             benchmark,
+            cash_balance,
             cached_generated_at,
         )
 
@@ -182,6 +196,7 @@ def get_portfolio_snapshot(
             holdings,
             targets,
             benchmark,
+            cash_balance,
             cached_generated_at,
         )
 
