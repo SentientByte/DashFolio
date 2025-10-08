@@ -179,7 +179,8 @@ def load_price_data(
     os.makedirs(os.path.dirname(os.path.abspath(database_path)), exist_ok=True)
 
     start_date_str = start_date.strftime("%Y-%m-%d")
-    today_str = today.strftime("%Y-%m-%d")
+    today_date = today.date()
+    today_str = today_date.strftime("%Y-%m-%d")
 
     all_data: Dict[str, pd.DataFrame] = {}
 
@@ -221,11 +222,15 @@ def load_price_data(
                     request_start = (latest + timedelta(days=1)).strftime("%Y-%m-%d")
 
             if need_download:
-                print(f"Requesting {ticker} data from {request_start} to {today_str}...")
+                request_end_date = today_date + timedelta(days=1)
+                request_end = request_end_date.strftime("%Y-%m-%d")
+                print(
+                    f"Requesting {ticker} data from {request_start} to {request_end} (exclusive)..."
+                )
                 new_data = yf.download(
                     ticker,
                     start=request_start,
-                    end=today_str,
+                    end=request_end,
                     interval="1d",
                     auto_adjust=False,
                 )
@@ -251,8 +256,16 @@ def load_price_data(
                     range_info = (
                         ticker_data.index.min() if not ticker_data.empty else "none"
                     )
+                    reason = ""
+                    request_start_date = datetime.strptime(request_start, "%Y-%m-%d").date()
+                    if request_start_date >= today_date:
+                        reason = (
+                            " Requested date is today or in the future; market data "
+                            "may not be published yet."
+                        )
                     print(
-                        f"Warning: No new data returned for {ticker}. Current local range (if any): {range_info}"
+                        "Warning: No new data returned for %s. Current local range (if any): %s.%s"
+                        % (ticker, range_info, reason)
                     )
 
             if ticker_data.empty:
