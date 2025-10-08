@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from Calculations import (
     calculate_statistics,
@@ -21,7 +22,7 @@ def main() -> None:
     database_path = os.path.join(base_dir, "dashfolio.db")
     config_file = os.path.join(base_dir, "config.json")
 
-    today = datetime.now()
+    today = datetime.now(ZoneInfo("America/New_York"))
 
     raw_config = load_config(config_file)
     config = normalize_config(raw_config)

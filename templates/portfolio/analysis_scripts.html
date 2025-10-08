@@ -234,11 +234,14 @@
             return;
         }
 
+        const benchmarkTicker = (latestSnapshot?.benchmark_ticker || initialSnapshot?.benchmark_ticker || '').trim();
+
         const rawPoints = Array.isArray(performanceData)
             ? performanceData.map(point => ({
                 date: point.date,
                 cumulative: Number(point.cumulative_return ?? point.cumulative ?? NaN),
                 legacyIndex: Number(point.index ?? point.value ?? point.portfolio ?? NaN),
+                benchmarkCumulative: Number(point.benchmark_cumulative_return ?? point.benchmark_cumulative ?? NaN),
             }))
             : [];
 
@@ -248,18 +251,15 @@
             baseIndex = Number(firstLegacy.legacyIndex);
         }
 
-        const seriesPoints = rawPoints
+        const portfolioPoints = rawPoints
             .map(point => {
-                const hasDate = Boolean(point.date);
-                if (!hasDate) {
+                if (!point.date) {
                     return null;
                 }
                 let ratio = point.cumulative;
-                if (!Number.isFinite(ratio)) {
-                    if (Number.isFinite(point.legacyIndex)) {
-                        const denominator = baseIndex === 0 ? 100 : baseIndex;
-                        ratio = (point.legacyIndex - denominator) / denominator;
-                    }
+                if (!Number.isFinite(ratio) && Number.isFinite(point.legacyIndex)) {
+                    const denominator = baseIndex === 0 ? 100 : baseIndex;
+                    ratio = (point.legacyIndex - denominator) / denominator;
                 }
                 if (!Number.isFinite(ratio)) {
                     return null;
@@ -271,23 +271,96 @@
             })
             .filter(Boolean);
 
-        if (!seriesPoints.length) {
+        const benchmarkPoints = rawPoints
+            .map(point => {
+                if (!point.date) {
+                    return null;
+                }
+                const ratio = point.benchmarkCumulative;
+                if (!Number.isFinite(ratio)) {
+                    return null;
+                }
+                return {
+                    x: point.date,
+                    y: Number((ratio * 100).toFixed(4)),
+                };
+            })
+            .filter(Boolean);
+
+        if (!portfolioPoints.length) {
             destroyIncomeChart();
             chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to display cumulative performance yet.</div>';
             return;
         }
 
-        const { success } = getThemeColors();
-        const yValues = seriesPoints.map(point => point.y);
-        let yMin = 0;
-        let yMax = 0;
+        const allPoints = benchmarkPoints.length ? portfolioPoints.concat(benchmarkPoints) : portfolioPoints;
+        const yValues = allPoints.map(point => point.y);
+        let rawMin = 0;
+        let rawMax = 0;
         if (yValues.length) {
-            yMin = Math.min(0, ...yValues);
-            yMax = Math.max(0, ...yValues);
+            rawMin = Math.min(0, ...yValues);
+            rawMax = Math.max(0, ...yValues);
         }
-        if (Math.abs(yMax - yMin) < 1e-6) {
-            yMax = yMin === 0 ? 1 : yMin + 1;
+        if (Math.abs(rawMax - rawMin) < 1e-6) {
+            rawMax = rawMin === 0 ? 2 : rawMin + 2;
         }
+
+        const step = 2;
+        const alignDown = value => Math.floor(value / step) * step;
+        const alignUp = value => Math.ceil(value / step) * step;
+
+        let yMin = alignDown(rawMin);
+        let yMax = alignUp(rawMax);
+
+        if (yMin === yMax) {
+            yMax = yMin + step;
+        }
+
+        const tickAmount = Math.max(2, Math.min(61, Math.round((yMax - yMin) / step) + 1));
+
+        const portfolioColor = '#1d4ed8';
+        const benchmarkColor = '#94a3b8';
+
+        const series = [
+            { name: 'Portfolio return', data: portfolioPoints },
+        ];
+        if (benchmarkPoints.length) {
+            const label = benchmarkTicker ? `${benchmarkTicker} benchmark` : 'Benchmark';
+            series.push({ name: label, data: benchmarkPoints });
+        }
+
+        const yAxisAnnotations = [];
+        if (yMax > 0) {
+            yAxisAnnotations.push({
+                y: 0,
+                y2: yMax,
+                fillColor: 'rgba(34, 197, 94, 0.15)',
+                opacity: 1,
+                borderColor: 'transparent',
+            });
+        }
+        if (yMin < 0) {
+            yAxisAnnotations.push({
+                y: yMin,
+                y2: 0,
+                fillColor: 'rgba(239, 68, 68, 0.15)',
+                opacity: 1,
+                borderColor: 'transparent',
+            });
+        }
+        yAxisAnnotations.push({
+            y: 0,
+            borderColor: '#0f172a',
+            strokeDashArray: 0,
+            label: {
+                text: '0%',
+                style: {
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    fontSize: '12px',
+                },
+            },
+        });
 
         const options = {
             chart: {
@@ -295,12 +368,12 @@
                 height: 320,
                 toolbar: { show: false },
             },
-            series: [
-                { name: 'Cumulative return', data: seriesPoints },
-            ],
-            colors: [success],
+            series,
+            colors: series.length > 1 ? [portfolioColor, benchmarkColor] : [portfolioColor],
             dataLabels: { enabled: false },
-            stroke: { curve: 'smooth', width: 3 },
+            stroke: series.length > 1
+                ? { curve: 'smooth', width: [3, 2.5] }
+                : { curve: 'smooth', width: 3 },
             xaxis: {
                 type: 'datetime',
                 labels: {
@@ -311,7 +384,7 @@
                 title: {
                     text: 'Cumulative return',
                 },
-                tickAmount: 6,
+                tickAmount,
                 min: yMin,
                 max: yMax,
                 labels: {
@@ -322,7 +395,7 @@
                 },
             },
             tooltip: {
-                shared: false,
+                shared: series.length > 1,
                 x: {
                     format: 'MMM dd, yyyy',
                 },
@@ -333,9 +406,22 @@
                     },
                 },
             },
-            legend: { show: false },
+            legend: {
+                show: series.length > 1,
+                position: 'top',
+                horizontalAlign: 'left',
+                markers: {
+                    width: 12,
+                    height: 12,
+                    offsetY: 1,
+                },
+            },
             grid: {
-                strokeDashArray: 4,
+                xaxis: { lines: { show: false } },
+                yaxis: { lines: { show: false } },
+            },
+            annotations: {
+                yaxis: yAxisAnnotations,
             },
         };
 
@@ -352,10 +438,12 @@
                 tooltip: options.tooltip,
                 legend: options.legend,
                 grid: options.grid,
+                annotations: options.annotations,
             });
             incomeChart.updateSeries(options.series);
         }
     }
+
 
     function updateMetrics(snapshot) {
         const summary = snapshot.summary || {};

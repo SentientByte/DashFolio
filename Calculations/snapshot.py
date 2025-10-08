@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Literal, Optional, Sequence, Set
 
 import pandas as pd
@@ -10,6 +11,7 @@ from pandas.api.types import is_datetime64tz_dtype
 
 from .allocations import normalize_target_allocations
 from .market_data import (
+    get_benchmark_history,
     get_benchmark_returns,
     get_market_snapshot,
 )
@@ -140,6 +142,7 @@ def _build_daily_performance_history(
     transactions: Sequence[Dict[str, Any]] | None,
     cash_adjustments: Sequence[Dict[str, Any]] | None,
     database_path: str | None,
+    benchmark_history: pd.Series | None,
 ) -> List[Dict[str, float]]:
     """Construct daily performance metrics for the portfolio."""
 
@@ -229,7 +232,9 @@ def _build_daily_performance_history(
         return []
 
     start_date = min(candidate_dates)
-    today = pd.Timestamp.utcnow().tz_localize(None).normalize()
+    ny_zone = ZoneInfo("America/New_York")
+    ny_now = datetime.now(ny_zone)
+    today = pd.Timestamp(ny_now.date())
     last_tx_date = (
         tx_df.loc[tx_df["date"].notna(), "date"].iloc[-1]
         if not tx_df.empty and tx_df["date"].notna().any()
@@ -244,6 +249,29 @@ def _build_daily_performance_history(
 
     date_index = pd.date_range(start=start_date, end=end_date, freq="D")
 
+    benchmark_prices: Optional[pd.Series]
+    benchmark_cumulative: Optional[pd.Series]
+    benchmark_daily: Optional[pd.Series]
+    if benchmark_history is not None and not benchmark_history.empty:
+        series = normalize_index(benchmark_history.astype(float)).sort_index()
+        if isinstance(series.index, pd.DatetimeIndex):
+            series.index = series.index.normalize()
+        series = series.reindex(date_index)
+        if series.notna().any():
+            first_valid = series.dropna().iloc[0]
+            series = series.fillna(first_valid)
+            benchmark_prices = series.ffill()
+            benchmark_daily = benchmark_prices.pct_change().fillna(0.0)
+            benchmark_cumulative = (1.0 + benchmark_daily).cumprod() - 1.0
+        else:
+            benchmark_prices = pd.Series(0.0, index=date_index)
+            benchmark_daily = pd.Series(0.0, index=date_index)
+            benchmark_cumulative = pd.Series(0.0, index=date_index)
+    else:
+        benchmark_prices = None
+        benchmark_cumulative = None
+        benchmark_daily = None
+
     tickers = [
         ticker
         for ticker in sorted(tx_df["ticker"].dropna().unique())
@@ -255,8 +283,8 @@ def _build_daily_performance_history(
         try:
             price_frames = load_price_data(
                 tickers,
-                start_date.to_pydatetime(),
-                (end_date + timedelta(days=1)).to_pydatetime(),
+                datetime.combine(start_date.date(), datetime.min.time(), tzinfo=ny_zone),
+                datetime.combine((end_date + timedelta(days=1)).date(), datetime.min.time(), tzinfo=ny_zone),
                 database_path,
             )
         except Exception as exc:
@@ -353,16 +381,20 @@ def _build_daily_performance_history(
         cumulative_factor *= 1.0 + daily_return
         cumulative_return = cumulative_factor - 1.0
 
-        history.append(
-            {
-                "date": day.strftime("%Y-%m-%d"),
-                "equity": float(equity_value),
-                "cash": float(cash_balance),
-                "portfolio_value": float(portfolio_value),
-                "daily_return": float(daily_return),
-                "cumulative_return": float(cumulative_return),
-            }
-        )
+        entry: Dict[str, float] = {
+            "date": day.strftime("%Y-%m-%d"),
+            "equity": float(equity_value),
+            "cash": float(cash_balance),
+            "portfolio_value": float(portfolio_value),
+            "daily_return": float(daily_return),
+            "cumulative_return": float(cumulative_return),
+        }
+
+        if benchmark_cumulative is not None and benchmark_daily is not None:
+            entry["benchmark_daily_return"] = float(benchmark_daily.loc[day])
+            entry["benchmark_cumulative_return"] = float(benchmark_cumulative.loc[day])
+
+        history.append(entry)
 
         previous_value = portfolio_value
 
@@ -682,10 +714,13 @@ def build_portfolio_snapshot(
             "change_pct": top_mover.get("change_pct"),
         }
 
+    benchmark_history = get_benchmark_history(benchmark=benchmark_ticker)
+
     performance_history = _build_daily_performance_history(
         transactions,
         cash_adjustments,
         database_path,
+        benchmark_history,
     )
 
     if database_path:
@@ -715,4 +750,5 @@ def build_portfolio_snapshot(
         "performance_history": performance_history,
         "performance_index": performance_history,
         "cash_balance": cash_balance,
+        "benchmark_ticker": (benchmark_ticker or "").upper().strip() or None,
     }
