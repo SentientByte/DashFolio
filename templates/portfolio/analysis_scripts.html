@@ -234,27 +234,60 @@
             return;
         }
 
-        const normalized = Array.isArray(performanceData)
+        const rawPoints = Array.isArray(performanceData)
             ? performanceData.map(point => ({
-                x: point.date,
-                index: Number(point.index ?? point.value ?? point.portfolio ?? 0),
+                date: point.date,
+                cumulative: Number(point.cumulative_return ?? point.cumulative ?? NaN),
+                legacyIndex: Number(point.index ?? point.value ?? point.portfolio ?? NaN),
             }))
             : [];
 
-        const seriesPoints = normalized
-            .filter(point => point.x && Number.isFinite(point.index))
-            .map(point => ({
-                x: point.x,
-                y: Number(point.index.toFixed(2)),
-            }));
+        let baseIndex = 100;
+        const firstLegacy = rawPoints.find(point => Number.isFinite(point.legacyIndex));
+        if (firstLegacy && firstLegacy.legacyIndex !== 0 && !Number.isFinite(firstLegacy.cumulative)) {
+            baseIndex = Number(firstLegacy.legacyIndex);
+        }
+
+        const seriesPoints = rawPoints
+            .map(point => {
+                const hasDate = Boolean(point.date);
+                if (!hasDate) {
+                    return null;
+                }
+                let ratio = point.cumulative;
+                if (!Number.isFinite(ratio)) {
+                    if (Number.isFinite(point.legacyIndex)) {
+                        const denominator = baseIndex === 0 ? 100 : baseIndex;
+                        ratio = (point.legacyIndex - denominator) / denominator;
+                    }
+                }
+                if (!Number.isFinite(ratio)) {
+                    return null;
+                }
+                return {
+                    x: point.date,
+                    y: Number((ratio * 100).toFixed(4)),
+                };
+            })
+            .filter(Boolean);
 
         if (!seriesPoints.length) {
             destroyIncomeChart();
-            chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to display performance yet.</div>';
+            chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to display cumulative performance yet.</div>';
             return;
         }
 
         const { success } = getThemeColors();
+        const yValues = seriesPoints.map(point => point.y);
+        let yMin = 0;
+        let yMax = 0;
+        if (yValues.length) {
+            yMin = Math.min(0, ...yValues);
+            yMax = Math.max(0, ...yValues);
+        }
+        if (Math.abs(yMax - yMin) < 1e-6) {
+            yMax = yMin === 0 ? 1 : yMin + 1;
+        }
 
         const options = {
             chart: {
@@ -263,7 +296,7 @@
                 toolbar: { show: false },
             },
             series: [
-                { name: 'Performance (invested only)', data: seriesPoints },
+                { name: 'Cumulative return', data: seriesPoints },
             ],
             colors: [success],
             dataLabels: { enabled: false },
@@ -276,13 +309,15 @@
             },
             yaxis: {
                 title: {
-                    text: 'Index value',
+                    text: 'Cumulative return',
                 },
                 tickAmount: 6,
+                min: yMin,
+                max: yMax,
                 labels: {
                     formatter: value => {
                         const numeric = Number(value);
-                        return Number.isFinite(numeric) ? numeric.toFixed(2) : value;
+                        return Number.isFinite(numeric) ? `${numeric.toFixed(2)}%` : value;
                     },
                 },
             },
@@ -294,7 +329,7 @@
                 y: {
                     formatter: value => {
                         const numeric = Number(value);
-                        return Number.isFinite(numeric) ? numeric.toFixed(2) : value;
+                        return Number.isFinite(numeric) ? `${numeric.toFixed(2)}%` : value;
                     },
                 },
             },

@@ -180,6 +180,7 @@ def _refresh_worker(
             cash_balance,
             transactions=transactions,
             cash_adjustments=cash_adjustments,
+            database_path=db_path,
         )
         with connect(db_path) as conn:
             ensure_snapshot_cache_table(conn)
@@ -270,6 +271,7 @@ def get_portfolio_snapshot(
             cash_balance,
             transactions=transactions,
             cash_adjustments=cash_adjustments,
+            database_path=db_path,
         )
         cached_snapshot = snapshot
         cached_generated_at = snapshot.get("generated_at")
