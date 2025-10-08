@@ -2,12 +2,35 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 import pandas as pd
 import yfinance as yf
 
 from .utils import historical_close, normalize_index, safe_float
+
+
+def _previous_close_from_history(closes: pd.Series) -> float | None:
+    """Return the latest close strictly prior to today from ``closes``."""
+
+    if closes is None or closes.empty:
+        return None
+
+    series = normalize_index(closes.dropna())
+    if series.empty:
+        return None
+
+    if isinstance(series.index, pd.DatetimeIndex):
+        today = datetime.now(timezone.utc).date()
+        eligible = series.loc[series.index.date < today]
+        if eligible.empty:
+            return None
+        return float(eligible.iloc[-1])
+
+    if len(series) < 2:
+        return None
+    return float(series.iloc[-2])
 
 
 BENCHMARK_TICKER = "SPY"
@@ -69,15 +92,9 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
                     last_close = float(closes.iloc[-1])
                     if result["current_price"] is None or result["current_price"] <= 0:
                         result["current_price"] = last_close
-                    if len(closes) > 1:
-                        fallback_previous_close = float(closes.iloc[-2])
-                    else:
-                        fallback_previous_close = last_close
-                    # Always rely on the historical series for previous close to
-                    # ensure valuation changes are based on the most recent
-                    # completed session. ``fast_info`` can occasionally report
-                    # stale values which skews per-holding change calculations.
-                    result["previous_close"] = fallback_previous_close
+                    previous_close = _previous_close_from_history(closes)
+                    if previous_close is not None:
+                        result["previous_close"] = previous_close
                     result["week_close"] = historical_close(closes, 7)
                     result["month_close"] = historical_close(closes, 30)
 

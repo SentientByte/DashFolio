@@ -105,8 +105,16 @@ def _canonical_cash_adjustments(
     if not adjustments:
         return []
     canonical: List[Dict[str, Any]] = []
+    type_map = {
+        "deposit": "deposit",
+        "withdraw": "withdrawal",
+        "withdrawal": "withdrawal",
+        "dividend": "dividend",
+        "interest": "interest",
+    }
     for entry in adjustments:
-        adj_type = str(entry.get("type", "deposit")).strip().lower()
+        raw_type = str(entry.get("type", "deposit")).strip().lower()
+        adj_type = type_map.get(raw_type, "deposit")
         amount = round(safe_float(entry.get("amount")), 6)
         signed = round(safe_float(entry.get("signed_amount")), 6)
         canonical.append(

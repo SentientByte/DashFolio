@@ -1,8 +1,7 @@
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 <script>
     const initialSnapshot = {{ snapshot|tojson }} || {};
-    const initialPerformanceData = initialSnapshot.performance_vs_benchmark || [];
-    const benchmarkTicker = {{ benchmark_ticker|tojson }};
+    const initialPerformanceData = initialSnapshot.performance_index || [];
     const currencySettings = {{ currency_settings|tojson }};
     const autoRefreshInterval = Math.min(900, Math.max(5, Number({{ config['AUTO_REFRESH_INTERVAL']|default(60) }}) || 60));
     let incomeChart = null;
@@ -136,26 +135,38 @@
 
     function computeTodayChange(holding) {
         if (!holding) {
-            return { value: 0, pct: 0 };
+            return { value: 0, pct: 0, reason: null };
         }
 
         const quantity = Number(holding.quantity) || 0;
         const currentPrice = Number(holding.current_price);
-        const referenceClose = isValidNumber(holding.previous_close)
+        const previousClose = isValidNumber(holding.previous_close)
             ? Number(holding.previous_close)
-            : (isValidNumber(holding.close_price) ? Number(holding.close_price) : NaN);
+            : NaN;
 
-        if (Number.isFinite(currentPrice) && Number.isFinite(referenceClose)) {
-            const priceDiff = currentPrice - referenceClose;
-            const value = priceDiff * quantity;
-            const pct = referenceClose !== 0 ? (priceDiff / referenceClose) * 100 : 0;
-            return { value, pct };
+        if (quantity === 0) {
+            return { value: 0, pct: 0, reason: null };
         }
 
-        return {
-            value: Number(holding.todays_gain || 0),
-            pct: Number(holding.todays_gain_pct || 0),
-        };
+        if (Number.isFinite(currentPrice) && Number.isFinite(previousClose) && previousClose > 0) {
+            const priceDiff = currentPrice - previousClose;
+            const value = priceDiff * quantity;
+            const pct = previousClose !== 0 ? (priceDiff / previousClose) * 100 : null;
+            if (pct === null || !Number.isFinite(pct)) {
+                return { value: null, pct: null, reason: 'No prior close available' };
+            }
+            return { value, pct, reason: null };
+        }
+
+        if (isValidNumber(holding.todays_gain) && isValidNumber(holding.todays_gain_pct)) {
+            return {
+                value: Number(holding.todays_gain),
+                pct: Number(holding.todays_gain_pct),
+                reason: null,
+            };
+        }
+
+        return { value: null, pct: null, reason: 'No prior close available' };
     }
 
     function formatMarketCap(value) {
@@ -226,27 +237,24 @@
         const normalized = Array.isArray(performanceData)
             ? performanceData.map(point => ({
                 x: point.date,
-                portfolio: Number(point.portfolio || 0),
-                benchmark: Number(point.benchmark || 0),
+                index: Number(point.index ?? point.value ?? point.portfolio ?? 0),
             }))
             : [];
 
-        if (!normalized.length) {
+        const seriesPoints = normalized
+            .filter(point => point.x && Number.isFinite(point.index))
+            .map(point => ({
+                x: point.x,
+                y: Number(point.index.toFixed(2)),
+            }));
+
+        if (!seriesPoints.length) {
             destroyIncomeChart();
-            chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to compare performance yet.</div>';
+            chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to display performance yet.</div>';
             return;
         }
 
-        const portfolioSeries = normalized.map(point => ({
-            x: point.x,
-            y: Number.isFinite(point.portfolio) ? Number(point.portfolio.toFixed(2)) : null,
-        }));
-        const benchmarkSeries = normalized.map(point => ({
-            x: point.x,
-            y: Number.isFinite(point.benchmark) ? Number(point.benchmark.toFixed(2)) : null,
-        }));
-
-        const { primary, success } = getThemeColors();
+        const { success } = getThemeColors();
 
         const options = {
             chart: {
@@ -255,10 +263,9 @@
                 toolbar: { show: false },
             },
             series: [
-                { name: 'Portfolio', data: portfolioSeries },
-                { name: `${benchmarkTicker}`, data: benchmarkSeries },
+                { name: 'Performance (invested only)', data: seriesPoints },
             ],
-            colors: [success, primary],
+            colors: [success],
             dataLabels: { enabled: false },
             stroke: { curve: 'smooth', width: 3 },
             xaxis: {
@@ -269,23 +276,29 @@
             },
             yaxis: {
                 title: {
-                    text: `Portfolio value (${currencySettings.symbol || currencySettings.code})`,
+                    text: 'Index value',
                 },
                 tickAmount: 6,
                 labels: {
-                    formatter: value => formatCompactCurrency(value),
+                    formatter: value => {
+                        const numeric = Number(value);
+                        return Number.isFinite(numeric) ? numeric.toFixed(2) : value;
+                    },
                 },
             },
             tooltip: {
-                shared: true,
+                shared: false,
                 x: {
                     format: 'MMM dd, yyyy',
                 },
                 y: {
-                    formatter: value => formatCurrency(value),
+                    formatter: value => {
+                        const numeric = Number(value);
+                        return Number.isFinite(numeric) ? numeric.toFixed(2) : value;
+                    },
                 },
             },
-            legend: { show: true },
+            legend: { show: false },
             grid: {
                 strokeDashArray: 4,
             },
@@ -387,13 +400,24 @@
         }
     }
 
-    function buildGainCell(value, percent) {
-        const safeValue = Number.isFinite(value) ? value : 0;
-        const safePercent = Number.isFinite(percent) ? percent : 0;
-        const positive = safeValue >= 0;
+    function buildGainCell(value, percent, options = {}) {
+        const settings = options || {};
+        const placeholder = typeof settings.placeholder === 'string' ? settings.placeholder : '—';
+        const tooltip = typeof settings.tooltip === 'string' ? settings.tooltip : '';
+        const numericValue = Number(value);
+        const numericPercent = Number(percent);
+        const hasValue = Number.isFinite(numericValue);
+        const hasPercent = Number.isFinite(numericPercent);
+
+        if (!hasValue || !hasPercent) {
+            const tooltipAttr = tooltip ? ` title="${tooltip}"` : '';
+            return `<span class="d-block text-muted"${tooltipAttr}>${placeholder}</span>`;
+        }
+
+        const positive = numericValue >= 0;
         const cls = positive ? 'gain-positive' : 'gain-negative';
-        return `<span class="d-block fw-semibold ${cls}">${formatSignedCurrency(safeValue)}</span>` +
-            `<small class="text-muted">${formatPercent(safePercent)}</small>`;
+        return `<span class="d-block fw-semibold ${cls}">${formatSignedCurrency(numericValue)}</span>` +
+            `<small class="text-muted">${formatPercent(numericPercent)}</small>`;
     }
 
     function updateHoldingsCache(snapshot) {
@@ -408,6 +432,7 @@
                 ...holding,
                 todays_gain: todayChange.value,
                 todays_gain_pct: todayChange.pct,
+                todays_gain_reason: todayChange.reason || null,
             };
         });
         if (window.DashFolioHoldingDetail) {
@@ -469,7 +494,9 @@
                 <td class="current-price numeric-col">${formatCurrency(holding.current_price)}</td>
                 <td class="numeric-col">${formatCurrency(holding.total_cost)}</td>
                 <td class="current-value numeric-col">${formatCurrency(holding.current_value)}</td>
-                <td class="todays-gain compact-col">${buildGainCell(holding.todays_gain, holding.todays_gain_pct)}</td>
+                <td class="todays-gain compact-col">${buildGainCell(holding.todays_gain, holding.todays_gain_pct, {
+                    tooltip: holding.todays_gain_reason ? String(holding.todays_gain_reason) : ''
+                })}</td>
                 <td class="compact-col">${buildGainCell(holding.weekly_gain, holding.weekly_gain_pct)}</td>
                 <td class="compact-col">${buildGainCell(holding.monthly_gain, holding.monthly_gain_pct)}</td>
                 <td class="compact-col">${buildGainCell(holding.pl_value, holding.pl_pct)}</td>
@@ -515,7 +542,7 @@
             latestSnapshot = snapshot;
             updateMetrics(snapshot);
             refreshTable(snapshot);
-            renderIncomeChart(snapshot.performance_vs_benchmark || []);
+            renderIncomeChart(snapshot.performance_index || []);
         } catch (err) {
             console.error('Failed to refresh portfolio snapshot', err);
         } finally {
