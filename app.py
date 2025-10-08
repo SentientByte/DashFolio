@@ -24,7 +24,7 @@ from Calculations.transactions import (
     load_current_holdings,
     load_transactions,
     parse_transactions_csv,
-    preview_holdings,
+    preview_holdings as build_preview_holdings,
     replace_transactions,
 )
 from Calculations.utils import safe_float
@@ -433,7 +433,7 @@ def api_upload_transactions():
     if not parsed_records:
         return jsonify({'error': 'No valid transactions found in CSV.'}), 400
 
-    _, preview_holdings = preview_holdings(DATA_STORE, parsed_records, mode)
+    _, preview_holdings = build_preview_holdings(DATA_STORE, parsed_records, mode)
     holdings_with_values = fetch_holdings_with_market_values(preview_holdings)
 
     return jsonify({
