@@ -33,7 +33,10 @@
                     <td><span class="fw-semibold">{{ '%.2f'|format(holding.sharpe_ratio) }}</span></td>
                     <td><span class="fw-semibold">{{ '%.2f'|format(holding.max_drawdown_pct) }}%</span></td>
                     <td><span class="fw-semibold">{{ '%.2f'|format(holding.beta_vs_benchmark) }}</span></td>
-                    <td><span class="fw-semibold">{{ '%.2f'|format(holding.ewma_var_pct) }}%</span></td>
+                    <td>
+                        <span class="fw-semibold d-block">{{ format_currency(holding.ewma_var_value) }}</span>
+                        <small class="text-muted">{{ '%.2f'|format(holding.ewma_var_pct) }}%</small>
+                    </td>
                     <td><span class="fw-semibold">{{ '%.2f'|format(holding.yield_on_cost_pct) }}%</span></td>
                 </tr>
                 {% endfor %}

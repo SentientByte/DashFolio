@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from .transactions import load_current_holdings
+
 
 def _read_portfolio_file(portfolio_file: str) -> Dict:
     if not os.path.exists(portfolio_file):
@@ -23,10 +25,19 @@ def _write_portfolio_file(portfolio_file: str, payload: Dict) -> None:
         json.dump(payload, fh, indent=4)
 
 
-def load_portfolio(portfolio_file: str) -> pd.DataFrame:
-    """Load the portfolio JSON file into a dataframe."""
-    data = _read_portfolio_file(portfolio_file)
-    holdings = data.get("holdings", [])
+def load_portfolio(portfolio_file: str, database_path: str | None = None) -> pd.DataFrame:
+    """Load holdings from transactions when available, otherwise fall back to JSON."""
+    holdings = []
+    if database_path:
+        try:
+            holdings = load_current_holdings(database_path)
+        except Exception:
+            holdings = []
+
+    if not holdings:
+        data = _read_portfolio_file(portfolio_file)
+        holdings = data.get("holdings", [])
+
     df = pd.DataFrame(holdings)
     if df.empty:
         return df

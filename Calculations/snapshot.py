@@ -157,6 +157,7 @@ def build_portfolio_snapshot(
                 "max_drawdown_pct": max_drawdown,
                 "beta_vs_benchmark": beta,
                 "ewma_var_pct": ewma_var_pct,
+                "ewma_var_value": current_value * (ewma_var_pct / 100.0),
                 "yield_on_cost_pct": yield_on_cost_pct,
                 "open_price": open_price,
                 "close_price": close_price,

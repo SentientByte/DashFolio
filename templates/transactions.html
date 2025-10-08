@@ -1,0 +1,501 @@
+{% extends 'layout.html' %}
+{% block title %}Transactions{% endblock %}
+{% block content %}
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card" id="transactions-upload-card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-3">
+                <div>
+                    <h5 class="mb-1">Upload transaction history</h5>
+                    <small class="text-muted">Import trades from CSV to refresh holdings derived across the application.</small>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <select id="transactions-upload-mode" class="form-select form-select-sm w-auto">
+                        <option value="append" selected>Append to existing</option>
+                        <option value="replace">Replace existing</option>
+                    </select>
+                    <button class="btn btn-primary" type="button" id="transactions-upload-button">
+                        <i class="bx bx-upload me-1"></i>
+                        Upload CSV
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-0 small">
+                    Supported headers include <strong>Symbol</strong>, <strong>Date/Time</strong>, <strong>Quantity</strong>, <strong>Price</strong>, and <strong>Commission</strong>.
+                    After upload you will review derived holdings before any data is saved.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card" id="transactions-table-card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <h5 class="mb-1">Transaction ledger</h5>
+                    <small class="text-muted">Edit trades manually or capture new activity. Saving overwrites the current dataset.</small>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-outline-secondary btn-sm" type="button" id="transactions-add-row">
+                        <i class="bx bx-plus me-1"></i>
+                        Add row
+                    </button>
+                    <button class="btn btn-primary" type="button" id="transactions-save-button">
+                        <i class="bx bx-save me-1"></i>
+                        Save changes
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0" id="transactions-table">
+                        <thead>
+                        <tr>
+                            <th>Date &amp; time</th>
+                            <th>Ticker</th>
+                            <th>Quantity</th>
+                            <th>Price</th>
+                            <th>Commission</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody id="transactions-table-body"></tbody>
+                    </table>
+                </div>
+                <small class="text-muted" id="transactions-save-status"></small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card" id="transactions-holdings-card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h5 class="mb-1">Derived holdings</h5>
+                    <small class="text-muted">Quantities and costs calculated from the current transaction history.</small>
+                </div>
+                <div class="text-muted small" id="transactions-holdings-total"></div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th class="text-uppercase text-muted small">Ticker</th>
+                            <th class="text-uppercase text-muted small">Quantity</th>
+                            <th class="text-uppercase text-muted small">Average cost</th>
+                            <th class="text-uppercase text-muted small">Current value</th>
+                        </tr>
+                        </thead>
+                        <tbody id="transactions-holdings-body"></tbody>
+                    </table>
+                </div>
+                <div class="text-muted small mt-3" id="transactions-holdings-empty" {% if holdings_summary %}style="display: none;"{% endif %}>
+                    No holdings derived yet. Upload transactions or add rows above to populate your portfolio.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<input type="file" id="transactions-upload-input" class="d-none" accept=".csv,text/csv">
+
+<div id="status-pill" role="status" aria-live="polite" aria-atomic="true">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/a/ad/YouTube_loading_symbol_3_%28transparent%29.gif" alt="loading">
+    <span class="status-text" id="status-text">Processing...</span>
+</div>
+
+<div class="modal fade" id="transactions-preview-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm derived holdings</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Review the holdings that will be stored after applying this upload.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Quantity</th>
+                            <th>Average cost</th>
+                            <th>Current value</th>
+                        </tr>
+                        </thead>
+                        <tbody id="transactions-preview-body"></tbody>
+                    </table>
+                </div>
+                <div class="alert alert-warning mt-3 mb-0" role="alert" id="transactions-preview-warning" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="transactions-confirm-upload">
+                    <i class="bx bx-check me-1"></i>
+                    Apply changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let transactionData = {{ transactions|tojson }} || [];
+    let holdingsSummary = {{ holdings_summary|tojson }} || [];
+    const currencySettings = {{ currency_settings|tojson }};
+    const currencyFormatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencySettings?.code === 'BHD' ? 'BHD' : 'USD'
+    });
+
+    let statusHideTimer = null;
+    let pendingUpload = null;
+    let previewModal = null;
+
+    function ensureModal() {
+        if (!previewModal) {
+            const element = document.getElementById('transactions-preview-modal');
+            if (element) {
+                previewModal = new bootstrap.Modal(element);
+            }
+        }
+        return previewModal;
+    }
+
+    function showStatus(message = 'Processing...') {
+        const pill = document.getElementById('status-pill');
+        const text = document.getElementById('status-text');
+        if (!pill || !text) return;
+        if (statusHideTimer) {
+            clearTimeout(statusHideTimer);
+        }
+        text.textContent = message;
+        pill.style.display = 'inline-flex';
+    }
+
+    function hideStatus(delay = 0) {
+        const pill = document.getElementById('status-pill');
+        if (!pill) return;
+        if (statusHideTimer) {
+            clearTimeout(statusHideTimer);
+        }
+        statusHideTimer = setTimeout(() => {
+            pill.style.display = 'none';
+        }, delay);
+    }
+
+    function formatCurrency(value) {
+        const rate = Number(currencySettings?.rate) || 1;
+        const numeric = Number(value);
+        const converted = Number.isFinite(numeric) ? numeric * rate : 0;
+        let formatted = currencyFormatter.format(converted);
+        if (currencySettings?.code === 'BHD') {
+            formatted = formatted.replace('BHD', currencySettings.symbol || 'BD').replace(/\u00a0/g, '');
+        }
+        return formatted;
+    }
+
+    function formatNumber(value, digits = 4) {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric.toFixed(digits) : '0.0000';
+    }
+
+    function toInputDate(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+        const pad = number => String(number).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function fromInputDate(value) {
+        if (!value) return null;
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+        return date.toISOString();
+    }
+
+    function renderTransactionsTable() {
+        const tbody = document.getElementById('transactions-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!Array.isArray(transactionData) || transactionData.length === 0) {
+            addTransactionRow();
+            return;
+        }
+        transactionData.forEach(record => addTransactionRow(record));
+    }
+
+    function addTransactionRow(record = {}) {
+        const tbody = document.getElementById('transactions-table-body');
+        if (!tbody) return;
+        const row = document.createElement('tr');
+        row.classList.add('transaction-row');
+        row.innerHTML = `
+            <td><input type="datetime-local" class="form-control transaction-timestamp" value="${toInputDate(record.timestamp)}"></td>
+            <td><input type="text" class="form-control transaction-ticker" value="${record.ticker || ''}" placeholder="GLD"></td>
+            <td><input type="number" step="0.0001" class="form-control transaction-quantity" value="${Number(record.quantity || 0)}"></td>
+            <td><input type="number" step="0.0001" class="form-control transaction-price" value="${Number(record.price || 0)}"></td>
+            <td><input type="number" step="0.0001" class="form-control transaction-commission" value="${Number(record.commission || 0)}"></td>
+            <td class="text-end"><button type="button" class="btn btn-link text-danger transaction-remove-row">Remove</button></td>
+        `;
+        tbody.appendChild(row);
+    }
+
+    function collectTransactionRows() {
+        const rows = document.querySelectorAll('#transactions-table-body .transaction-row');
+        const result = [];
+        rows.forEach(row => {
+            const timestamp = fromInputDate(row.querySelector('.transaction-timestamp')?.value || '');
+            const ticker = row.querySelector('.transaction-ticker')?.value?.toUpperCase().trim();
+            const quantity = parseFloat(row.querySelector('.transaction-quantity')?.value || '0');
+            const price = parseFloat(row.querySelector('.transaction-price')?.value || '0');
+            const commission = parseFloat(row.querySelector('.transaction-commission')?.value || '0');
+            if (!ticker || !timestamp || !Number.isFinite(quantity) || quantity === 0 || !Number.isFinite(price)) {
+                return;
+            }
+            result.push({
+                timestamp,
+                ticker,
+                quantity,
+                price,
+                commission: Number.isFinite(commission) ? commission : 0,
+            });
+        });
+        return result;
+    }
+
+    function renderHoldingsSummary(data) {
+        const tbody = document.getElementById('transactions-holdings-body');
+        const emptyState = document.getElementById('transactions-holdings-empty');
+        const totalEl = document.getElementById('transactions-holdings-total');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        let totalValue = 0;
+        if (Array.isArray(data) && data.length > 0) {
+            data.forEach(record => {
+                const quantity = Number(record.quantity || 0);
+                const avgCost = Number(record.average_cost || 0);
+                const currentValue = Number(record.current_value || 0);
+                totalValue += currentValue;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="fw-semibold">${record.ticker}</td>
+                    <td>${formatNumber(quantity, 4)}</td>
+                    <td>${formatCurrency(avgCost)}</td>
+                    <td>${formatCurrency(currentValue)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            if (emptyState) {
+                emptyState.style.display = 'none';
+            }
+        } else if (emptyState) {
+            emptyState.style.display = 'block';
+        }
+        if (totalEl) {
+            totalEl.textContent = `Total value: ${formatCurrency(totalValue)}`;
+        }
+    }
+
+    function renderPreviewHoldings(data) {
+        const tbody = document.getElementById('transactions-preview-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!Array.isArray(data) || data.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="4" class="text-muted text-center">No holdings derived from this upload.</td>';
+            tbody.appendChild(row);
+            return;
+        }
+        data.forEach(record => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${record.ticker}</td>
+                <td>${formatNumber(record.quantity, 4)}</td>
+                <td>${formatCurrency(record.average_cost)}</td>
+                <td>${formatCurrency(record.current_value)}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    function updateTransactionsState(data) {
+        transactionData = Array.isArray(data) ? data.slice() : [];
+        renderTransactionsTable();
+    }
+
+    function updateHoldingsState(data) {
+        holdingsSummary = Array.isArray(data) ? data.slice() : [];
+        renderHoldingsSummary(holdingsSummary);
+    }
+
+    async function saveTransactions() {
+        const statusEl = document.getElementById('transactions-save-status');
+        const payload = collectTransactionRows();
+        if (payload.length === 0) {
+            if (statusEl) {
+                statusEl.textContent = 'Add at least one valid transaction before saving.';
+                statusEl.classList.remove('text-success');
+                statusEl.classList.add('text-danger');
+            }
+            return;
+        }
+
+        showStatus('Saving transactions...');
+        try {
+            const response = await fetch('{{ url_for('api_save_transactions') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ transactions: payload })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to save transactions.');
+            }
+            updateTransactionsState(data.transactions);
+            updateHoldingsState(data.holdings);
+            if (statusEl) {
+                statusEl.textContent = 'Transactions saved successfully.';
+                statusEl.classList.remove('text-danger');
+                statusEl.classList.add('text-success');
+            }
+        } catch (error) {
+            console.error(error);
+            if (statusEl) {
+                statusEl.textContent = error.message || 'Unable to save transactions.';
+                statusEl.classList.remove('text-success');
+                statusEl.classList.add('text-danger');
+            }
+        } finally {
+            hideStatus(400);
+        }
+    }
+
+    async function handleUpload(file) {
+        if (!file) return;
+        const modeSelect = document.getElementById('transactions-upload-mode');
+        const mode = modeSelect?.value || 'append';
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('mode', mode);
+
+        showStatus('Parsing CSV...');
+        try {
+            const response = await fetch('{{ url_for('api_upload_transactions') }}', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to parse CSV upload.');
+            }
+            pendingUpload = {
+                mode: data.mode,
+                transactions: data.uploaded_transactions || [],
+                holdings: data.preview_holdings || [],
+            };
+            renderPreviewHoldings(pendingUpload.holdings);
+            const warning = document.getElementById('transactions-preview-warning');
+            if (warning) {
+                if (pendingUpload.mode === 'replace') {
+                    warning.textContent = 'Replacing will remove all existing transactions before applying this file.';
+                    warning.style.display = 'block';
+                } else {
+                    warning.style.display = 'none';
+                }
+            }
+            const modal = ensureModal();
+            modal?.show();
+        } catch (error) {
+            console.error(error);
+            alert(error.message || 'Unable to process the uploaded file.');
+        } finally {
+            hideStatus(0);
+        }
+    }
+
+    async function confirmUpload() {
+        if (!pendingUpload) return;
+        showStatus('Applying transactions...');
+        try {
+            const response = await fetch('{{ url_for('api_apply_transactions') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mode: pendingUpload.mode,
+                    transactions: pendingUpload.transactions,
+                }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to apply uploaded transactions.');
+            }
+            updateTransactionsState(data.transactions);
+            updateHoldingsState(data.holdings);
+            ensureModal()?.hide();
+            pendingUpload = null;
+        } catch (error) {
+            console.error(error);
+            alert(error.message || 'Unable to apply uploaded transactions.');
+        } finally {
+            hideStatus(400);
+        }
+    }
+
+    function setupEventListeners() {
+        const uploadButton = document.getElementById('transactions-upload-button');
+        const uploadInput = document.getElementById('transactions-upload-input');
+        const addRowButton = document.getElementById('transactions-add-row');
+        const saveButton = document.getElementById('transactions-save-button');
+        const tableBody = document.getElementById('transactions-table-body');
+        const confirmButton = document.getElementById('transactions-confirm-upload');
+
+        if (uploadButton && uploadInput) {
+            uploadButton.addEventListener('click', () => uploadInput.click());
+            uploadInput.addEventListener('change', event => {
+                const file = event.target.files?.[0];
+                if (file) {
+                    handleUpload(file);
+                    uploadInput.value = '';
+                }
+            });
+        }
+
+        if (addRowButton) {
+            addRowButton.addEventListener('click', () => addTransactionRow());
+        }
+
+        if (saveButton) {
+            saveButton.addEventListener('click', saveTransactions);
+        }
+
+        if (tableBody) {
+            tableBody.addEventListener('click', event => {
+                if (event.target.classList.contains('transaction-remove-row')) {
+                    const row = event.target.closest('tr');
+                    row?.remove();
+                }
+            });
+        }
+
+        if (confirmButton) {
+            confirmButton.addEventListener('click', confirmUpload);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        renderTransactionsTable();
+        renderHoldingsSummary(holdingsSummary);
+        setupEventListeners();
+    });
+</script>
+{% endblock %}

@@ -18,6 +18,15 @@ import pandas as pd
 from Calculations.allocations import normalize_target_allocations
 from Calculations.snapshot_cache import get_portfolio_snapshot as get_cached_portfolio_snapshot
 from Calculations.storage import connect, ensure_risk_results_table
+from Calculations.transactions import (
+    append_transactions,
+    fetch_holdings_with_market_values,
+    load_current_holdings,
+    load_transactions,
+    parse_transactions_csv,
+    preview_holdings,
+    replace_transactions,
+)
 from Calculations.utils import safe_float
 
 # ------------------------------
@@ -157,35 +166,8 @@ if not os.path.exists(CONFIG_FILE):
 
 if not os.path.exists(PORTFOLIO_FILE):
     default_portfolio = {
-        "holdings": [
-            {
-                "ticker": "AAPL",
-                "name": "Apple Inc.",
-                "quantity": 25,
-                "average_cost": 142.35,
-                "logo_url": "https://logo.clearbit.com/apple.com"
-            },
-            {
-                "ticker": "MSFT",
-                "name": "Microsoft Corp.",
-                "quantity": 18,
-                "average_cost": 265.40,
-                "logo_url": "https://logo.clearbit.com/microsoft.com"
-            },
-            {
-                "ticker": "GOOGL",
-                "name": "Alphabet Inc.",
-                "quantity": 12,
-                "average_cost": 125.15,
-                "logo_url": "https://logo.clearbit.com/abc.xyz"
-            }
-        ]
+        "target_allocations": {}
     }
-    if default_portfolio["holdings"]:
-        even = 100.0 / len(default_portfolio["holdings"])
-        default_portfolio["target_allocations"] = {
-            holding["ticker"]: even for holding in default_portfolio["holdings"]
-        }
     with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
         json.dump(default_portfolio, f, indent=4)
     print(f"Created default portfolio file: {PORTFOLIO_FILE}")
@@ -232,20 +214,31 @@ def save_config(config):
 
 
 def load_portfolio_state() -> Dict[str, Any]:
-    with open(PORTFOLIO_FILE, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    raw: Dict[str, Any] = {}
+    if os.path.exists(PORTFOLIO_FILE):
+        with open(PORTFOLIO_FILE, 'r', encoding='utf-8') as f:
+            try:
+                raw = json.load(f)
+            except json.JSONDecodeError:
+                raw = {}
 
-    holdings = data.get('holdings', [])
-    data['target_allocations'] = normalize_target_allocations(
+    holdings = load_current_holdings(DATA_STORE)
+    normalized_targets = normalize_target_allocations(
         holdings,
-        data.get('target_allocations'),
+        raw.get('target_allocations'),
     )
-    return data
+    return {
+        'holdings': holdings,
+        'target_allocations': normalized_targets,
+    }
 
 
 def save_portfolio_state(data: Dict[str, Any]) -> None:
+    payload = {
+        'target_allocations': data.get('target_allocations', {}),
+    }
     with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4)
+        json.dump(payload, f, indent=4)
 
 
 # ------------------------------
@@ -269,7 +262,6 @@ def portfolio_analysis():
     return render_template(
         'portfolio_analysis.html',
         snapshot=snapshot,
-        holdings_raw=holdings,
         active_page='portfolio',
         page_title='Portfolio Overview',
         page_subtitle='Live performance & allocations',
@@ -297,13 +289,32 @@ def allocation_planner():
     return render_template(
         'allocation.html',
         snapshot=snapshot,
-        holdings_raw=holdings,
         target_allocations=snapshot.get('target_allocations', {}),
         active_page='allocation',
         page_title='Allocation Planner',
         page_subtitle='Rebalance towards your target mix',
         config=config,
         currency_settings=currency_settings,
+    )
+
+
+@app.route('/transactions')
+def transactions_page():
+    config = load_config()
+    currency_settings = get_currency_context(config)
+    transactions = load_transactions(DATA_STORE)
+    holdings = load_current_holdings(DATA_STORE)
+    holdings_summary = fetch_holdings_with_market_values(holdings)
+
+    return render_template(
+        'transactions.html',
+        transactions=transactions,
+        holdings_summary=holdings_summary,
+        currency_settings=currency_settings,
+        active_page='transactions',
+        page_title='Transactions',
+        page_subtitle='Upload trades & review derived holdings',
+        snapshot=None,
     )
 
 
@@ -326,7 +337,6 @@ def settings():
     return render_template(
         'settings.html',
         snapshot=snapshot,
-        holdings_raw=holdings,
         target_allocations=targets,
         config=config,
         currency_settings=currency_settings,
@@ -357,60 +367,125 @@ def api_get_portfolio():
     return jsonify(snapshot)
 
 
-@app.route('/api/portfolio', methods=['POST'])
-def api_update_portfolio():
-    payload = request.get_json(silent=True)
-    if not payload or 'holdings' not in payload:
-        return jsonify({'error': 'Invalid payload'}), 400
+@app.route('/api/transactions', methods=['GET'])
+def api_get_transactions():
+    transactions = load_transactions(DATA_STORE)
+    holdings = load_current_holdings(DATA_STORE)
+    holdings_summary = fetch_holdings_with_market_values(holdings)
+    return jsonify({
+        'transactions': transactions,
+        'holdings': holdings_summary,
+    })
 
-    normalized_holdings: List[Dict[str, Any]] = []
-    for entry in payload.get('holdings', []):
-        ticker = str(entry.get('ticker', '')).upper().strip()
-        quantity = safe_float(entry.get('quantity'))
-        avg_cost = safe_float(entry.get('average_cost'))
-        name = entry.get('name')
-        logo_url = entry.get('logo_url')
 
-        if not ticker or quantity <= 0:
-            continue
+@app.route('/api/transactions/save', methods=['POST'])
+def api_save_transactions():
+    payload = request.get_json(silent=True) or {}
+    records = payload.get('transactions')
+    if not isinstance(records, list):
+        return jsonify({'error': 'Transactions payload must be a list.'}), 400
 
-        holding_record: Dict[str, Any] = {
-            'ticker': ticker,
-            'quantity': quantity,
-            'average_cost': avg_cost,
-        }
-        if name:
-            holding_record['name'] = name
-        if logo_url:
-            holding_record['logo_url'] = logo_url
-        # Preserve explicit current price if client provides it
-        if entry.get('current_price') is not None:
-            holding_record['current_price'] = safe_float(entry.get('current_price'))
+    try:
+        holdings = replace_transactions(DATA_STORE, records)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
 
-        normalized_holdings.append(holding_record)
+    # Persist updated allocation targets with the new holdings universe.
+    state = load_portfolio_state()
+    save_portfolio_state({'target_allocations': state.get('target_allocations', {})})
 
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
-
-    current_state = load_portfolio_state()
-    updated_targets = normalize_target_allocations(
-        normalized_holdings,
-        current_state.get('target_allocations'),
-    )
-
-    save_portfolio_state({
-        'holdings': normalized_holdings,
-        'target_allocations': updated_targets,
-    })
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
-        normalized_holdings,
-        updated_targets,
+        state.get('holdings', []),
+        state.get('target_allocations', {}),
         benchmark_ticker,
         refresh_async=True,
         force_recompute=True,
     )
-    return jsonify({'status': 'ok', 'snapshot': snapshot})
+
+    holdings_summary = fetch_holdings_with_market_values(state.get('holdings', []))
+    return jsonify({
+        'status': 'ok',
+        'transactions': load_transactions(DATA_STORE),
+        'holdings': holdings_summary,
+        'snapshot': snapshot,
+    })
+
+
+@app.route('/api/transactions/upload', methods=['POST'])
+def api_upload_transactions():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded.'}), 400
+
+    file_storage = request.files['file']
+    mode = request.form.get('mode', 'append').lower()
+    if mode not in {'append', 'replace'}:
+        return jsonify({'error': "Mode must be either 'append' or 'replace'."}), 400
+
+    try:
+        content = file_storage.read()
+        parsed_records = parse_transactions_csv(content)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    if not parsed_records:
+        return jsonify({'error': 'No valid transactions found in CSV.'}), 400
+
+    _, preview_holdings = preview_holdings(DATA_STORE, parsed_records, mode)
+    holdings_with_values = fetch_holdings_with_market_values(preview_holdings)
+
+    return jsonify({
+        'status': 'preview',
+        'mode': mode,
+        'uploaded_transactions': parsed_records,
+        'preview_holdings': holdings_with_values,
+    })
+
+
+@app.route('/api/transactions/apply', methods=['POST'])
+def api_apply_transactions():
+    payload = request.get_json(silent=True) or {}
+    mode = str(payload.get('mode', 'append')).lower()
+    transactions_payload = payload.get('transactions')
+    if not isinstance(transactions_payload, list) or not transactions_payload:
+        return jsonify({'error': 'No transactions provided for commit.'}), 400
+
+    if mode not in {'append', 'replace'}:
+        return jsonify({'error': "Mode must be either 'append' or 'replace'."}), 400
+
+    try:
+        if mode == 'replace':
+            holdings = replace_transactions(DATA_STORE, transactions_payload)
+        else:
+            holdings = append_transactions(DATA_STORE, transactions_payload)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    state = load_portfolio_state()
+    save_portfolio_state({'target_allocations': state.get('target_allocations', {})})
+
+    config = load_config()
+    benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
+    snapshot = get_cached_portfolio_snapshot(
+        DATA_STORE,
+        state.get('holdings', []),
+        state.get('target_allocations', {}),
+        benchmark_ticker,
+        refresh_async=True,
+        force_recompute=True,
+    )
+
+    holdings_summary = fetch_holdings_with_market_values(state.get('holdings', []))
+
+    return jsonify({
+        'status': 'ok',
+        'mode': mode,
+        'transactions': load_transactions(DATA_STORE),
+        'holdings': holdings_summary,
+        'snapshot': snapshot,
+    })
 
 
 @app.route('/api/targets', methods=['POST'])

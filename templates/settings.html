@@ -43,48 +43,6 @@
     </div>
 
     <div class="col-12">
-        <div class="card" id="settings-holdings-card">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <div>
-                    <h5 class="mb-1">Portfolio holdings</h5>
-                    <small class="text-muted">Modify holdings data. Changes are stored in <code>portfolio.json</code>.</small>
-                </div>
-                <div class="text-muted small">
-                    Current value: <strong id="settings-current-value">{{ format_currency(snapshot.summary.current_value) }}</strong>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive mb-3">
-                    <table class="table align-middle">
-                        <thead>
-                        <tr>
-                            <th>Ticker</th>
-                            <th>Name</th>
-                            <th>Quantity</th>
-                            <th>Avg cost ({{ currency_context.code }})</th>
-                            <th>Logo URL</th>
-                            <th></th>
-                        </tr>
-                        </thead>
-                        <tbody id="settings-holdings-body"></tbody>
-                    </table>
-                </div>
-                <button class="btn btn-outline-secondary btn-sm mb-3" type="button" id="settings-add-holding">
-                    <i class="bx bx-plus me-1"></i>
-                    Add holding
-                </button>
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <small id="settings-holdings-status" class="text-muted"></small>
-                    <button class="btn btn-primary" type="button" id="settings-save-holdings">
-                        <i class="bx bx-save me-1"></i>
-                        Save holdings
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12">
         <div class="card" id="settings-target-card">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <div>
@@ -189,16 +147,9 @@
 
 {% block scripts %}
 <script>
-    const initialHoldings = {{ holdings_raw|tojson }} || [];
-    let holdingsData = Array.isArray(initialHoldings) ? initialHoldings.slice() : [];
     let targetMap = {{ target_allocations|tojson }} || {};
     let snapshotHoldings = {{ snapshot.holdings|tojson }} || [];
     const currencySettings = {{ currency_settings|tojson }};
-
-    const currencyFormatter = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: currencySettings.code === 'BHD' ? 'BHD' : 'USD'
-    });
 
     let statusHideTimer = null;
 
@@ -222,59 +173,6 @@
         statusHideTimer = setTimeout(() => {
             pill.style.display = 'none';
         }, delay);
-    }
-
-    function convertCurrency(value) {
-        const numeric = Number(value);
-        if (!Number.isFinite(numeric)) {
-            return 0;
-        }
-        return numeric * (Number(currencySettings.rate) || 1);
-    }
-
-    function revertCurrency(value) {
-        const numeric = Number(value);
-        if (!Number.isFinite(numeric)) {
-            return 0;
-        }
-        const rate = Number(currencySettings.rate) || 1;
-        return rate ? numeric / rate : numeric;
-    }
-
-    function formatCurrency(value) {
-        let formatted = currencyFormatter.format(convertCurrency(value));
-        if (currencySettings.code === 'BHD') {
-            formatted = formatted.replace('BHD', currencySettings.symbol).replace(/\u00a0/g, '');
-        }
-        return formatted;
-    }
-
-    function addHoldingRow(holding = {}) {
-        const tbody = document.getElementById('settings-holdings-body');
-        if (!tbody) return;
-        const row = document.createElement('tr');
-        row.classList.add('holding-row');
-        const avgCostDisplay = Number.isFinite(Number(holding.average_cost)) ? convertCurrency(holding.average_cost) : 0;
-        row.innerHTML = `
-            <td><input type="text" class="form-control holding-ticker" value="${holding.ticker || ''}" placeholder="AAPL"></td>
-            <td><input type="text" class="form-control holding-name" value="${holding.name || ''}" placeholder="Company name"></td>
-            <td><input type="number" step="0.0001" class="form-control holding-quantity" value="${Number(holding.quantity || 0)}"></td>
-            <td><input type="number" step="0.01" class="form-control holding-avg-cost" value="${avgCostDisplay.toFixed(4)}"></td>
-            <td><input type="text" class="form-control holding-logo" value="${holding.logo_url || ''}" placeholder="https://..."></td>
-            <td class="text-end"><button type="button" class="btn btn-link text-danger settings-remove-row">Remove</button></td>
-        `;
-        tbody.appendChild(row);
-    }
-
-    function populateHoldingsTable() {
-        const tbody = document.getElementById('settings-holdings-body');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        if (holdingsData.length) {
-            holdingsData.forEach(holding => addHoldingRow(holding));
-        } else {
-            addHoldingRow();
-        }
     }
 
     function getTotalValueFromSnapshot(data) {
@@ -325,64 +223,6 @@
             badge.classList.add('bg-label-warning');
         } else {
             badge.classList.add('bg-label-secondary');
-        }
-    }
-
-    async function saveHoldings() {
-        const statusEl = document.getElementById('settings-holdings-status');
-        const rows = document.querySelectorAll('#settings-holdings-body .holding-row');
-        const payload = [];
-        rows.forEach(row => {
-            const ticker = row.querySelector('.holding-ticker')?.value?.toUpperCase().trim();
-            const quantity = parseFloat(row.querySelector('.holding-quantity')?.value || '0');
-            const avgCostInput = parseFloat(row.querySelector('.holding-avg-cost')?.value || '0');
-            const name = row.querySelector('.holding-name')?.value?.trim();
-            const logo = row.querySelector('.holding-logo')?.value?.trim();
-            payload.push({
-                ticker,
-                quantity: Number.isFinite(quantity) ? quantity : 0,
-                average_cost: Number.isFinite(avgCostInput) ? revertCurrency(avgCostInput) : 0,
-                name,
-                logo_url: logo,
-            });
-        });
-
-        showStatus('Saving settings...');
-        try {
-            const response = await fetch('{{ url_for('api_update_portfolio') }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ holdings: payload })
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to save holdings. Ensure quantities and tickers are valid.');
-            }
-            if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
-                holdingsData = data.snapshot.holdings;
-                targetMap = data.snapshot.target_allocations || targetMap;
-                snapshotHoldings = data.snapshot.holdings;
-                populateHoldingsTable();
-                populateTargetTable();
-                const currentValueEl = document.getElementById('settings-current-value');
-                if (currentValueEl && data.snapshot.summary) {
-                    currentValueEl.textContent = formatCurrency(data.snapshot.summary.current_value || 0);
-                }
-            }
-            if (statusEl) {
-                statusEl.classList.remove('text-danger', 'text-muted');
-                statusEl.classList.add('text-success');
-                statusEl.textContent = 'Holdings saved successfully.';
-            }
-        } catch (error) {
-            console.error(error);
-            if (statusEl) {
-                statusEl.classList.remove('text-success', 'text-muted');
-                statusEl.classList.add('text-danger');
-                statusEl.textContent = error.message || 'Unable to save holdings right now.';
-            }
-        } finally {
-            hideStatus(400);
         }
     }
 
@@ -542,26 +382,6 @@
             generalForm.addEventListener('submit', saveGeneralSettings);
         }
 
-        const addBtn = document.getElementById('settings-add-holding');
-        if (addBtn) {
-            addBtn.addEventListener('click', () => addHoldingRow());
-        }
-
-        const holdingsBody = document.getElementById('settings-holdings-body');
-        if (holdingsBody) {
-            holdingsBody.addEventListener('click', event => {
-                if (event.target.classList.contains('settings-remove-row')) {
-                    const row = event.target.closest('tr');
-                    row?.remove();
-                }
-            });
-        }
-
-        const saveHoldingsBtn = document.getElementById('settings-save-holdings');
-        if (saveHoldingsBtn) {
-            saveHoldingsBtn.addEventListener('click', saveHoldings);
-        }
-
         const targetBody = document.getElementById('settings-target-body');
         if (targetBody) {
             targetBody.addEventListener('input', event => {
@@ -597,7 +417,6 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        populateHoldingsTable();
         populateTargetTable();
         setupEventListeners();
         updateTargetTotalBadge();

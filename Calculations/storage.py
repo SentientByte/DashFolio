@@ -49,6 +49,30 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
 """
 
 
+TRANSACTIONS_TABLE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    price REAL NOT NULL,
+    commission REAL DEFAULT 0
+)
+"""
+
+
+DERIVED_HOLDINGS_TABLE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS derived_holdings (
+    ticker TEXT PRIMARY KEY,
+    quantity REAL NOT NULL,
+    average_cost REAL,
+    total_cost REAL,
+    last_transaction_at TEXT,
+    updated_at TEXT NOT NULL
+)
+"""
+
+
 def ensure_directory(db_path: str) -> None:
     """Ensure the parent directory for the database exists."""
     directory = os.path.dirname(os.path.abspath(db_path))
@@ -81,6 +105,16 @@ def ensure_risk_results_table(conn: sqlite3.Connection) -> None:
 
 def ensure_snapshot_cache_table(conn: sqlite3.Connection) -> None:
     conn.execute(SNAPSHOT_CACHE_TABLE_SCHEMA)
+    conn.commit()
+
+
+def ensure_transactions_table(conn: sqlite3.Connection) -> None:
+    conn.execute(TRANSACTIONS_TABLE_SCHEMA)
+    conn.commit()
+
+
+def ensure_derived_holdings_table(conn: sqlite3.Connection) -> None:
+    conn.execute(DERIVED_HOLDINGS_TABLE_SCHEMA)
     conn.commit()
 
 
