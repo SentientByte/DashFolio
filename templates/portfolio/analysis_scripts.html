@@ -460,6 +460,7 @@
                     <td><span class="fw-semibold">${formatNumber(holding.sharpe_ratio || 0)}</span></td>
                     <td><span class="fw-semibold">${formatPercentPlain(holding.max_drawdown_pct || 0)}</span></td>
                     <td><span class="fw-semibold">${formatNumber(holding.beta_vs_benchmark || 0)}</span></td>
+                    <td><span class="fw-semibold">${formatPercentPlain(holding.ewma_var_pct || 0)}</span></td>
                     <td><span class="fw-semibold">${formatPercentPlain(holding.yield_on_cost_pct || 0)}</span></td>
                 `;
                 kpiBody.appendChild(kpiRow);

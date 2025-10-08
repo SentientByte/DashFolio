@@ -288,7 +288,19 @@ tr.holding-detail-trigger:hover {
 .holding-detail-grid {
     display: grid;
     gap: 1.25rem;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 992px) {
+    .holding-detail-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 576px) {
+    .holding-detail-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .holding-detail-metric .metric-label {
