@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional, Sequence, Set
 
 import pandas as pd
+from pandas.api.types import is_datetime64tz_dtype
 
 from .allocations import normalize_target_allocations
 from .market_data import (
@@ -36,6 +37,19 @@ def _canonical_flow_type(raw: Any) -> FlowKind:
     return value  # type: ignore[return-value]
 
 
+def _to_naive_datetimes(values: Any) -> pd.Series:
+    """Parse ``values`` into timezone-naive pandas datetimes."""
+
+    parsed = pd.to_datetime(values, errors="coerce", utc=False)
+    if isinstance(parsed, pd.Series):
+        series = parsed
+    else:
+        series = pd.Series(parsed, index=getattr(values, "index", None))
+    if is_datetime64tz_dtype(series.dtype):
+        series = series.dt.tz_convert("UTC").dt.tz_localize(None)
+    return series
+
+
 def _extract_flow_days(adjustments: Sequence[Dict[str, Any]] | None) -> Set[str]:
     """Return ISO dates where deposits or withdrawals occurred."""
 
@@ -46,10 +60,15 @@ def _extract_flow_days(adjustments: Sequence[Dict[str, Any]] | None) -> Set[str]
         flow_type = _canonical_flow_type(entry.get("type"))
         if flow_type not in {"deposit", "withdrawal"}:
             continue
-        timestamp = pd.to_datetime(entry.get("timestamp"), utc=False, errors="coerce")
-        if pd.isna(timestamp):
+        timestamp = entry.get("timestamp")
+        if not timestamp:
+            timestamp = entry.get("date")
+        parsed = pd.to_datetime(timestamp, utc=False, errors="coerce")
+        if isinstance(parsed, pd.Timestamp) and parsed.tz is not None:
+            parsed = parsed.tz_convert("UTC").tz_localize(None)
+        if pd.isna(parsed):
             continue
-        days.add(timestamp.normalize().strftime("%Y-%m-%d"))
+        days.add(parsed.normalize().strftime("%Y-%m-%d"))
     return days
 
 
@@ -142,9 +161,7 @@ def _build_daily_performance_history(
 
     tx_df = tx_df.copy()
     if "timestamp" in tx_df.columns:
-        tx_df["timestamp"] = pd.to_datetime(
-            tx_df["timestamp"], utc=True, errors="coerce"
-        ).dt.tz_convert("UTC").dt.tz_localize(None)
+        tx_df["timestamp"] = _to_naive_datetimes(tx_df["timestamp"])
         tx_df.dropna(subset=["timestamp"], inplace=True)
         tx_df.sort_values("timestamp", inplace=True)
         tx_df["date"] = tx_df["timestamp"].dt.normalize()
@@ -173,14 +190,22 @@ def _build_daily_performance_history(
 
     adj_df = adj_df.copy()
     if "timestamp" in adj_df.columns:
-        adj_df["timestamp"] = pd.to_datetime(
-            adj_df["timestamp"], utc=True, errors="coerce"
-        ).dt.tz_convert("UTC").dt.tz_localize(None)
-        adj_df.dropna(subset=["timestamp"], inplace=True)
-        adj_df.sort_values("timestamp", inplace=True)
-        adj_df["date"] = adj_df["timestamp"].dt.normalize()
+        parsed_ts = _to_naive_datetimes(adj_df["timestamp"])
     else:
-        adj_df["date"] = pd.NaT
+        parsed_ts = pd.Series(pd.NaT, index=adj_df.index, dtype="datetime64[ns]")
+
+    if "date" in adj_df.columns:
+        parsed_dates = pd.to_datetime(adj_df["date"], utc=False, errors="coerce")
+        if isinstance(parsed_dates, pd.Series) and is_datetime64tz_dtype(parsed_dates.dtype):
+            parsed_dates = parsed_dates.dt.tz_convert("UTC").dt.tz_localize(None)
+        parsed_dates = parsed_dates.dt.normalize()
+    else:
+        parsed_dates = pd.Series(pd.NaT, index=adj_df.index, dtype="datetime64[ns]")
+
+    adj_df["timestamp"] = parsed_ts
+    adj_df["date"] = parsed_ts.dt.normalize().combine_first(parsed_dates)
+    adj_df.dropna(subset=["date"], inplace=True)
+    adj_df.sort_values(["date", "timestamp"], inplace=True)
 
     def _signed_adjustment(row: pd.Series) -> float:
         if "signed_amount" in row and pd.notna(row["signed_amount"]):
@@ -204,7 +229,7 @@ def _build_daily_performance_history(
         return []
 
     start_date = min(candidate_dates)
-    today = pd.Timestamp.utcnow().normalize()
+    today = pd.Timestamp.utcnow().tz_localize(None).normalize()
     last_tx_date = (
         tx_df.loc[tx_df["date"].notna(), "date"].iloc[-1]
         if not tx_df.empty and tx_df["date"].notna().any()
