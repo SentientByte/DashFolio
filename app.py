@@ -40,6 +40,7 @@ from Calculations.transactions import (
     replace_transactions,
 )
 from Calculations.utils import safe_float
+from services.activity_log import append_log, get_log_entries
 from services.auth import complete_onboarding, load_user_record, login_user_session
 from services.configuration import (
     DEFAULT_SESSION_DURATION,
@@ -68,7 +69,6 @@ from werkzeug.security import check_password_hash, generate_password_hash
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dashfolio-secret-key")
 
-log_output_raw: List[str] = []   # raw stdout lines from main.py
 log_output_table: List[Dict[str, Any]] = [] # parsed table (list of dicts) built from database results
 
 
@@ -523,7 +523,7 @@ def settings():
         config=config,
         currency_settings=currency_settings,
         benchmark_ticker=benchmark_ticker,
-        log_output_raw=log_output_raw,
+        activity_log=get_log_entries(),
         session_durations=SESSION_DURATION_CHOICES,
         active_page='settings',
         page_title='Settings',
@@ -542,6 +542,10 @@ def api_get_portfolio():
     transactions = portfolio_state.get('transactions', [])
     cash_adjustments = portfolio_state.get('cash_adjustments', [])
     force_refresh = str(request.args.get('force', '')).lower() in {'1', 'true', 'yes'}
+    append_log(
+        "Portfolio snapshot API requested "
+        f"(force={'yes' if force_refresh else 'no'})"
+    )
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         holdings,
@@ -985,18 +989,18 @@ def api_delete_cash_adjustment_route(adjustment_id: int):
 def run_main_script():
     """
     Run main.py synchronously using the venv/python specified (VENV_PYTHON).
-    Capture stdout/stderr into log_output_raw and after completion attempt to read the results Excel
-    into log_output_table (list of dicts).
+    Capture stdout/stderr into the in-memory activity log and after completion attempt to read the
+    results into ``log_output_table`` (list of dicts).
     """
-    global log_output_raw, log_output_table
-    log_output_raw = []
+    global log_output_table
     log_output_table = []
 
     if not os.path.exists(MAIN_SCRIPT):
-        log_output_raw.append(f"ERROR: main script not found at {MAIN_SCRIPT}")
+        append_log(f"ERROR: main script not found at {MAIN_SCRIPT}")
         return
 
     # Execute main.py
+    append_log("Launching risk analysis script (main.py)")
     try:
         process = subprocess.Popen(
             [VENV_PYTHON, MAIN_SCRIPT],
@@ -1006,15 +1010,18 @@ def run_main_script():
             cwd=BASE_DIR
         )
     except Exception as e:
-        log_output_raw.append(f"Failed to start process: {e}")
+        append_log(f"Failed to start risk analysis process: {e}")
         return
 
     # Stream stdout lines
-    for line in process.stdout:
-        # store lines (strip trailing newlines for template)
-        log_output_raw.append(line.rstrip('\n'))
+    if process.stdout:
+        for line in process.stdout:
+            message = line.rstrip('\n')
+            if message:
+                append_log(f"[main.py] {message}")
 
-    process.wait()
+    exit_code = process.wait()
+    append_log(f"Risk analysis script completed with exit code {exit_code}")
 
     # Once done, load the latest results from the SQLite database
     try:
@@ -1037,12 +1044,15 @@ def run_main_script():
         if not df.empty:
             df.columns = [str(c) for c in df.columns]
             log_output_table = df.to_dict(orient='records')
+            append_log(
+                f"Loaded {len(log_output_table)} risk analysis rows for period {data_period}"
+            )
         else:
-            log_output_raw.append(
+            append_log(
                 f"Note: no risk analysis results found in database for period {data_period}."
             )
     except Exception as e:
-        log_output_raw.append(f"Error reading results from database: {e}")
+        append_log(f"Error reading results from database: {e}")
 
 # ------------------------------
 # Routes
@@ -1053,8 +1063,8 @@ def risk_analysis():
     return render_template(
         'risk_analysis.html',
         config=config,
-        log_output_raw=log_output_raw,
         log_output_table=log_output_table,
+        activity_log=get_log_entries(),
         active_page='risk',
         page_title='Portfolio Risk Analysis',
         page_subtitle='Stop-loss simulations & VaR insights',
@@ -1063,9 +1073,7 @@ def risk_analysis():
 
 @app.route('/run', methods=['POST'])
 def run():
-    # Make sure any previous logs are cleared and show starting message immediately
-    global log_output_raw
-    log_output_raw = ["Starting calculations..."]
+    append_log("Starting risk analysis calculations...")
     # Run synchronously (Option 1). Will block until main.py completes.
     run_main_script()
     return redirect(url_for('risk_analysis'))

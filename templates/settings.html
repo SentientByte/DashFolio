@@ -11,33 +11,33 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link fw-semibold" id="settings-tab-cash" data-bs-toggle="pill" data-bs-target="#settings-pane-cash" type="button" role="tab" aria-controls="settings-pane-cash" aria-selected="false">
-                    <i class="bx bx-wallet me-1"></i>
-                    Cash adjustments
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link fw-semibold" id="settings-tab-logos" data-bs-toggle="pill" data-bs-target="#settings-pane-logos" type="button" role="tab" aria-controls="settings-pane-logos" aria-selected="false">
-                    <i class="bx bx-image me-1"></i>
-                    Holding logos
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
                 <button class="nav-link fw-semibold" id="settings-tab-targets" data-bs-toggle="pill" data-bs-target="#settings-pane-targets" type="button" role="tab" aria-controls="settings-pane-targets" aria-selected="false">
                     <i class="bx bx-target-lock me-1"></i>
-                    Target allocation
+                    Target Allocation
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link fw-semibold" id="settings-tab-risk" data-bs-toggle="pill" data-bs-target="#settings-pane-risk" type="button" role="tab" aria-controls="settings-pane-risk" aria-selected="false">
                     <i class="bx bx-shield-quarter me-1"></i>
-                    Risk parameters
+                    Risk Parameters
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-semibold" id="settings-tab-logos" data-bs-toggle="pill" data-bs-target="#settings-pane-logos" type="button" role="tab" aria-controls="settings-pane-logos" aria-selected="false">
+                    <i class="bx bx-image me-1"></i>
+                    Holding Logos
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-semibold" id="settings-tab-cash" data-bs-toggle="pill" data-bs-target="#settings-pane-cash" type="button" role="tab" aria-controls="settings-pane-cash" aria-selected="false">
+                    <i class="bx bx-wallet me-1"></i>
+                    Cash Adjustments
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link fw-semibold" id="settings-tab-log" data-bs-toggle="pill" data-bs-target="#settings-pane-log" type="button" role="tab" aria-controls="settings-pane-log" aria-selected="false">
                     <i class="bx bx-notepad me-1"></i>
-                    Application log
+                    Log
                 </button>
             </li>
         </ul>
@@ -96,6 +96,105 @@
                     </div>
                 </div>
             </div>
+            <div class="tab-pane fade" id="settings-pane-targets" role="tabpanel" aria-labelledby="settings-tab-targets">
+                <div class="card" id="settings-target-card">
+                    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div>
+                            <h5 class="mb-1">Target allocation</h5>
+                            <small class="text-muted">Rebalance goals are stored alongside holdings in <code>portfolio.json</code>.</small>
+                        </div>
+                        <span class="badge bg-label-secondary" id="settings-target-total-badge"><span id="settings-target-total">0.00%</span> allocated</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive mb-3">
+                            <table class="table align-middle">
+                                <thead>
+                                <tr>
+                                    <th>Ticker</th>
+                                    <th>Current allocation</th>
+                                    <th>Target %</th>
+                                </tr>
+                                </thead>
+                                <tbody id="settings-target-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <small class="text-muted d-block">Targets persist inside <code>portfolio.json</code>.</small>
+                                <small id="settings-targets-status" class="text-muted"></small>
+                            </div>
+                            <button class="btn btn-primary" type="button" id="settings-save-targets" {% if not snapshot.holdings %}disabled{% endif %}>
+                                <i class="bx bx-target-lock me-1"></i>
+                                Save targets
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="settings-pane-risk" role="tabpanel" aria-labelledby="settings-tab-risk">
+                <div class="card" id="settings-risk-card">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <h5 class="mb-1">Risk parameters</h5>
+                            <small class="text-muted">Control Monte Carlo inputs saved inside <code>config.json</code>.</small>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <form id="settings-risk-form" class="row g-3">
+                            <div class="col-md-4">
+                                <label for="settings-num-simulations" class="form-label">Num simulations</label>
+                                <input type="number" class="form-control" id="settings-num-simulations" value="{{ config['NUM_SIMULATIONS'] }}" min="1">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="settings-confidence-level" class="form-label">Confidence level (0-1)</label>
+                                <input type="number" step="0.01" class="form-control" id="settings-confidence-level" value="{{ '%.2f'|format(config['CONFIDENCE_LEVEL']) }}" min="0" max="1">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="settings-span-ewma" class="form-label">EWMA span</label>
+                                <input type="number" class="form-control" id="settings-span-ewma" value="{{ config['SPAN_EWMA'] }}" min="1">
+                            </div>
+                            <div class="col-12 d-flex justify-content-end gap-2">
+                                <button class="btn btn-primary" type="submit">
+                                    <i class="bx bx-save me-1"></i>
+                                    Save parameters
+                                </button>
+                            </div>
+                        </form>
+                        <div class="alert alert-success mt-3 d-none" role="alert" id="settings-risk-success">Settings saved. Reloading to apply changes…</div>
+                        <div class="alert alert-danger mt-3 d-none" role="alert" id="settings-risk-error"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="settings-pane-logos" role="tabpanel" aria-labelledby="settings-tab-logos">
+                <div class="card" id="settings-logos-card">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <h5 class="mb-1">Holding logos</h5>
+                            <small class="text-muted">Manage optional display names and logo URLs for each ticker.</small>
+                        </div>
+                        <button class="btn btn-primary" type="button" id="settings-save-logos">
+                            <i class="bx bx-save me-1"></i>
+                            Save logos
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive mb-3">
+                            <table class="table align-middle">
+                                <thead>
+                                <tr>
+                                    <th style="min-width: 120px;">Ticker</th>
+                                    <th style="min-width: 200px;">Display name</th>
+                                    <th style="min-width: 240px;">Logo URL</th>
+                                    <th class="text-center" style="width: 80px;">Preview</th>
+                                </tr>
+                                </thead>
+                                <tbody id="settings-logos-body"></tbody>
+                            </table>
+                        </div>
+                        <small id="settings-logos-status" class="text-muted"></small>
+                    </div>
+                </div>
+            </div>
             <div class="tab-pane fade" id="settings-pane-cash" role="tabpanel" aria-labelledby="settings-tab-cash">
                 <div class="card" id="settings-cash-card">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-3">
@@ -148,111 +247,12 @@
                     </div>
                 </div>
             </div>
-            <div class="tab-pane fade" id="settings-pane-logos" role="tabpanel" aria-labelledby="settings-tab-logos">
-                <div class="card" id="settings-logos-card">
-                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                        <div>
-                            <h5 class="mb-1">Holding logos</h5>
-                            <small class="text-muted">Manage optional display names and logo URLs for each ticker.</small>
-                        </div>
-                        <button class="btn btn-primary" type="button" id="settings-save-logos">
-                            <i class="bx bx-save me-1"></i>
-                            Save logos
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive mb-3">
-                            <table class="table align-middle">
-                                <thead>
-                                <tr>
-                                    <th style="min-width: 120px;">Ticker</th>
-                                    <th style="min-width: 200px;">Display name</th>
-                                    <th style="min-width: 240px;">Logo URL</th>
-                                    <th class="text-center" style="width: 80px;">Preview</th>
-                                </tr>
-                                </thead>
-                                <tbody id="settings-logos-body"></tbody>
-                            </table>
-                        </div>
-                        <small id="settings-logos-status" class="text-muted"></small>
-                    </div>
-                </div>
-            </div>
-            <div class="tab-pane fade" id="settings-pane-targets" role="tabpanel" aria-labelledby="settings-tab-targets">
-                <div class="card" id="settings-target-card">
-                    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                        <div>
-                            <h5 class="mb-1">Target allocation</h5>
-                            <small class="text-muted">Rebalance goals are stored alongside holdings in <code>portfolio.json</code>.</small>
-                        </div>
-                        <span class="badge bg-label-secondary" id="settings-target-total-badge"><span id="settings-target-total">0.00%</span> allocated</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive mb-3">
-                            <table class="table align-middle">
-                                <thead>
-                                <tr>
-                                    <th>Ticker</th>
-                                    <th>Current allocation</th>
-                                    <th>Target %</th>
-                                </tr>
-                                </thead>
-                                <tbody id="settings-target-body"></tbody>
-                            </table>
-                        </div>
-                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                            <div>
-                                <small class="text-muted d-block">Targets persist inside <code>portfolio.json</code>.</small>
-                                <small id="settings-targets-status" class="text-muted"></small>
-                            </div>
-                            <button class="btn btn-primary" type="button" id="settings-save-targets" {% if not snapshot.holdings %}disabled{% endif %}>
-                                <i class="bx bx-target-lock me-1"></i>
-                                Save targets
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="tab-pane fade" id="settings-pane-risk" role="tabpanel" aria-labelledby="settings-tab-risk">
-                <div class="card" id="settings-risk-card">
-                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                        <div>
-                            <h5 class="mb-1">Benchmark &amp; risk parameters</h5>
-                            <small class="text-muted">Control Monte Carlo inputs saved inside <code>config.json</code>.</small>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <form id="settings-risk-form" class="row g-3">
-                            <div class="col-md-4">
-                                <label for="settings-num-simulations" class="form-label">Num simulations</label>
-                                <input type="number" class="form-control" id="settings-num-simulations" value="{{ config['NUM_SIMULATIONS'] }}" min="1">
-                            </div>
-                            <div class="col-md-4">
-                                <label for="settings-confidence-level" class="form-label">Confidence level (0-1)</label>
-                                <input type="number" step="0.01" class="form-control" id="settings-confidence-level" value="{{ '%.2f'|format(config['CONFIDENCE_LEVEL']) }}" min="0" max="1">
-                            </div>
-                            <div class="col-md-4">
-                                <label for="settings-span-ewma" class="form-label">EWMA span</label>
-                                <input type="number" class="form-control" id="settings-span-ewma" value="{{ config['SPAN_EWMA'] }}" min="1">
-                            </div>
-                            <div class="col-12 d-flex justify-content-end gap-2">
-                                <button class="btn btn-primary" type="submit">
-                                    <i class="bx bx-save me-1"></i>
-                                    Save parameters
-                                </button>
-                            </div>
-                        </form>
-                        <div class="alert alert-success mt-3 d-none" role="alert" id="settings-risk-success">Settings saved. Reloading to apply changes…</div>
-                        <div class="alert alert-danger mt-3 d-none" role="alert" id="settings-risk-error"></div>
-                    </div>
-                </div>
-            </div>
             <div class="tab-pane fade" id="settings-pane-log" role="tabpanel" aria-labelledby="settings-tab-log">
                 <div class="card" id="settings-log-card">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <div>
-                            <h5 class="mb-1">Application log</h5>
-                            <small class="text-muted">Inspect the most recent console output from risk calculations.</small>
+                            <h5 class="mb-1">Log</h5>
+                            <small class="text-muted">Inspect the most recent application events and background tasks.</small>
                         </div>
                         <button class="btn btn-outline-secondary" type="button" id="settings-toggle-log">
                             <i class="bx bx-show me-1"></i>
@@ -261,12 +261,12 @@
                     </div>
                     <div class="card-body">
                         <div id="settings-log-box" class="log-box" aria-hidden="true">
-                            {% if log_output_raw %}
-                                {% for line in log_output_raw %}
+                            {% if activity_log %}
+                                {% for line in activity_log %}
                                     {{ line }}<br>
                                 {% endfor %}
                             {% else %}
-                                <div class="muted-note mb-0">No log entries available yet. Run calculations from the Risk Analysis page.</div>
+                                <div class="muted-note mb-0">No log entries available yet.</div>
                             {% endif %}
                         </div>
                     </div>

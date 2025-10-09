@@ -8,6 +8,8 @@ from typing import Any, Dict
 import pandas as pd
 import yfinance as yf
 
+from services.activity_log import append_log
+
 from .utils import historical_close, normalize_index, safe_float
 
 
@@ -56,6 +58,8 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
         "rolling_high_250": None,
         "rolling_low_250": None,
     }
+
+    append_log(f"Requesting market snapshot for {ticker} from Yahoo Finance")
 
     try:
         ticker_obj = yf.Ticker(ticker)
@@ -137,7 +141,16 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
                     result["rolling_high_250"] = safe_float(trimmed.max())
                     result["rolling_low_250"] = safe_float(trimmed.min())
     except Exception as exc:
+        append_log(f"Failed to fetch market data for {ticker}: {exc}")
         print(f"Warning: failed to fetch market data for {ticker}: {exc}")
+    else:
+        price_display = result.get("current_price")
+        if isinstance(price_display, (int, float)):
+            append_log(
+                f"Updated {ticker} snapshot · last price {safe_float(price_display):.2f}"
+            )
+        else:
+            append_log(f"Updated {ticker} snapshot with unavailable price data")
 
     return result
 

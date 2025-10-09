@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Literal, Optional, Sequence, Set
 import pandas as pd
 from pandas.api.types import is_datetime64tz_dtype
 
+from services.activity_log import append_log
+
 from .allocations import normalize_target_allocations
 from .market_data import (
     get_benchmark_history,
@@ -94,6 +96,62 @@ def _series_with_flow_days(series: pd.Series, flow_days: Set[str]) -> pd.Series:
     reindexed = series.reindex(combined_index).sort_index()
     reindexed = reindexed.ffill().fillna(0.0)
     return reindexed
+
+
+def _compute_realized_pl(transactions: Sequence[Dict[str, Any]] | None) -> float:
+    """Estimate realised profit or loss from executed transactions."""
+
+    if not transactions:
+        return 0.0
+
+    ledger: Dict[str, Dict[str, float]] = {}
+    realised_total = 0.0
+
+    try:
+        ordered = sorted(transactions, key=lambda item: item.get("timestamp") or "")
+    except Exception:
+        ordered = transactions
+
+    for record in ordered:
+        ticker = str(record.get("ticker", "")).upper().strip()
+        if not ticker:
+            continue
+        qty = safe_float(record.get("quantity"))
+        price = safe_float(record.get("price"))
+        commission = abs(safe_float(record.get("commission")))
+
+        entry = ledger.setdefault(ticker, {"quantity": 0.0, "total_cost": 0.0})
+        quantity = entry["quantity"]
+        total_cost = entry["total_cost"]
+
+        if qty > 0:
+            # Purchase – increase position cost basis.
+            entry["quantity"] = quantity + qty
+            entry["total_cost"] = total_cost + qty * price + commission
+            continue
+
+        sell_amount = abs(qty)
+        if quantity <= 0:
+            # No existing long position to close; treat as new short exposure.
+            entry["quantity"] = quantity - sell_amount
+            entry["total_cost"] = total_cost - sell_amount * price
+            realised_total -= commission
+            continue
+
+        realised_qty = min(sell_amount, quantity)
+        avg_cost = total_cost / quantity if quantity else 0.0
+        realised_total += (price - avg_cost) * realised_qty - commission
+
+        entry["quantity"] = quantity - realised_qty
+        entry["total_cost"] = max(entry["quantity"], 0.0) * avg_cost
+
+        remaining = sell_amount - realised_qty
+        if remaining > 0:
+            # Excess sale opens a short position at the execution price.
+            entry["quantity"] -= remaining
+            entry["total_cost"] -= remaining * price
+
+    return realised_total
 
 
 def _optional_float(value: Any) -> Optional[float]:
@@ -478,6 +536,10 @@ def build_portfolio_snapshot(
     cash_adjustments: List[Dict[str, Any]] | None = None,
     database_path: str | None = None,
 ) -> Dict[str, Any]:
+    append_log(
+        f"Recalculating portfolio snapshot for {len(holdings)} holdings"
+    )
+
     computed_holdings: List[Dict[str, Any]] = []
     total_cost = 0.0
     total_current_value = 0.0
@@ -488,6 +550,7 @@ def build_portfolio_snapshot(
     cash_balance = max(safe_float(cash_balance), 0.0)
     transactions = transactions or []
     cash_adjustments = cash_adjustments or []
+    realized_pl_value = _compute_realized_pl(transactions)
 
     def build_quantity_curves() -> Dict[str, pd.Series]:
         if not transactions:
@@ -758,6 +821,23 @@ def build_portfolio_snapshot(
     total_portfolio_value = invested_current + cash_balance
     total_pl_value = total_portfolio_value - total_cost
     total_pl_pct = (total_pl_value / total_cost * 100) if total_cost else 0.0
+    unrealized_pl_value = sum(
+        safe_float(record.get("pl_value")) for record in computed_holdings
+    )
+    portfolio_beta = 0.0
+    if total_current_value > 0:
+        beta_numerator = 0.0
+        for holding in computed_holdings:
+            weight = safe_float(holding.get("current_value"))
+            beta_component = safe_float(holding.get("beta_vs_benchmark"))
+            beta_numerator += weight * beta_component
+        portfolio_beta = beta_numerator / total_current_value if total_current_value else 0.0
+    portfolio_var_value = sum(
+        safe_float(record.get("ewma_var_value")) for record in computed_holdings
+    )
+    portfolio_var_pct = (
+        (portfolio_var_value / total_current_value) * 100 if total_current_value else 0.0
+    )
 
     summary = {
         "total_cost": total_cost,
@@ -773,6 +853,11 @@ def build_portfolio_snapshot(
         "top_mover": None,
         "cash_balance": cash_balance,
         "invested_value": invested_current,
+        "realized_pl_value": realized_pl_value,
+        "unrealized_pl_value": unrealized_pl_value,
+        "portfolio_beta": portfolio_beta,
+        "portfolio_var_value": portfolio_var_value,
+        "portfolio_var_pct": portfolio_var_pct,
     }
 
     if top_mover:
@@ -832,6 +917,12 @@ def build_portfolio_snapshot(
                 )
         except Exception as exc:
             print(f"Warning: failed to persist performance history: {exc}")
+
+    append_log(
+        "Portfolio snapshot updated · "
+        f"value {total_portfolio_value:.2f} · realised P/L {realized_pl_value:.2f} · "
+        f"unrealised P/L {unrealized_pl_value:.2f}"
+    )
 
     return {
         "summary": summary,
