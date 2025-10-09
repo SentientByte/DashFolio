@@ -1,0 +1,56 @@
+{% extends 'auth_base.html' %}
+{% block title %}Register | DashFolio{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <div class="app-brand justify-content-center mb-4">
+            <a href="{{ url_for('register') }}" class="app-brand-link gap-2">
+                <span class="app-brand-logo demo"><i class="bx bx-pie-chart-alt-2"></i></span>
+                <span class="app-brand-text demo text-body fw-bold">DashFolio</span>
+            </a>
+        </div>
+        <h4 class="mb-1">Create your administrator account 🚀</h4>
+        <p class="mb-4 text-muted">Provide your details to secure access to the dashboard.</p>
+        {% if errors %}
+        <div class="alert alert-danger" role="alert">
+            <ul class="mb-0 ps-3">
+                {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        <form method="post" novalidate>
+            <div class="row g-3">
+                <div class="col-sm-6">
+                    <label for="first_name" class="form-label">First name</label>
+                    <input type="text" class="form-control" id="first_name" name="first_name" value="{{ form_data.get('first_name', '') }}" required autofocus>
+                </div>
+                <div class="col-sm-6">
+                    <label for="last_name" class="form-label">Last name</label>
+                    <input type="text" class="form-control" id="last_name" name="last_name" value="{{ form_data.get('last_name', '') }}" required>
+                </div>
+                <div class="col-sm-6">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" class="form-control" id="username" name="username" value="{{ form_data.get('username', '') }}" autocomplete="username" required>
+                </div>
+                <div class="col-sm-6">
+                    <label for="email" class="form-label">Email address</label>
+                    <input type="email" class="form-control" id="email" name="email" value="{{ form_data.get('email', '') }}" autocomplete="email" required>
+                </div>
+                <div class="col-sm-6">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="password" name="password" autocomplete="new-password" required>
+                    <div class="form-text">Use at least 8 characters.</div>
+                </div>
+                <div class="col-sm-6">
+                    <label for="confirm_password" class="form-label">Confirm password</label>
+                    <input type="password" class="form-control" id="confirm_password" name="confirm_password" autocomplete="new-password" required>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary d-block w-100 mt-4">Register &amp; continue</button>
+        </form>
+        <p class="text-center mt-3 mb-0">
+            Already registered? <a href="{{ url_for('login') }}">Log in</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
