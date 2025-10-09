@@ -5,6 +5,7 @@
     const currencySettings = {{ currency_settings|tojson }};
     const autoRefreshInterval = Math.min(60, Math.max(1, Number({{ config['AUTO_REFRESH_INTERVAL']|default(60) }}) || 60));
     let incomeChart = null;
+    let performanceGauge = null;
     let autoRefreshHandle = null;
     let statusHideTimer = null;
     let latestSnapshot = initialSnapshot;
@@ -21,7 +22,8 @@
         const style = getComputedStyle(document.documentElement);
         const primary = style.getPropertyValue('--bs-primary').trim() || '#696cff';
         const success = style.getPropertyValue('--bs-success').trim() || '#71dd37';
-        return { primary, success };
+        const danger = style.getPropertyValue('--bs-danger').trim() || '#ff3e1d';
+        return { primary, success, danger };
     }
 
     const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -229,6 +231,90 @@
         }
     }
 
+    function destroyPerformanceGauge() {
+        if (performanceGauge) {
+            performanceGauge.destroy();
+            performanceGauge = null;
+        }
+    }
+
+    function renderPerformanceGauge(portfolioValue, benchmarkValue, benchmarkTicker) {
+        const gaugeEl = document.getElementById('performanceGauge');
+        const benchmarkEl = document.getElementById('performance-benchmark');
+
+        if (benchmarkEl) {
+            const tickerLabel = (benchmarkTicker || 'Benchmark').toUpperCase();
+            if (Number.isFinite(benchmarkValue)) {
+                benchmarkEl.textContent = `${tickerLabel} performance ${formatPercentPlain(Number(benchmarkValue))}`;
+            } else {
+                benchmarkEl.textContent = `${tickerLabel} performance N/A`;
+            }
+        }
+
+        if (!gaugeEl) {
+            return;
+        }
+
+        if (!Number.isFinite(portfolioValue)) {
+            destroyPerformanceGauge();
+            gaugeEl.innerHTML = '<div class="text-muted text-center py-4">No performance data yet.</div>';
+            return;
+        }
+
+        const { primary, danger } = getThemeColors();
+        const displayValue = Number(portfolioValue);
+        const normalizedValue = Math.max(0, Math.min(100, Math.abs(displayValue)));
+        const color = displayValue >= 0 ? primary : danger;
+
+        const options = {
+            chart: {
+                type: 'radialBar',
+                height: 240,
+                sparkline: { enabled: true },
+            },
+            series: [normalizedValue],
+            labels: ['Current performance'],
+            colors: [color],
+            plotOptions: {
+                radialBar: {
+                    startAngle: -135,
+                    endAngle: 135,
+                    hollow: { size: '60%' },
+                    track: {
+                        background: '#f1f5f9',
+                        strokeWidth: '100%',
+                    },
+                    dataLabels: {
+                        name: {
+                            offsetY: -10,
+                            color: '#94a3b8',
+                            fontSize: '0.95rem',
+                            fontWeight: 500,
+                        },
+                        value: {
+                            fontSize: '1.75rem',
+                            fontWeight: 600,
+                            formatter: () => formatPercentPlain(displayValue),
+                        },
+                    },
+                },
+            },
+        };
+
+        if (!performanceGauge) {
+            gaugeEl.innerHTML = '';
+            performanceGauge = new ApexCharts(gaugeEl, options);
+            performanceGauge.render();
+        } else {
+            performanceGauge.updateOptions({
+                labels: options.labels,
+                colors: options.colors,
+                plotOptions: options.plotOptions,
+            });
+            performanceGauge.updateSeries(options.series);
+        }
+    }
+
     function renderIncomeChart(performanceData) {
         const chartEl = document.getElementById('incomeChart');
         if (!chartEl) {
@@ -291,6 +377,8 @@
         if (!portfolioPoints.length) {
             destroyIncomeChart();
             chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to display cumulative performance yet.</div>';
+            const latestBenchmark = benchmarkPoints.length ? benchmarkPoints[benchmarkPoints.length - 1].y : null;
+            renderPerformanceGauge(null, latestBenchmark, benchmarkTicker);
             return;
         }
 
@@ -425,6 +513,10 @@
                 yaxis: yAxisAnnotations,
             },
         };
+
+        const latestPortfolio = portfolioPoints.length ? portfolioPoints[portfolioPoints.length - 1].y : null;
+        const latestBenchmark = benchmarkPoints.length ? benchmarkPoints[benchmarkPoints.length - 1].y : null;
+        renderPerformanceGauge(latestPortfolio, latestBenchmark, benchmarkTicker);
 
         if (!incomeChart) {
             chartEl.innerHTML = '';

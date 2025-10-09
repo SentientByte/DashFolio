@@ -473,16 +473,13 @@
 
             const actionsCell = document.createElement('td');
             actionsCell.className = 'text-center';
-            if (editable) {
-                const deleteButton = document.createElement('button');
-                deleteButton.type = 'button';
-                deleteButton.className = 'btn btn-link btn-sm text-danger transaction-delete-row';
-                deleteButton.innerHTML = '<i class="bx bx-trash"></i>';
-                deleteButton.setAttribute('aria-label', 'Delete transaction');
-                actionsCell.appendChild(deleteButton);
-            } else {
-                actionsCell.innerHTML = '<span class="text-muted">—</span>';
-            }
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.className = 'btn btn-icon btn-outline-danger transaction-delete-row';
+            deleteButton.innerHTML = '<i class="icon-base bx bx-trash icon-md"></i>';
+            deleteButton.setAttribute('aria-label', 'Delete transaction');
+            deleteButton.disabled = !editable;
+            actionsCell.appendChild(deleteButton);
             row.appendChild(actionsCell);
 
             tbody.appendChild(row);
