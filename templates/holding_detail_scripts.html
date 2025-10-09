@@ -172,6 +172,10 @@
                 return { value: 0, pct: 0 };
             }
 
+            if (holding.is_historical) {
+                return { value: 0, pct: 0 };
+            }
+
             const quantity = Number(holding.quantity) || 0;
             const currentPrice = Number(holding.current_price);
             const previousCloseSource = isValidNumber(holding.previous_close)
@@ -368,6 +372,15 @@
         }
 
         function buildMetrics(holding) {
+            if (holding?.is_historical) {
+                return [
+                    { label: 'Average cost', value: formatCurrencyOrNA(holding.average_cost) },
+                    { label: 'Average sell price', value: formatCurrencyOrNA(holding.average_sell_price) },
+                    { label: 'Total invested', value: formatCurrencyOrNA(holding.total_cost) },
+                    { label: 'Total proceeds', value: formatCurrencyOrNA(holding.total_sell_value) },
+                    { label: 'Realized P/L', value: formatSignedCurrency(holding.profit_loss) },
+                ];
+            }
             const previousClose = isValidNumber(holding?.previous_close)
                 ? Number(holding.previous_close)
                 : holding.close_price;
@@ -417,11 +430,54 @@
                 logoEl.innerHTML = `<img src="${logoSrc}" alt="${holding.ticker || ''} logo" onerror="this.src='https://via.placeholder.com/64?text=%20';">`;
             }
 
-            if (priceEl) {
-                priceEl.textContent = formatCurrencyOrNA(holding.current_price);
-            }
+            let changeValue = 0;
+            let changePct = 0;
 
-            const { value: changeValue, pct: changePct } = computeTodayChange(holding);
+            if (holding.is_historical) {
+                if (priceEl) {
+                    priceEl.textContent = formatCurrencyOrNA(holding.average_sell_price);
+                }
+                const realizedValue = Number(holding.profit_loss ?? holding.realized_pl_value ?? 0);
+                const totalCost = Number(holding.total_cost ?? 0);
+                const realizedPct = Number.isFinite(Number(holding.realized_pl_pct))
+                    ? Number(holding.realized_pl_pct)
+                    : (totalCost ? (realizedValue / totalCost) * 100 : 0);
+                changeValue = realizedValue;
+                changePct = realizedPct;
+
+                if (metaEl) {
+                    const parts = [];
+                    parts.push(`Quantity ${formatQuantity(holding.quantity || 0)}`);
+                    if (isValidNumber(holding.average_cost)) {
+                        parts.push(`Avg cost ${formatCurrencyOrNA(holding.average_cost)}`);
+                    }
+                    if (isValidNumber(holding.average_sell_price)) {
+                        parts.push(`Avg sell ${formatCurrencyOrNA(holding.average_sell_price)}`);
+                    }
+                    parts.push(`Proceeds ${formatCurrencyOrNA(holding.total_sell_value)}`);
+                    metaEl.textContent = parts.join(' · ');
+                }
+            } else {
+                if (priceEl) {
+                    priceEl.textContent = formatCurrencyOrNA(holding.current_price);
+                }
+                const todayChange = computeTodayChange(holding);
+                changeValue = todayChange.value;
+                changePct = todayChange.pct;
+
+                if (metaEl) {
+                    const parts = [];
+                    parts.push(`Quantity ${formatQuantity(holding.quantity || 0)}`);
+                    if (isValidNumber(holding.average_cost)) {
+                        parts.push(`Avg cost ${formatCurrencyOrNA(holding.average_cost)}`);
+                    }
+                    parts.push(`Allocation ${formatNumber(holding.allocation_pct || 0)}%`);
+                    if (isValidNumber(holding.target_pct)) {
+                        parts.push(`Target ${formatNumber(holding.target_pct)}%`);
+                    }
+                    metaEl.textContent = parts.join(' · ');
+                }
+            }
 
             if (changeEl) {
                 changeEl.textContent = formatSignedCurrency(changeValue);
@@ -433,19 +489,6 @@
                 changePctEl.textContent = `(${formatPercent(changePct)})`;
                 changePctEl.classList.toggle('detail-positive', changePct > 0);
                 changePctEl.classList.toggle('detail-negative', changePct < 0);
-            }
-
-            if (metaEl) {
-                const parts = [];
-                parts.push(`Quantity ${formatQuantity(holding.quantity || 0)}`);
-                if (isValidNumber(holding.average_cost)) {
-                    parts.push(`Avg cost ${formatCurrencyOrNA(holding.average_cost)}`);
-                }
-                parts.push(`Allocation ${formatNumber(holding.allocation_pct || 0)}%`);
-                if (isValidNumber(holding.target_pct)) {
-                    parts.push(`Target ${formatNumber(holding.target_pct)}%`);
-                }
-                metaEl.textContent = parts.join(' · ');
             }
 
             if (metricsEl) {

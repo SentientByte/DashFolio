@@ -61,6 +61,7 @@
                             <th>Quantity</th>
                             <th>Price</th>
                             <th>Commission</th>
+                            <th class="text-center" style="width: 80px;">Actions</th>
                         </tr>
                         </thead>
                         <tbody id="transactions-table-body"></tbody>
@@ -427,14 +428,6 @@
             timestampInput.value = toInputDate(record.timestamp);
             timestampInput.disabled = !editable;
             timestampWrapper.appendChild(timestampInput);
-            if (editable) {
-                const removeButton = document.createElement('button');
-                removeButton.type = 'button';
-                removeButton.className = 'btn btn-text text-danger transaction-remove-row';
-                removeButton.innerHTML = '<i class="bx bx-trash"></i>';
-                removeButton.setAttribute('aria-label', 'Remove row');
-                timestampWrapper.appendChild(removeButton);
-            }
             timestampCell.appendChild(timestampWrapper);
             row.appendChild(timestampCell);
 
@@ -477,6 +470,20 @@
             commissionInput.disabled = !editable;
             commissionCell.appendChild(commissionInput);
             row.appendChild(commissionCell);
+
+            const actionsCell = document.createElement('td');
+            actionsCell.className = 'text-center';
+            if (editable) {
+                const deleteButton = document.createElement('button');
+                deleteButton.type = 'button';
+                deleteButton.className = 'btn btn-link btn-sm text-danger transaction-delete-row';
+                deleteButton.innerHTML = '<i class="bx bx-trash"></i>';
+                deleteButton.setAttribute('aria-label', 'Delete transaction');
+                actionsCell.appendChild(deleteButton);
+            } else {
+                actionsCell.innerHTML = '<span class="text-muted">—</span>';
+            }
+            row.appendChild(actionsCell);
 
             tbody.appendChild(row);
 
@@ -797,7 +804,7 @@
 
         if (tableBody) {
             tableBody.addEventListener('click', event => {
-                const removeButton = event.target.closest('.transaction-remove-row');
+                const removeButton = event.target.closest('.transaction-delete-row');
                 if (!removeButton) {
                     return;
                 }

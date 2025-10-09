@@ -635,17 +635,27 @@ def _build_daily_performance_history(
         previous_value = portfolio_value
 
     filtered_history: List[Dict[str, float]] = []
-    has_started = False
-    for idx, entry in enumerate(history):
+    series_started = False
+    for entry in history:
         had_market_price = bool(entry.pop("_had_market_price", False))
         had_benchmark_price = bool(entry.pop("_had_benchmark_price", False))
         had_activity = bool(entry.pop("_had_activity", False))
         portfolio_value = safe_float(entry.get("portfolio_value"))
 
-        if had_market_price or had_activity or abs(portfolio_value) > 1e-9:
-            has_started = True
+        meaningful = (
+            had_market_price
+            or had_benchmark_price
+            or had_activity
+            or abs(portfolio_value) > 1e-9
+        )
 
-        if idx == 0 or had_market_price or had_benchmark_price or had_activity or has_started:
+        if not series_started:
+            if meaningful:
+                series_started = True
+                filtered_history.append(entry)
+            continue
+
+        if had_market_price or had_benchmark_price or had_activity:
             filtered_history.append(entry)
 
     return filtered_history
@@ -909,17 +919,24 @@ def build_portfolio_snapshot(
         invested_series = _series_with_flow_days(invested_series, flow_days)
 
     if invested_series is not None and not invested_series.empty:
-        invested_current = float(invested_series.iloc[-1])
-        previous_invested = float(invested_series.iloc[-2]) if len(invested_series) > 1 else None
+        invested_reference_current = float(invested_series.iloc[-1])
+        previous_invested = (
+            float(invested_series.iloc[-2]) if len(invested_series) > 1 else None
+        )
         weekly_reference_value = historical_close(invested_series, 7)
         monthly_reference_value = historical_close(invested_series, 30)
     else:
-        invested_current = total_current_value
+        invested_reference_current = None
         previous_invested = None
         weekly_reference_value = None
         monthly_reference_value = None
 
-    dod_value = invested_current - previous_invested if previous_invested is not None else 0.0
+    invested_current = total_current_value
+    reference_current = (
+        invested_reference_current if invested_reference_current is not None else invested_current
+    )
+
+    dod_value = reference_current - previous_invested if previous_invested is not None else 0.0
     dod_pct = (
         (dod_value / previous_invested) * 100
         if previous_invested is not None and previous_invested != 0
@@ -927,7 +944,7 @@ def build_portfolio_snapshot(
     )
 
     weekly_change_value = (
-        invested_current - weekly_reference_value if weekly_reference_value is not None else 0.0
+        reference_current - weekly_reference_value if weekly_reference_value is not None else 0.0
     )
     weekly_change_pct = (
         (weekly_change_value / weekly_reference_value) * 100
@@ -936,7 +953,7 @@ def build_portfolio_snapshot(
     )
 
     monthly_change_value = (
-        invested_current - monthly_reference_value if monthly_reference_value is not None else 0.0
+        reference_current - monthly_reference_value if monthly_reference_value is not None else 0.0
     )
     monthly_change_pct = (
         (monthly_change_value / monthly_reference_value) * 100
