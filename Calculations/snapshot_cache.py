@@ -52,6 +52,25 @@ def _canonical_holdings(holdings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return canonical
 
 
+def _canonical_metadata(metadata: List[Dict[str, Any]] | None) -> List[Dict[str, Any]]:
+    if not metadata:
+        return []
+    canonical: List[Dict[str, Any]] = []
+    for entry in metadata:
+        ticker = str(entry.get("ticker", "")).upper().strip()
+        if not ticker:
+            continue
+        canonical.append(
+            {
+                "ticker": ticker,
+                "logo_url": str(entry.get("logo_url", "") or "").strip(),
+                "name": str(entry.get("name", "") or "").strip(),
+            }
+        )
+    canonical.sort(key=lambda item: item["ticker"])
+    return canonical
+
+
 def _canonical_targets(targets: Dict[str, Any] | None) -> Dict[str, float]:
     if not targets:
         return {}
@@ -136,6 +155,7 @@ def _generate_cache_key(
     cash_balance: float,
     transactions: List[Dict[str, Any]] | None,
     cash_adjustments: List[Dict[str, Any]] | None,
+    holdings_metadata: List[Dict[str, Any]] | None,
 ) -> Tuple[str, str]:
     canonical_payload = {
         "benchmark": (benchmark or "").upper().strip(),
@@ -144,6 +164,7 @@ def _generate_cache_key(
         "cash": round(safe_float(cash_balance), 6),
         "transactions": _canonical_transactions(transactions),
         "cash_adjustments": _canonical_cash_adjustments(cash_adjustments),
+        "metadata": _canonical_metadata(holdings_metadata),
     }
     encoded = json.dumps(canonical_payload, sort_keys=True, separators=(",", ":"))
     cache_key = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -171,6 +192,7 @@ def _refresh_worker(
     cash_balance: float,
     transactions: List[Dict[str, Any]] | None,
     cash_adjustments: List[Dict[str, Any]] | None,
+    holdings_metadata: List[Dict[str, Any]] | None,
 ) -> None:
     try:
         snapshot = build_portfolio_snapshot(
@@ -181,6 +203,7 @@ def _refresh_worker(
             transactions=transactions,
             cash_adjustments=cash_adjustments,
             database_path=db_path,
+            holdings_metadata=holdings_metadata,
         )
         with connect(db_path) as conn:
             ensure_snapshot_cache_table(conn)
@@ -203,6 +226,7 @@ def _schedule_refresh_if_needed(
     transactions: List[Dict[str, Any]] | None,
     cash_adjustments: List[Dict[str, Any]] | None,
     existing_timestamp: Optional[str],
+    holdings_metadata: List[Dict[str, Any]] | None,
 ) -> None:
     if not _should_refresh(existing_timestamp):
         return
@@ -222,6 +246,7 @@ def _schedule_refresh_if_needed(
                 cash_balance,
                 transactions,
                 cash_adjustments,
+                holdings_metadata,
             ),
             daemon=True,
         )
@@ -237,6 +262,7 @@ def get_portfolio_snapshot(
     cash_balance: float = 0.0,
     transactions: List[Dict[str, Any]] | None = None,
     cash_adjustments: List[Dict[str, Any]] | None = None,
+    holdings_metadata: List[Dict[str, Any]] | None = None,
     *,
     refresh_async: bool = True,
     force_recompute: bool = False,
@@ -250,7 +276,13 @@ def get_portfolio_snapshot(
     """
 
     cache_key, fingerprint = _generate_cache_key(
-        holdings, targets, benchmark, cash_balance, transactions, cash_adjustments
+        holdings,
+        targets,
+        benchmark,
+        cash_balance,
+        transactions,
+        cash_adjustments,
+        holdings_metadata,
     )
     cached_snapshot: Optional[Dict[str, Any]] = None
     cached_generated_at: Optional[str] = None
@@ -272,6 +304,7 @@ def get_portfolio_snapshot(
             transactions=transactions,
             cash_adjustments=cash_adjustments,
             database_path=db_path,
+            holdings_metadata=holdings_metadata,
         )
         cached_snapshot = snapshot
         cached_generated_at = snapshot.get("generated_at")
@@ -290,6 +323,7 @@ def get_portfolio_snapshot(
             transactions,
             cash_adjustments,
             cached_generated_at,
+            holdings_metadata,
         )
 
     if force_recompute and refresh_async:
@@ -306,6 +340,7 @@ def get_portfolio_snapshot(
             transactions,
             cash_adjustments,
             cached_generated_at,
+            holdings_metadata,
         )
 
     return cached_snapshot
