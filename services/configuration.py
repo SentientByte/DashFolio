@@ -60,11 +60,11 @@ def load_config() -> Dict[str, Any]:
         interval = int(config.get("AUTO_REFRESH_INTERVAL", 60))
     except (TypeError, ValueError):
         interval = 60
-    if interval < 5:
-        interval = 5
+    if interval < 1:
+        interval = 1
         updated = True
-    elif interval > 900:
-        interval = 900
+    elif interval > 60:
+        interval = 60
         updated = True
     config["AUTO_REFRESH_INTERVAL"] = interval
 

@@ -803,11 +803,11 @@ def api_update_config():
     if 'auto_refresh_interval' in payload:
         try:
             value = int(payload.get('auto_refresh_interval'))
-            if value < 5 or value > 900:
+            if value < 1 or value > 60:
                 raise ValueError
             config['AUTO_REFRESH_INTERVAL'] = value
         except (TypeError, ValueError):
-            errors.append('Auto refresh interval must be between 5 seconds and 900 seconds.')
+            errors.append('Auto refresh interval must be between 1 second and 60 seconds.')
 
     if 'session_duration_hours' in payload:
         try:

@@ -15,6 +15,26 @@ body {
     color: #34495e;
 }
 
+.authentication-wrapper.authentication-basic {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    background-color: var(--layout-bg);
+}
+
+.authentication-inner {
+    width: 100%;
+    max-width: 420px;
+}
+
+.authentication-inner .card {
+    box-shadow: var(--card-shadow);
+    border-radius: 1rem;
+    margin: 0;
+}
+
 .layout-wrapper {
     min-height: 100vh;
 }
