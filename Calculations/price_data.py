@@ -200,30 +200,34 @@ def load_price_data(
                     )
                 )
 
-            need_download = ticker_data.empty
-            request_start = start_date_str
-            refresh_all = ticker_data.empty
+            desired_start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            download_ranges = []
 
-            if not ticker_data.empty:
-                earliest = ticker_data.index.min()
-                latest = ticker_data.index.max()
+            if ticker_data.empty:
+                if desired_start_date <= today_date:
+                    download_ranges.append((desired_start_date, today_date))
+            else:
+                earliest = ticker_data.index.min().date()
+                latest = ticker_data.index.max().date()
 
-                if earliest > pd.to_datetime(start_date_str):
-                    print(
-                        f"{ticker} local data starts at {earliest.date()}, "
-                        f"which is after requested start {start_date_str}. Will refresh from {start_date_str}."
-                    )
-                    need_download = True
-                    refresh_all = True
-                    request_start = start_date_str
-                elif latest.strftime("%Y-%m-%d") < today_str:
-                    need_download = True
-                    refresh_all = False
-                    request_start = (latest + timedelta(days=1)).strftime("%Y-%m-%d")
+                if earliest > desired_start_date:
+                    missing_end = earliest - timedelta(days=1)
+                    if missing_end >= desired_start_date:
+                        download_ranges.append((desired_start_date, missing_end))
+                        print(
+                            f"{ticker} local data starts at {earliest}, which is after requested start {desired_start_date}. "
+                            f"Requesting backfill through {missing_end}."
+                        )
 
-            if need_download:
-                request_end_date = today_date + timedelta(days=1)
-                request_end = request_end_date.strftime("%Y-%m-%d")
+                if latest < today_date:
+                    download_ranges.append((latest + timedelta(days=1), today_date))
+
+            for range_start, range_end in download_ranges:
+                if range_start > range_end:
+                    continue
+
+                request_start = range_start.strftime("%Y-%m-%d")
+                request_end = (range_end + timedelta(days=1)).strftime("%Y-%m-%d")
                 print(
                     f"Requesting {ticker} data from {request_start} to {request_end} (exclusive)..."
                 )
@@ -238,20 +242,8 @@ def load_price_data(
                     new_data = _flatten_columns(new_data)
                     new_data.reset_index(inplace=True)
                     new_data = _flatten_columns(new_data)
-                    if refresh_all:
-                        conn.execute("DELETE FROM price_data WHERE ticker = ?", (ticker,))
                     _persist_price_rows(conn, ticker, new_data)
                     conn.commit()
-                    ticker_data = _load_local_data(conn, ticker)
-                    if not ticker_data.empty:
-                        print(
-                            "Stored %s data in SQLite. New range: %s -> %s"
-                            % (
-                                ticker,
-                                ticker_data.index.min().date(),
-                                ticker_data.index.max().date(),
-                            )
-                        )
                 else:
                     range_info = (
                         ticker_data.index.min() if not ticker_data.empty else "none"
@@ -266,6 +258,18 @@ def load_price_data(
                     print(
                         "Warning: No new data returned for %s. Current local range (if any): %s.%s"
                         % (ticker, range_info, reason)
+                    )
+
+            if download_ranges:
+                ticker_data = _load_local_data(conn, ticker)
+                if not ticker_data.empty:
+                    print(
+                        "Stored %s data in SQLite. New range: %s -> %s"
+                        % (
+                            ticker,
+                            ticker_data.index.min().date(),
+                            ticker_data.index.max().date(),
+                        )
                     )
 
             if ticker_data.empty:

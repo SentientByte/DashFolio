@@ -3,7 +3,7 @@
     const initialSnapshot = {{ snapshot|tojson }} || {};
     const initialPerformanceData = initialSnapshot.performance_index || [];
     const currencySettings = {{ currency_settings|tojson }};
-    const autoRefreshInterval = Math.min(900, Math.max(5, Number({{ config['AUTO_REFRESH_INTERVAL']|default(60) }}) || 60));
+    const autoRefreshInterval = Math.min(60, Math.max(1, Number({{ config['AUTO_REFRESH_INTERVAL']|default(60) }}) || 60));
     let incomeChart = null;
     let autoRefreshHandle = null;
     let statusHideTimer = null;

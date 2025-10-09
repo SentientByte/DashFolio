@@ -63,8 +63,8 @@
                         <form id="settings-general-form" class="row g-4 align-items-end">
                             <div class="col-md-6 col-xl-5">
                                 <label for="settings-auto-refresh" class="form-label">Auto refresh interval (seconds)</label>
-                                <input type="number" class="form-control" id="settings-auto-refresh" value="{{ config['AUTO_REFRESH_INTERVAL'] }}" min="5" max="900" step="1" required>
-                                <div class="form-text">Applies to price and valuation data on the Portfolio Overview page (5 sec – 15 min).</div>
+                                <input type="number" class="form-control" id="settings-auto-refresh" value="{{ config['AUTO_REFRESH_INTERVAL'] }}" min="1" max="60" step="1" required>
+                                <div class="form-text">Applies to price and valuation data on the Portfolio Overview page (1 sec – 1 min).</div>
                             </div>
                             <div class="col-md-6 col-xl-5">
                                 <label for="settings-benchmark" class="form-label">Benchmark ticker</label>
