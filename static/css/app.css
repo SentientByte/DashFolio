@@ -400,6 +400,62 @@ tr.holding-detail-trigger:hover {
     z-index: 1200;
 }
 
+.performance-gauge-tile {
+    border: 1px solid var(--bs-border-color, #e0e6ed);
+    border-radius: 18px;
+    padding: 1.5rem;
+    background-color: var(--bs-body-bg, #fff);
+    box-shadow: 0 12px 30px rgba(52, 71, 103, 0.08);
+}
+
+.performance-gauge-chart {
+    min-height: 240px;
+}
+
+.performance-gauge-chart #performanceGauge {
+    width: 100%;
+    min-height: 240px;
+}
+
+.performance-gauge-stats {
+    margin-top: 1.5rem;
+}
+
+#performance-gauge-summary {
+    font-size: 1.05rem;
+}
+
+.performance-gauge-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    font-size: 1.1rem;
+}
+
+.performance-gauge-icon-primary {
+    background: rgba(105, 108, 255, 0.12);
+    color: #696cff;
+}
+
+.performance-gauge-icon-info {
+    background: rgba(10, 207, 254, 0.12);
+    color: #0acffe;
+}
+
+@media (max-width: 575.98px) {
+    .performance-gauge-tile {
+        padding: 1.25rem;
+    }
+
+    .performance-gauge-chart,
+    .performance-gauge-chart #performanceGauge {
+        min-height: 220px;
+    }
+}
+
 #status-pill img {
     width: 24px;
     height: 24px;

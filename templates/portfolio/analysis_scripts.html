@@ -241,9 +241,29 @@
     function renderPerformanceGauge(portfolioValue, benchmarkValue, benchmarkTicker) {
         const gaugeEl = document.getElementById('performanceGauge');
         const benchmarkEl = document.getElementById('performance-benchmark');
+        const summaryEl = document.getElementById('performance-gauge-summary');
+        const portfolioYearEl = document.getElementById('performance-portfolio-year');
+        const benchmarkYearEl = document.getElementById('performance-benchmark-year');
+        const gaugeYearButton = document.getElementById('performance-gauge-year');
 
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        if (gaugeYearButton) {
+            gaugeYearButton.textContent = currentYear;
+        }
+        if (portfolioYearEl) {
+            portfolioYearEl.textContent = currentYear;
+        }
+        if (benchmarkYearEl) {
+            benchmarkYearEl.textContent = currentYear - 1;
+        }
+
+        if (!gaugeEl) {
+            return;
+        }
+
+        const tickerLabel = (benchmarkTicker || 'Benchmark').toUpperCase();
         if (benchmarkEl) {
-            const tickerLabel = (benchmarkTicker || 'Benchmark').toUpperCase();
             if (Number.isFinite(benchmarkValue)) {
                 benchmarkEl.textContent = `${tickerLabel} performance ${formatPercentPlain(Number(benchmarkValue))}`;
             } else {
@@ -251,13 +271,20 @@
             }
         }
 
-        if (!gaugeEl) {
-            return;
-        }
-
         if (!Number.isFinite(portfolioValue)) {
             destroyPerformanceGauge();
             gaugeEl.innerHTML = '<div class="text-muted text-center py-4">No performance data yet.</div>';
+            if (summaryEl) {
+                summaryEl.textContent = 'Company growth unavailable';
+            }
+            const portfolioValueEl = document.getElementById('performance-portfolio-value');
+            if (portfolioValueEl) {
+                portfolioValueEl.textContent = '--';
+            }
+            const benchmarkValueEl = document.getElementById('performance-benchmark-value');
+            if (benchmarkValueEl) {
+                benchmarkValueEl.textContent = '--';
+            }
             return;
         }
 
@@ -265,39 +292,64 @@
         const displayValue = Number(portfolioValue);
         const normalizedValue = Math.max(0, Math.min(100, Math.abs(displayValue)));
         const color = displayValue >= 0 ? primary : danger;
+        const gradientStart = displayValue >= 0 ? '#c6c9ff' : '#ffcbc2';
+        const gaugeLabel = displayValue >= 0 ? 'Growth' : 'Decline';
+
+        if (summaryEl) {
+            const descriptor = displayValue >= 0 ? 'Company growth' : 'Company decline';
+            summaryEl.textContent = `${formatPercentPlain(displayValue)} ${descriptor}`;
+        }
 
         const options = {
             chart: {
                 type: 'radialBar',
-                height: 240,
+                height: 260,
                 sparkline: { enabled: true },
             },
             series: [normalizedValue],
-            labels: ['Current performance'],
-            colors: [color],
+            labels: [gaugeLabel],
+            colors: [gradientStart],
+            strokeDashArray: 6,
             plotOptions: {
                 radialBar: {
-                    startAngle: -135,
-                    endAngle: 135,
-                    hollow: { size: '60%' },
+                    startAngle: -140,
+                    endAngle: 140,
+                    hollow: {
+                        size: '58%',
+                    },
                     track: {
-                        background: '#f1f5f9',
-                        strokeWidth: '100%',
+                        background: 'rgba(105, 108, 255, 0.08)',
+                        strokeWidth: '65%',
+                        margin: 8,
                     },
                     dataLabels: {
                         name: {
-                            offsetY: -10,
+                            offsetY: 20,
                             color: '#94a3b8',
                             fontSize: '0.95rem',
                             fontWeight: 500,
                         },
                         value: {
-                            fontSize: '1.75rem',
-                            fontWeight: 600,
+                            offsetY: -18,
+                            fontSize: '2.25rem',
+                            fontWeight: 700,
                             formatter: () => formatPercentPlain(displayValue),
                         },
                     },
                 },
+            },
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shade: 'light',
+                    shadeIntensity: 0.25,
+                    gradientToColors: [color],
+                    inverseColors: false,
+                    stops: [0, 100],
+                },
+            },
+            stroke: {
+                lineCap: 'round',
             },
         };
 
@@ -310,6 +362,9 @@
                 labels: options.labels,
                 colors: options.colors,
                 plotOptions: options.plotOptions,
+                strokeDashArray: options.strokeDashArray,
+                fill: options.fill,
+                stroke: options.stroke,
             });
             performanceGauge.updateSeries(options.series);
         }
@@ -545,6 +600,17 @@
 
         document.getElementById('metric-total-cost').textContent = formatCurrency(summary.total_cost || 0);
         document.getElementById('metric-current-value').textContent = formatCurrency(summary.current_value || 0);
+
+        const gaugePortfolioValueEl = document.getElementById('performance-portfolio-value');
+        if (gaugePortfolioValueEl) {
+            gaugePortfolioValueEl.textContent = formatCompactCurrency(summary.current_value || 0);
+        }
+
+        const gaugeBenchmarkValueEl = document.getElementById('performance-benchmark-value');
+        if (gaugeBenchmarkValueEl) {
+            const investedValue = Number(summary.total_cost || summary.invested_value || 0);
+            gaugeBenchmarkValueEl.textContent = formatCompactCurrency(investedValue);
+        }
 
         const totalPlEl = document.getElementById('metric-total-pl');
         if (totalPlEl) {
