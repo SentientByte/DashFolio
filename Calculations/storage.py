@@ -10,6 +10,20 @@ from typing import Iterator, Optional, Sequence, Tuple
 import json
 from datetime import datetime, timezone
 
+USER_TABLE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT,
+    onboarding_completed INTEGER NOT NULL DEFAULT 0
+)
+"""
+
 PRICE_TABLE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS price_data (
     ticker TEXT NOT NULL,
@@ -124,8 +138,80 @@ def ensure_price_table(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def ensure_user_table(conn: sqlite3.Connection) -> None:
+    conn.execute(USER_TABLE_SCHEMA)
+    conn.commit()
+
+
 def ensure_risk_results_table(conn: sqlite3.Connection) -> None:
     conn.execute(RISK_RESULTS_TABLE_SCHEMA)
+    conn.commit()
+
+
+def read_single_user(conn: sqlite3.Connection) -> Optional[dict]:
+    cursor = conn.execute(
+        """
+        SELECT id, first_name, last_name, username, email, password_hash, created_at, last_login_at, onboarding_completed
+        FROM users
+        ORDER BY id
+        LIMIT 1
+        """
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "id": int(row[0]),
+        "first_name": row[1],
+        "last_name": row[2],
+        "username": row[3],
+        "email": row[4],
+        "password_hash": row[5],
+        "created_at": row[6],
+        "last_login_at": row[7],
+        "onboarding_completed": bool(row[8]),
+    }
+
+
+def insert_single_user(
+    conn: sqlite3.Connection,
+    *,
+    first_name: str,
+    last_name: str,
+    username: str,
+    email: str,
+    password_hash: str,
+    created_at: Optional[datetime] = None,
+) -> None:
+    timestamp = (created_at or datetime.now(timezone.utc)).isoformat()
+    conn.execute(
+        """
+        INSERT INTO users (id, first_name, last_name, username, email, password_hash, created_at, onboarding_completed)
+        VALUES (1, ?, ?, ?, ?, ?, ?, 0)
+        """,
+        (first_name, last_name, username, email, password_hash, timestamp),
+    )
+    conn.commit()
+
+
+def update_user_last_login(
+    conn: sqlite3.Connection, user_id: int, *, at: Optional[datetime] = None
+) -> None:
+    timestamp = (at or datetime.now(timezone.utc)).isoformat()
+    conn.execute(
+        "UPDATE users SET last_login_at = ? WHERE id = ?",
+        (timestamp, int(user_id)),
+    )
+    conn.commit()
+
+
+def update_user_onboarding_status(
+    conn: sqlite3.Connection, completed: bool
+) -> None:
+    conn.execute(
+        "UPDATE users SET onboarding_completed = ? WHERE id = 1",
+        (1 if completed else 0,),
+    )
     conn.commit()
 
 

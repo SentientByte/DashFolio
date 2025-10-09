@@ -71,6 +71,19 @@
                                 <input type="text" class="form-control" id="settings-benchmark" value="{{ benchmark_ticker }}" placeholder="SPY" autocomplete="off">
                                 <div class="form-text">Used for performance comparisons across the app.</div>
                             </div>
+                            <div class="col-md-6 col-xl-5">
+                                <label for="settings-session-duration" class="form-label">Session duration</label>
+                                <select id="settings-session-duration" class="form-select">
+                                    {% for option in session_durations %}
+                                        {% if option == 0 %}
+                                            <option value="0" {% if config['SESSION_DURATION_HOURS'] == 0 %}selected{% endif %}>Only this browser session</option>
+                                        {% else %}
+                                            <option value="{{ option }}" {% if config['SESSION_DURATION_HOURS'] == option %}selected{% endif %}>{{ option }} hour{% if option != 1 %}s{% endif %}</option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Controls how long login cookies remain valid. Choose 0 to end the session when the browser closes.</div>
+                            </div>
                             <div class="col-12 d-flex align-items-end justify-content-md-end">
                                 <button class="btn btn-primary ms-md-auto" type="submit">
                                     <i class="bx bx-save me-1"></i>
@@ -763,13 +776,16 @@
         const currencyToggle = document.getElementById('settings-currency-toggle');
         const autoRefreshInput = document.getElementById('settings-auto-refresh');
         const benchmarkInput = document.getElementById('settings-benchmark');
+        const sessionDurationSelect = document.getElementById('settings-session-duration');
         const intervalValue = parseInt(autoRefreshInput?.value, 10);
         const benchmarkValue = benchmarkInput?.value?.trim();
+        const sessionDurationValue = parseInt(sessionDurationSelect?.value, 10);
 
         const payload = {
             currency: currencyToggle?.checked ? 'BHD' : 'USD',
             auto_refresh_interval: Number.isFinite(intervalValue) ? intervalValue : undefined,
             benchmark_ticker: benchmarkValue,
+            session_duration_hours: Number.isFinite(sessionDurationValue) ? sessionDurationValue : undefined,
         };
 
         showStatus('Saving settings...');

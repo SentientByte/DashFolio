@@ -1,0 +1,64 @@
+{% extends 'layout.html' %}
+{% block title %}Onboarding | DashFolio{% endblock %}
+{% block content %}
+<div class="row g-4">
+    <div class="col-12">
+        <div class="alert alert-info" role="alert">
+            <strong>Step 3 of 3:</strong> Upload your transaction CSV to populate the portfolio. You can also skip this step and import data later from the Transactions page.
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-1">Upload transaction history</h5>
+                    <small class="text-muted">Accepts CSV files with columns for Symbol, Date/Time, Quantity, Price, and optional Commission.</small>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if error %}
+                <div class="alert alert-danger" role="alert">{{ error }}</div>
+                {% endif %}
+                <form method="post" enctype="multipart/form-data" class="row g-3" novalidate>
+                    <input type="hidden" name="action" value="upload">
+                    <div class="col-12">
+                        <label for="csv-file" class="form-label">Choose CSV file</label>
+                        <input class="form-control" type="file" id="csv-file" name="csv_file" accept=".csv,text/csv" required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="upload-mode" class="form-label">Import mode</label>
+                        <select id="upload-mode" name="mode" class="form-select">
+                            <option value="replace" selected>Replace existing transactions</option>
+                            <option value="append">Append to existing transactions</option>
+                        </select>
+                    </div>
+                    <div class="col-12 d-flex justify-content-md-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bx bx-upload me-1"></i>
+                            Upload &amp; finish
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-1">Need more time?</h5>
+                <small class="text-muted">You currently have {{ transaction_count }} saved transaction{{ transaction_count != 1 and 's' or '' }}.</small>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">If you prefer to configure the portfolio later, you can skip for now. You will always be able to upload data from the Transactions page once inside the dashboard.</p>
+            </div>
+            <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <p class="mb-0 text-muted small">You can always import transactions later from the dashboard once onboarding is complete.</p>
+                <form method="post" class="ms-auto">
+                    <input type="hidden" name="action" value="skip">
+                    <button type="submit" class="btn btn-success">Skip &amp; enter dashboard</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

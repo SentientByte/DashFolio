@@ -1,139 +1,75 @@
 from flask import (
     Flask,
+    g,
+    jsonify,
+    redirect,
     render_template,
     request,
-    redirect,
+    session,
     url_for,
-    jsonify,
 )
-import json
+import os
+import sqlite3
 import subprocess
 import sys
-import os
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from app_paths import BASE_DIR, DATA_STORE, MAIN_SCRIPT, VENV_PYTHON
 from Calculations.allocations import normalize_target_allocations
 from Calculations.snapshot_cache import get_portfolio_snapshot as get_cached_portfolio_snapshot
-from Calculations.storage import connect, ensure_risk_results_table
+from Calculations.storage import (
+    connect,
+    ensure_risk_results_table,
+    ensure_user_table,
+    insert_single_user,
+)
 from Calculations.transactions import (
+    add_cash_adjustment,
     append_transactions,
     fetch_holdings_with_market_values,
-    add_cash_adjustment,
-    load_cash_balance,
     load_cash_adjustments,
+    load_cash_balance,
     load_current_holdings,
     load_transactions,
     parse_transactions_csv,
-    remove_cash_adjustment,
     preview_holdings as build_preview_holdings,
+    remove_cash_adjustment,
     replace_transactions,
 )
 from Calculations.utils import safe_float
+from services.auth import complete_onboarding, load_user_record, login_user_session
+from services.configuration import (
+    DEFAULT_SESSION_DURATION,
+    SESSION_DURATION_CHOICES,
+    apply_session_duration,
+    ensure_default_config_file,
+    get_currency_context,
+    load_config,
+    save_config,
+)
+from services.formatting import (
+    format_currency_value,
+    format_signed_currency_value,
+    format_snapshot_update,
+)
+from services.portfolio import (
+    ensure_default_portfolio_file,
+    load_portfolio_file,
+    load_portfolio_state,
+    save_portfolio_file,
+    save_portfolio_state,
+)
+from werkzeug.security import check_password_hash, generate_password_hash
 
-# ------------------------------
-# Paths & constants
-# ------------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Prefer venv python if available, otherwise use current interpreter
-VENV_PYTHON = os.path.join(BASE_DIR, 'venv', 'Scripts', 'python.exe')
-if not os.path.exists(VENV_PYTHON):
-    # fallback to current python interpreter (this ensures we run with an interpreter that has deps)
-    VENV_PYTHON = sys.executable
-
-MAIN_SCRIPT = os.path.join(BASE_DIR, 'main.py')
-CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
-PORTFOLIO_FILE = os.path.join(BASE_DIR, 'portfolio.json')
-DATA_STORE = os.path.join(BASE_DIR, 'dashfolio.db')
-
-USD_TO_BHD = 0.376081
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dashfolio-secret-key")
+
 log_output_raw: List[str] = []   # raw stdout lines from main.py
 log_output_table: List[Dict[str, Any]] = [] # parsed table (list of dicts) built from database results
-
-
-def get_currency_context(config: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    if config is None:
-        config = load_config()
-
-    currency = str(config.get("CURRENCY", "USD")).upper()
-    if currency not in {"USD", "BHD"}:
-        currency = "USD"
-
-    rate = USD_TO_BHD if currency == "BHD" else 1.0
-    symbol = "BD" if currency == "BHD" else "$"
-    return {
-        "code": currency,
-        "symbol": symbol,
-        "rate": rate,
-        "symbol_first": True,
-    }
-
-
-def format_currency_value(value: Any, currency_context: Dict[str, Any]) -> str:
-    try:
-        numeric_value = float(value)
-    except (TypeError, ValueError):
-        numeric_value = 0.0
-
-    converted = numeric_value * currency_context.get("rate", 1.0)
-    symbol = currency_context.get("symbol", "$")
-    decimals = currency_context.get("decimals", 2)
-    formatted = f"{converted:,.{decimals}f}"
-    return f"{symbol}{formatted}" if currency_context.get("symbol_first", True) else f"{formatted}{symbol}"
-
-
-def format_signed_currency_value(value: Any, currency_context: Dict[str, Any]) -> str:
-    try:
-        numeric_value = float(value)
-    except (TypeError, ValueError):
-        numeric_value = 0.0
-
-    prefix = "+" if numeric_value > 0 else ("-" if numeric_value < 0 else "")
-    absolute = abs(numeric_value)
-    formatted = format_currency_value(absolute, currency_context)
-    if prefix:
-        return f"{prefix}{formatted}"
-    return formatted
-
-
-def format_snapshot_update(timestamp: Any) -> str:
-    try:
-        if not timestamp:
-            raise ValueError("missing timestamp")
-        if isinstance(timestamp, datetime):
-            parsed = timestamp.astimezone(timezone.utc)
-        else:
-            parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            else:
-                parsed = parsed.astimezone(timezone.utc)
-    except Exception:
-        return "Updated: Recently"
-
-    now = datetime.now(timezone.utc)
-    delta = now - parsed
-
-    if delta.total_seconds() < 60:
-        return "Updated: Recently"
-
-    if delta.total_seconds() < 3600:
-        minutes = max(int(delta.total_seconds() // 60), 1)
-        return f"Updated: {minutes} min ago"
-
-    if delta.total_seconds() < 86400:
-        hours = max(int(delta.total_seconds() // 3600), 1)
-        suffix = "hour" if hours == 1 else "hours"
-        return f"Updated: {hours} {suffix} ago"
-
-    utc_plus_three = timezone(timedelta(hours=3))
-    localized = parsed.astimezone(utc_plus_three)
-    formatted = localized.strftime("%Y-%m-%d %H:%M:%S")
-    return f"Updated: {formatted} UTC+3"
 
 
 @app.context_processor
@@ -146,148 +82,321 @@ def inject_global_helpers():
         "format_currency": lambda value, ctx=currency_context: format_currency_value(value, ctx),
         "format_signed_currency": lambda value, ctx=currency_context: format_signed_currency_value(value, ctx),
         "format_snapshot_update": format_snapshot_update,
+        "current_user": getattr(g, 'user', None),
+        "is_authenticated": getattr(g, 'is_authenticated', False),
     }
 
 # ------------------------------
-# Ensure config file exists
+# Application bootstrap
 # ------------------------------
-if not os.path.exists(CONFIG_FILE):
-    default_config = {
-        "DATA_PERIOD": "1y",
-        "CUSTOM_START_DATE": "2024-01-01",
-        "STOP_LOSS_PERCENTAGE_RANGE": [1, 2],
-        "STOP_LOSS_STEP": 0.2,
-        "NUM_SIMULATIONS": 10000,
-        "CONFIDENCE_LEVEL": 0.95,
-        "SPAN_EWMA": 60,
-        "BENCHMARK_TICKER": "SPY",
-        "CURRENCY": "USD",
-        "AUTO_REFRESH_INTERVAL": 60,
-    }
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(default_config, f, indent=4)
-    print(f"Created default config file: {CONFIG_FILE}")
+ensure_default_config_file()
+ensure_default_portfolio_file()
+apply_session_duration(app, load_config())
 
-if not os.path.exists(PORTFOLIO_FILE):
-    default_portfolio = {
-        "holdings": [],
-        "target_allocations": {}
-    }
-    with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
-        json.dump(default_portfolio, f, indent=4)
-    print(f"Created default portfolio file: {PORTFOLIO_FILE}")
 
 # ------------------------------
-# Helper functions
+# Authentication guards
 # ------------------------------
-def load_config():
-    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-        config = json.load(f)
-
-    defaults = {
-        "BENCHMARK_TICKER": "SPY",
-        "CURRENCY": "USD",
-        "AUTO_REFRESH_INTERVAL": 60,
-    }
-    updated = False
-    for key, value in defaults.items():
-        if key not in config:
-            config[key] = value
-            updated = True
-
-    try:
-        interval = int(config.get("AUTO_REFRESH_INTERVAL", 60))
-    except (TypeError, ValueError):
-        interval = 60
-    if interval < 5:
-        interval = 5
-        updated = True
-    elif interval > 900:
-        interval = 900
-        updated = True
-    config["AUTO_REFRESH_INTERVAL"] = interval
-
-    if updated:
-        save_config(config)
-
-    return config
 
 
-def save_config(config):
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(config, f, indent=4)
+@app.before_request
+def enforce_single_user_access() -> Optional[Any]:
+    endpoint = request.endpoint or ""
+    if endpoint.startswith("static"):
+        return None
+
+    user = load_user_record(DATA_STORE)
+    g.user = user
+    session_user_id = session.get('user_id')
+    g.is_authenticated = bool(user and session_user_id == user.get('id'))
+
+    if user is None:
+        if endpoint != 'register':
+            return redirect(url_for('register'))
+        return None
+
+    if not g.is_authenticated:
+        if endpoint == 'register':
+            return redirect(url_for('login'))
+        if endpoint != 'login':
+            return redirect(url_for('login'))
+        return None
+
+    if endpoint in {'login', 'register'}:
+        if user.get('onboarding_completed'):
+            return redirect(url_for('portfolio_analysis'))
+        return redirect(url_for('onboarding_deposits'))
+
+    if not user.get('onboarding_completed'):
+        allowed = {'onboarding_deposits', 'onboarding_upload', 'logout'}
+        if endpoint not in allowed:
+            return redirect(url_for('onboarding_deposits'))
+
+    return None
 
 
-def load_portfolio_file() -> Dict[str, Any]:
-    if os.path.exists(PORTFOLIO_FILE):
-        with open(PORTFOLIO_FILE, 'r', encoding='utf-8') as f:
-            try:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    data.setdefault('holdings', [])
-                    data.setdefault('target_allocations', {})
-                    return data
-            except json.JSONDecodeError:
-                pass
-    return {'holdings': [], 'target_allocations': {}}
+# ------------------------------
+# Authentication & onboarding routes
+# ------------------------------
 
 
-def save_portfolio_file(payload: Dict[str, Any]) -> None:
-    with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
-        json.dump(payload, f, indent=4)
-
-
-def load_portfolio_state() -> Dict[str, Any]:
-    raw = load_portfolio_file()
-    metadata_lookup: Dict[str, Dict[str, Any]] = {}
-    for entry in raw.get('holdings', []):
-        ticker = str(entry.get('ticker', '')).upper().strip()
-        if not ticker:
-            continue
-        metadata_lookup[ticker] = {
-            'ticker': ticker,
-            'logo_url': entry.get('logo_url'),
-            'name': entry.get('name'),
-        }
-
-    holdings = load_current_holdings(DATA_STORE)
-    transactions = load_transactions(DATA_STORE)
-    cash_adjustments = load_cash_adjustments(DATA_STORE)
-    for holding in holdings:
-        ticker = str(holding.get('ticker', '')).upper()
-        if not ticker:
-            continue
-        meta = metadata_lookup.get(ticker)
-        if not meta:
-            continue
-        if meta.get('logo_url'):
-            holding['logo_url'] = meta['logo_url']
-        if meta.get('name'):
-            holding['name'] = meta['name']
-
-    normalized_targets = normalize_target_allocations(
-        holdings,
-        raw.get('target_allocations'),
-    )
-    cash_balance = load_cash_balance(DATA_STORE)
-    metadata_list = sorted(metadata_lookup.values(), key=lambda item: item['ticker'])
+def _registration_form_data() -> Dict[str, str]:
     return {
-        'holdings': holdings,
-        'target_allocations': normalized_targets,
-        'cash_balance': cash_balance,
-        'metadata': metadata_list,
-        'transactions': transactions,
-        'cash_adjustments': cash_adjustments,
+        'first_name': request.form.get('first_name', '').strip(),
+        'last_name': request.form.get('last_name', '').strip(),
+        'username': request.form.get('username', '').strip(),
+        'email': request.form.get('email', '').strip(),
     }
 
 
-def save_portfolio_state(data: Dict[str, Any]) -> None:
-    payload = load_portfolio_file()
-    if 'target_allocations' in data:
-        payload['target_allocations'] = data.get('target_allocations', {})
-    if 'holdings' in data:
-        payload['holdings'] = data.get('holdings', [])
-    save_portfolio_file(payload)
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if g.get('user'):
+        if g.get('is_authenticated'):
+            if g.user.get('onboarding_completed'):
+                return redirect(url_for('portfolio_analysis'))
+            return redirect(url_for('onboarding_deposits'))
+        return redirect(url_for('login'))
+
+    errors: List[str] = []
+    form_data = _registration_form_data() if request.method == 'POST' else {
+        'first_name': '',
+        'last_name': '',
+        'username': '',
+        'email': '',
+    }
+
+    if request.method == 'POST':
+        first_name = form_data['first_name']
+        last_name = form_data['last_name']
+        username = form_data['username']
+        email = form_data['email']
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if not first_name:
+            errors.append('First name is required.')
+        if not last_name:
+            errors.append('Last name is required.')
+        if not username:
+            errors.append('Username is required.')
+        if not email or '@' not in email:
+            errors.append('A valid email address is required.')
+        if not password or len(password) < 8:
+            errors.append('Password must be at least 8 characters long.')
+        if password != confirm_password:
+            errors.append('Password confirmation does not match.')
+
+        if not errors:
+            password_hash = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
+            try:
+                with connect(DATA_STORE) as conn:
+                    ensure_user_table(conn)
+                    insert_single_user(
+                        conn,
+                        first_name=first_name,
+                        last_name=last_name,
+                        username=username,
+                        email=email,
+                        password_hash=password_hash,
+                    )
+            except sqlite3.IntegrityError:
+                errors.append('A user account has already been created. Please log in instead.')
+            else:
+                user = load_user_record(DATA_STORE)
+                if user:
+                    login_user_session(app, DATA_STORE, user)
+                    g.user = user
+                    g.is_authenticated = True
+                    return redirect(url_for('onboarding_deposits'))
+                return redirect(url_for('login'))
+
+    return render_template(
+        'register.html',
+        errors=errors,
+        form_data=form_data,
+        snapshot=None,
+        active_page=None,
+        page_title='Create account',
+        page_subtitle='Step 1 of 3: Register your administrator account',
+    )
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if g.user is None:
+        return redirect(url_for('register'))
+    if g.get('is_authenticated'):
+        if g.user.get('onboarding_completed'):
+            return redirect(url_for('portfolio_analysis'))
+        return redirect(url_for('onboarding_deposits'))
+
+    errors: List[str] = []
+    username_value = ''
+
+    if request.method == 'POST':
+        username_value = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        if not username_value:
+            errors.append('Username is required.')
+        if not password:
+            errors.append('Password is required.')
+
+        if not errors:
+            user = g.user or load_user_record(DATA_STORE)
+            if user and user.get('username', '').lower() == username_value.lower() and check_password_hash(user.get('password_hash', ''), password):
+                login_user_session(app, DATA_STORE, user)
+                g.user = user
+                g.is_authenticated = True
+                if user.get('onboarding_completed'):
+                    return redirect(url_for('portfolio_analysis'))
+                return redirect(url_for('onboarding_deposits'))
+            errors.append('Invalid username or password.')
+
+    return render_template(
+        'login.html',
+        errors=errors,
+        username=username_value,
+        snapshot=None,
+        active_page=None,
+        page_title='Welcome back',
+        page_subtitle='Log in to continue to DashFolio',
+    )
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+
+@app.route('/onboarding/deposits', methods=['GET', 'POST'])
+def onboarding_deposits():
+    if not g.get('is_authenticated'):
+        return redirect(url_for('login'))
+
+    errors: List[str] = []
+    success_message: Optional[str] = None
+    form_timestamp = request.form.get('timestamp') if request.method == 'POST' else None
+    form_amount = request.form.get('amount') if request.method == 'POST' else None
+
+    default_timestamp = datetime.now().replace(microsecond=0).strftime('%Y-%m-%dT%H:%M')
+
+    deposits = [adj for adj in load_cash_adjustments(DATA_STORE) if adj.get('type') == 'deposit']
+    cash_balance = load_cash_balance(DATA_STORE)
+
+    if request.method == 'POST':
+        raw_amount = (form_amount or '').strip()
+        raw_timestamp = (form_timestamp or '').strip()
+
+        try:
+            amount_value = float(raw_amount)
+        except (TypeError, ValueError):
+            errors.append('Enter a numeric amount for the deposit.')
+            amount_value = 0.0
+        else:
+            if amount_value <= 0:
+                errors.append('Deposit amount must be greater than zero.')
+
+        if raw_timestamp:
+            try:
+                timestamp_value = datetime.fromisoformat(raw_timestamp)
+            except ValueError:
+                errors.append('Provide a valid deposit date and time.')
+                timestamp_value = None
+        else:
+            timestamp_value = datetime.now()
+
+        if not errors and timestamp_value is not None:
+            try:
+                adjustments, cash_balance = add_cash_adjustment(
+                    DATA_STORE,
+                    {
+                        'timestamp': timestamp_value.replace(microsecond=0).isoformat(),
+                        'amount': amount_value,
+                        'type': 'deposit',
+                    },
+                )
+            except ValueError as exc:
+                errors.append(str(exc))
+            else:
+                deposits = [adj for adj in adjustments if adj.get('type') == 'deposit']
+                success_message = 'Deposit recorded successfully.'
+                form_timestamp = None
+                form_amount = None
+
+    deposit_total = sum(safe_float(entry.get('amount')) for entry in deposits)
+
+    return render_template(
+        'onboarding_deposits.html',
+        deposits=deposits,
+        deposit_total=deposit_total,
+        cash_balance=cash_balance,
+        errors=errors,
+        success_message=success_message,
+        form_timestamp=form_timestamp or default_timestamp,
+        form_amount=form_amount or '',
+        snapshot=None,
+        active_page=None,
+        page_title='Record initial deposits',
+        page_subtitle='Step 2 of 3: Capture your starting cash position',
+    )
+
+
+@app.route('/onboarding/upload', methods=['GET', 'POST'])
+def onboarding_upload():
+    if not g.get('is_authenticated'):
+        return redirect(url_for('login'))
+
+    error: Optional[str] = None
+
+    if request.method == 'POST':
+        action = request.form.get('action', 'upload')
+        if action == 'skip':
+            complete_onboarding(DATA_STORE)
+            return redirect(url_for('portfolio_analysis'))
+
+        file_storage = request.files.get('csv_file')
+        mode = request.form.get('mode', 'replace').lower()
+        if mode not in {'append', 'replace'}:
+            mode = 'replace'
+
+        if not file_storage or not file_storage.filename:
+            error = 'Choose a CSV file to upload.'
+        else:
+            try:
+                records = parse_transactions_csv(file_storage.read())
+            except ValueError as exc:
+                error = str(exc)
+            else:
+                if not records:
+                    error = 'No valid transactions found in the uploaded file.'
+                else:
+                    try:
+                        if mode == 'append':
+                            append_transactions(DATA_STORE, records)
+                        else:
+                            replace_transactions(DATA_STORE, records)
+                    except ValueError as exc:
+                        error = str(exc)
+                    else:
+                        state = load_portfolio_state(DATA_STORE)
+                        save_portfolio_state(DATA_STORE, {'target_allocations': state.get('target_allocations', {})})
+                        complete_onboarding(DATA_STORE)
+                        return redirect(url_for('portfolio_analysis'))
+
+    existing_transactions = load_transactions(DATA_STORE)
+
+    return render_template(
+        'onboarding_upload.html',
+        error=error,
+        transaction_count=len(existing_transactions),
+        snapshot=None,
+        active_page=None,
+        page_title='Upload transaction history',
+        page_subtitle='Step 3 of 3: Import your trades or skip for later',
+    )
 
 
 # ------------------------------
@@ -299,7 +408,7 @@ def portfolio_analysis():
     currency_settings = get_currency_context(config)
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
 
-    portfolio_state = load_portfolio_state()
+    portfolio_state = load_portfolio_state(DATA_STORE)
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
     cash_balance = portfolio_state.get('cash_balance', 0.0)
@@ -332,7 +441,7 @@ def allocation_planner():
     currency_settings = get_currency_context(config)
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
 
-    portfolio_state = load_portfolio_state()
+    portfolio_state = load_portfolio_state(DATA_STORE)
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
     cash_balance = portfolio_state.get('cash_balance', 0.0)
@@ -364,7 +473,7 @@ def transactions_page():
     config = load_config()
     currency_settings = get_currency_context(config)
     transactions = load_transactions(DATA_STORE)
-    portfolio_state = load_portfolio_state()
+    portfolio_state = load_portfolio_state(DATA_STORE)
     holdings = portfolio_state.get('holdings', [])
     holdings_summary = fetch_holdings_with_market_values(holdings)
     cash_balance = portfolio_state.get('cash_balance', 0.0)
@@ -388,7 +497,7 @@ def settings():
     currency_settings = get_currency_context(config)
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
 
-    portfolio_state = load_portfolio_state()
+    portfolio_state = load_portfolio_state(DATA_STORE)
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
     cash_balance = portfolio_state.get('cash_balance', 0.0)
@@ -415,6 +524,7 @@ def settings():
         currency_settings=currency_settings,
         benchmark_ticker=benchmark_ticker,
         log_output_raw=log_output_raw,
+        session_durations=SESSION_DURATION_CHOICES,
         active_page='settings',
         page_title='Settings',
         page_subtitle='Manage portfolio configuration & preferences',
@@ -425,7 +535,7 @@ def settings():
 def api_get_portfolio():
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
-    portfolio_state = load_portfolio_state()
+    portfolio_state = load_portfolio_state(DATA_STORE)
     holdings = portfolio_state.get('holdings', [])
     targets = portfolio_state.get('target_allocations', {})
     cash_balance = portfolio_state.get('cash_balance', 0.0)
@@ -449,7 +559,7 @@ def api_get_portfolio():
 @app.route('/api/transactions', methods=['GET'])
 def api_get_transactions():
     transactions = load_transactions(DATA_STORE)
-    portfolio_state = load_portfolio_state()
+    portfolio_state = load_portfolio_state(DATA_STORE)
     holdings = portfolio_state.get('holdings', [])
     holdings_summary = fetch_holdings_with_market_values(holdings)
     cash_balance = portfolio_state.get('cash_balance', 0.0)
@@ -473,8 +583,8 @@ def api_save_transactions():
         return jsonify({'error': str(exc)}), 400
 
     # Persist updated allocation targets with the new holdings universe.
-    state = load_portfolio_state()
-    save_portfolio_state({'target_allocations': state.get('target_allocations', {})})
+    state = load_portfolio_state(DATA_STORE)
+    save_portfolio_state(DATA_STORE, {'target_allocations': state.get('target_allocations', {})})
 
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
@@ -553,8 +663,8 @@ def api_apply_transactions():
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 
-    state = load_portfolio_state()
-    save_portfolio_state({'target_allocations': state.get('target_allocations', {})})
+    state = load_portfolio_state(DATA_STORE)
+    save_portfolio_state(DATA_STORE, {'target_allocations': state.get('target_allocations', {})})
 
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
@@ -592,7 +702,7 @@ def api_update_targets():
 
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
-    state = load_portfolio_state()
+    state = load_portfolio_state(DATA_STORE)
     holdings = state.get('holdings', [])
     if not holdings:
         return jsonify({'error': 'No holdings available to assign targets'}), 400
@@ -620,7 +730,7 @@ def api_update_targets():
         proposed_targets.setdefault(ticker, 0.0)
 
     normalized = normalize_target_allocations(holdings, proposed_targets)
-    save_portfolio_state({
+    save_portfolio_state(DATA_STORE, {
         'target_allocations': normalized,
         'holdings': state.get('metadata', []),
     })
@@ -699,10 +809,20 @@ def api_update_config():
         except (TypeError, ValueError):
             errors.append('Auto refresh interval must be between 5 seconds and 900 seconds.')
 
+    if 'session_duration_hours' in payload:
+        try:
+            value = int(payload.get('session_duration_hours'))
+            if value not in SESSION_DURATION_CHOICES:
+                raise ValueError
+            config['SESSION_DURATION_HOURS'] = value
+        except (TypeError, ValueError):
+            errors.append('Session duration must be one of 0, 4, 12, 24, or 48 hours.')
+
     if errors:
         return jsonify({'status': 'error', 'errors': errors}), 400
 
     save_config(config)
+    apply_session_duration(app, config)
     currency_settings = get_currency_context(config)
 
     return jsonify({
@@ -714,6 +834,7 @@ def api_update_config():
             'SPAN_EWMA': config.get('SPAN_EWMA'),
             'CURRENCY': config.get('CURRENCY'),
             'AUTO_REFRESH_INTERVAL': config.get('AUTO_REFRESH_INTERVAL'),
+            'SESSION_DURATION_HOURS': config.get('SESSION_DURATION_HOURS'),
         },
         'currency': currency_settings,
     })
@@ -761,7 +882,7 @@ def api_update_logos():
     portfolio_payload['holdings'] = updated_metadata
     save_portfolio_file(portfolio_payload)
 
-    state = load_portfolio_state()
+    state = load_portfolio_state(DATA_STORE)
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
     cash_balance = state.get('cash_balance', 0.0)
@@ -791,7 +912,7 @@ def api_update_logos():
 @app.route('/api/cash-adjustments', methods=['GET'])
 def api_get_cash_adjustments():
     adjustments = load_cash_adjustments(DATA_STORE)
-    state = load_portfolio_state()
+    state = load_portfolio_state(DATA_STORE)
     return jsonify({
         'adjustments': adjustments,
         'cash_balance': state.get('cash_balance', 0.0),
@@ -806,7 +927,7 @@ def api_add_cash_adjustment_route():
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 
-    state = load_portfolio_state()
+    state = load_portfolio_state(DATA_STORE)
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
     cash_balance = state.get('cash_balance', 0.0)
@@ -837,7 +958,7 @@ def api_delete_cash_adjustment_route(adjustment_id: int):
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 
-    state = load_portfolio_state()
+    state = load_portfolio_state(DATA_STORE)
     config = load_config()
     benchmark_ticker = config.get('BENCHMARK_TICKER', 'SPY')
     cash_balance = state.get('cash_balance', 0.0)
