@@ -16,6 +16,7 @@
             range: '6M',
             defaultRange: '6M',
             rangeButtons: [],
+            activeTicker: null,
         };
 
         function updateFormatter() {
@@ -83,6 +84,7 @@
                 state.chartData = [];
                 state.range = state.defaultRange;
                 setActiveRangeButton(state.range);
+                state.activeTicker = null;
             });
 
             return true;
@@ -96,6 +98,12 @@
                 state.modal = new bootstrap.Modal(state.elements.modalEl);
             }
             return state.modal;
+        }
+
+        function isModalVisible() {
+            return Boolean(
+                state.elements.modalEl && state.elements.modalEl.classList.contains('show')
+            );
         }
 
         function applyCurrencyConversion(value) {
@@ -343,14 +351,19 @@
                         state.holdings.set(String(key).toUpperCase(), value);
                     }
                 });
-                return;
-            }
-            if (Array.isArray(holdings)) {
+            } else if (Array.isArray(holdings)) {
                 holdings.forEach(holding => {
                     if (holding && holding.ticker) {
                         state.holdings.set(String(holding.ticker).toUpperCase(), holding);
                     }
                 });
+            }
+
+            if (state.activeTicker && isModalVisible()) {
+                const activeHolding = state.holdings.get(state.activeTicker);
+                if (activeHolding) {
+                    populateHoldingDetail(activeHolding, { preserveRange: true });
+                }
             }
         }
 
@@ -370,7 +383,7 @@
             ];
         }
 
-        function populateHoldingDetail(holding) {
+        function populateHoldingDetail(holding, options = {}) {
             if (!ensureElements()) {
                 return;
             }
@@ -385,6 +398,9 @@
                 metaEl,
                 metricsEl,
             } = state.elements;
+
+            const preserveRange = options.preserveRange === true;
+            const previousRange = state.range;
 
             if (titleEl) {
                 titleEl.textContent = holding.ticker || '';
@@ -443,7 +459,11 @@
             }
 
             state.chartData = Array.isArray(holding.price_history) ? holding.price_history : [];
-            state.range = state.defaultRange;
+            if (preserveRange && previousRange) {
+                state.range = previousRange;
+            } else {
+                state.range = state.defaultRange;
+            }
             setRange(state.range);
         }
 
@@ -453,6 +473,9 @@
                 return;
             }
             populateHoldingDetail(holding);
+            state.activeTicker = holding && holding.ticker
+                ? String(holding.ticker).toUpperCase()
+                : null;
             modal.show();
         }
 
@@ -463,6 +486,7 @@
             const normalized = String(ticker).toUpperCase();
             const holding = state.holdings.get(normalized);
             if (holding) {
+                state.activeTicker = normalized;
                 openHolding(holding);
             }
         }

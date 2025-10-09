@@ -65,3 +65,52 @@
         </div>
     </div>
 </div>
+<div class="row g-4 mb-4" id="risk-metrics-row">
+    <div class="col-sm-6 col-xl-3">
+        {% set realized_value = snapshot.summary.realized_pl_value %}
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <span class="metric-label">Realized Profit / Loss</span>
+                <h5 class="metric-value {{ 'metric-positive' if realized_value >= 0 else 'metric-negative' }}" id="metric-realized-pl">
+                    {{ format_signed_currency(realized_value) }}
+                </h5>
+                <p class="metric-subvalue mb-0">Closed positions and cash activity</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        {% set unrealized_value = snapshot.summary.unrealized_pl_value %}
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <span class="metric-label">Unrealized Profit / Loss</span>
+                <h5 class="metric-value {{ 'metric-positive' if unrealized_value >= 0 else 'metric-negative' }}" id="metric-unrealized-pl">
+                    {{ format_signed_currency(unrealized_value) }}
+                </h5>
+                <p class="metric-subvalue mb-0">Mark-to-market gains across holdings</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        {% set portfolio_beta = snapshot.summary.portfolio_beta %}
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <span class="metric-label">Portfolio Beta</span>
+                <h5 class="metric-value" id="metric-portfolio-beta">{{ '%.2f'|format(portfolio_beta) }}</h5>
+                <p class="metric-subvalue mb-0">Weighted vs {{ benchmark_ticker }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        {% set portfolio_var_value = snapshot.summary.portfolio_var_value %}
+        {% set portfolio_var_pct = snapshot.summary.portfolio_var_pct %}
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <span class="metric-label">Portfolio VaR</span>
+                <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2">
+                    <h5 class="metric-value mb-0" id="metric-portfolio-var-value">{{ format_currency(portfolio_var_value) }}</h5>
+                </div>
+                <p class="metric-subvalue mb-0" id="metric-portfolio-var-pct">VaR (95%): {{ '%.2f'|format(portfolio_var_pct) }}%</p>
+            </div>
+        </div>
+    </div>
+</div>

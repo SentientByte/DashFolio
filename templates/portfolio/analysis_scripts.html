@@ -474,6 +474,37 @@
             cashEl.textContent = `Cash balance: ${formatCurrency(summary.cash_balance || 0)}`;
         }
 
+        const realizedPlEl = document.getElementById('metric-realized-pl');
+        if (realizedPlEl) {
+            const realizedValue = Number(summary.realized_pl_value || 0);
+            realizedPlEl.textContent = formatSignedCurrency(realizedValue);
+            realizedPlEl.classList.toggle('metric-positive', realizedValue >= 0);
+            realizedPlEl.classList.toggle('metric-negative', realizedValue < 0);
+        }
+
+        const unrealizedPlEl = document.getElementById('metric-unrealized-pl');
+        if (unrealizedPlEl) {
+            const unrealizedValue = Number(summary.unrealized_pl_value || 0);
+            unrealizedPlEl.textContent = formatSignedCurrency(unrealizedValue);
+            unrealizedPlEl.classList.toggle('metric-positive', unrealizedValue >= 0);
+            unrealizedPlEl.classList.toggle('metric-negative', unrealizedValue < 0);
+        }
+
+        const betaEl = document.getElementById('metric-portfolio-beta');
+        if (betaEl) {
+            betaEl.textContent = formatNumber(summary.portfolio_beta || 0, 2);
+        }
+
+        const varValueEl = document.getElementById('metric-portfolio-var-value');
+        if (varValueEl) {
+            varValueEl.textContent = formatCurrency(summary.portfolio_var_value || 0);
+        }
+
+        const varPctEl = document.getElementById('metric-portfolio-var-pct');
+        if (varPctEl) {
+            varPctEl.textContent = `VaR (95%): ${formatPercentPlain(summary.portfolio_var_pct || 0)}`;
+        }
+
         const labelEl = document.getElementById('metric-today-label');
         if (labelEl) {
             labelEl.textContent = dodPositive ? 'Todays Profit' : 'Todays Loss';
