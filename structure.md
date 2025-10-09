@@ -112,57 +112,73 @@ During price refreshes, the calculation layer writes back `current_price` and
 ## 4. Analytics and formulas
 
 The analytics layer relies on exponential weighting to emphasise recent market
-behaviour. Let $r_t$ denote the daily return at time $t$,
-$\lambda = \frac{2}{\text{SPAN\_EWMA} + 1}$, and $w_i = (1-\lambda)^i$.
+behaviour. Let $r_t$ denote the daily return at time $t$,  
+$\lambda = \dfrac{2}{\text{SPAN\_EWMA} + 1}$, and $w_i = (1-\lambda)^i$.
 
-- **Daily return**: $r_t = \frac{P_t}{P_{t-1}} - 1$ where $P_t$ is the
-  adjusted close from `Calculations/price_data.py`.
-- **EWMA mean** (used for drift in simulations):
+- **Daily return**
 
-  $$
-  \mu_t = \frac{\sum_{i=0}^{n-1} w_i\, r_{t-i}}{\sum_{i=0}^{n-1} w_i}.
-  $$
+  ```math
+  r_t = \frac{P_t}{P_{t-1}} - 1
+  ```
 
-- **EWMA volatility**:
+  where $P_t$ is the adjusted close from `Calculations/price_data.py`.
 
-  $$
-  \sigma_t = \sqrt{\frac{\sum_{i=0}^{n-1} w_i \left(r_{t-i} - \mu_t\right)^2}{\sum_{i=0}^{n-1} w_i}}.
-  $$
+- **EWMA mean** (used for drift in simulations)
 
-- **Annualised volatility** (reported in `calculate_statistics`):
+  ```math
+  \mu_t = \frac{\sum_{i=0}^{n-1} w_i\, r_{t-i}}{\sum_{i=0}^{n-1} w_i}
+  ```
 
-  $$
-  \sigma_{\text{annual}} = \sigma_t \sqrt{252}.
-  $$
+- **EWMA volatility**
 
-- **Trailing-stop likelihood**: Monte Carlo paths are sampled as
-  $S_{t+j} = S_t \prod_{k=1}^{j} (1 + \varepsilon_k)$ where each
-  $\varepsilon_k \sim \mathcal{N}(\mu_t, \sigma_t)$. The activation
-  probability equals the share of simulations where
-  $S_{t+j} \leq S_t (1 - L/100)$ for some stop level $L$.
-- **Potential loss** at stop $L$:
+  ```math
+  \sigma_t = \sqrt{\frac{\sum_{i=0}^{n-1} w_i \left(r_{t-i} - \mu_t\right)^2}{\sum_{i=0}^{n-1} w_i}}
+  ```
 
-  $$
+- **Annualised volatility** (reported in `calculate_statistics`)
+
+  ```math
+  \sigma_{\text{annual}} = \sigma_t \sqrt{252}
+  ```
+
+- **Trailing-stop likelihood**
+
+  ```math
+  S_{t+j} = S_t \prod_{k=1}^{j} (1 + \varepsilon_k)
+  \quad \text{where} \quad
+  \varepsilon_k \sim \mathcal{N}(\mu_t, \sigma_t)
+  ```
+
+  Activation probability equals the share of simulations where  
+  $S_{t+j} \leq S_t (1 - L/100)$.
+
+- **Potential loss** at stop $L$
+
+  ```math
   \text{Loss} = \bigl(P_t - P_t (1 - L/100)\bigr) \times Q
-  $$
+  ```
 
   with $Q$ representing the position size.
-- **EWMA Value-at-Risk**: for confidence level $\alpha$,
 
-  $$
-  \text{VaR} = z_{1-\alpha} \sigma_t P_t Q,
-  $$
+- **EWMA Value-at-Risk (VaR)** for confidence level $\alpha$
 
-  where $z$ is the standard normal quantile estimated in
-  `Calculations/risk_analysis.py` via `numpy.percentile`.
-- **Time-weighted return index** (`portfolio/performanceIndex.ts`): after each
-  external cash flow day $f$, the index is reset so performance measures only
-  reflect market appreciation:
+  ```math
+  \text{VaR} = z_{1-\alpha} \, \sigma_t \, P_t \, Q
+  ```
 
-  $$
-  \text{TWR}_{d_i} = \text{TWR}_{f} \prod_{j=f+1}^{i} (1 + R_j), \qquad
-  R_j = \frac{V_{d_j} - V_{d_{j-1}}}{V_{d_{j-1}}}.
-  $$
+  where $z$ is the standard normal quantile estimated in  
+  `Calculations/risk_analysis.py`.
+
+- **Time-weighted return index** (`portfolio/performanceIndex.ts`)  
+  After each external cash-flow day $f$, the index is reset so performance
+  reflects only market appreciation:
+
+  ```math
+  \text{TWR}_{d_i} = \text{TWR}_{f} \prod_{j=f+1}^{i} (1 + R_j),
+  \qquad
+  R_j = \frac{V_{d_j} - V_{d_{j-1}}}{V_{d_{j-1}}}
+  ```
+
 
 ## 5. Data flow details
 
