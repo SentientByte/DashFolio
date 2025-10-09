@@ -455,7 +455,9 @@
 
         const totalPlEl = document.getElementById('metric-total-pl');
         if (totalPlEl) {
-            const totalPlValue = summary.total_pl_value || 0;
+            const totalPlValue = isValidNumber(summary.total_pl_value)
+                ? Number(summary.total_pl_value)
+                : (Number(summary.current_value || 0) - Number(summary.total_cost || 0));
             const totalPlPositive = totalPlValue >= 0;
             totalPlEl.textContent = formatSignedCurrency(totalPlValue);
             totalPlEl.classList.toggle('pill-positive', totalPlPositive);
@@ -682,7 +684,7 @@
         if (autoRefreshHandle) {
             clearInterval(autoRefreshHandle);
         }
-        if (autoRefreshInterval && autoRefreshInterval >= 5) {
+        if (autoRefreshInterval && autoRefreshInterval >= 1) {
             autoRefreshHandle = setInterval(() => {
                 fetchSnapshot({ force: true });
             }, autoRefreshInterval * 1000);
