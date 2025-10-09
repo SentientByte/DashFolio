@@ -154,6 +154,124 @@ def _compute_realized_pl(transactions: Sequence[Dict[str, Any]] | None) -> float
     return realised_total
 
 
+def _build_metadata_lookup(
+    holdings: Sequence[Dict[str, Any]] | None,
+    metadata: Sequence[Dict[str, Any]] | None,
+) -> Dict[str, Dict[str, Any]]:
+    """Return a lookup table of optional ticker metadata."""
+
+    lookup: Dict[str, Dict[str, Any]] = {}
+
+    if metadata:
+        for entry in metadata:
+            ticker = str(entry.get("ticker", "")).upper().strip()
+            if not ticker:
+                continue
+            record: Dict[str, Any] = {}
+            logo = entry.get("logo_url")
+            name = entry.get("name")
+            if logo:
+                record["logo_url"] = str(logo).strip()
+            if name:
+                record["name"] = str(name).strip()
+            if record:
+                lookup[ticker] = record
+
+    if holdings:
+        for entry in holdings:
+            ticker = str(entry.get("ticker", "")).upper().strip()
+            if not ticker:
+                continue
+            record = lookup.setdefault(ticker, {})
+            logo = entry.get("logo_url")
+            name = entry.get("name")
+            if logo and not record.get("logo_url"):
+                record["logo_url"] = str(logo).strip()
+            if name and not record.get("name"):
+                record["name"] = str(name).strip()
+
+    return lookup
+
+
+def _build_closed_positions(
+    transactions: Sequence[Dict[str, Any]] | None,
+    metadata_lookup: Dict[str, Dict[str, Any]] | None = None,
+) -> List[Dict[str, Any]]:
+    """Aggregate fully realised positions from the transaction ledger."""
+
+    if not transactions:
+        return []
+
+    ledger: Dict[str, Dict[str, float]] = {}
+
+    try:
+        ordered = sorted(transactions, key=lambda item: item.get("timestamp") or "")
+    except Exception:
+        ordered = list(transactions)
+
+    for record in ordered:
+        ticker = str(record.get("ticker", "")).upper().strip()
+        if not ticker:
+            continue
+        quantity = safe_float(record.get("quantity"))
+        price = safe_float(record.get("price"))
+        commission = abs(safe_float(record.get("commission")))
+
+        entry = ledger.setdefault(
+            ticker,
+            {
+                "net_quantity": 0.0,
+                "buy_quantity": 0.0,
+                "sell_quantity": 0.0,
+                "buy_cost": 0.0,
+                "sell_value": 0.0,
+            },
+        )
+
+        if quantity > 0:
+            entry["net_quantity"] += quantity
+            entry["buy_quantity"] += quantity
+            entry["buy_cost"] += quantity * price + commission
+        elif quantity < 0:
+            sell_amount = abs(quantity)
+            entry["net_quantity"] -= sell_amount
+            entry["sell_quantity"] += sell_amount
+            entry["sell_value"] += sell_amount * price - commission
+
+    closed: List[Dict[str, Any]] = []
+    for ticker, entry in ledger.items():
+        buy_qty = entry.get("buy_quantity", 0.0)
+        sell_qty = entry.get("sell_quantity", 0.0)
+        net_qty = entry.get("net_quantity", 0.0)
+        if buy_qty <= 0 or sell_qty <= 0:
+            continue
+        if abs(net_qty) > 1e-6:
+            continue
+
+        buy_cost = entry.get("buy_cost", 0.0)
+        sell_value = entry.get("sell_value", 0.0)
+        avg_cost = buy_cost / buy_qty if buy_qty else 0.0
+        avg_sell = sell_value / sell_qty if sell_qty else 0.0
+        meta = (metadata_lookup or {}).get(ticker, {})
+
+        closed.append(
+            {
+                "ticker": ticker,
+                "logo_url": meta.get("logo_url"),
+                "name": meta.get("name") or ticker,
+                "quantity": sell_qty,
+                "average_cost": avg_cost,
+                "average_sell_price": avg_sell,
+                "total_cost": buy_cost,
+                "total_sell_value": sell_value,
+                "profit_loss": sell_value - buy_cost,
+            }
+        )
+
+    closed.sort(key=lambda item: item.get("total_sell_value", 0.0), reverse=True)
+    return closed
+
+
 def _optional_float(value: Any) -> Optional[float]:
     """Attempt to coerce ``value`` to ``float`` while preserving ``None``."""
 
@@ -517,11 +635,17 @@ def _build_daily_performance_history(
         previous_value = portfolio_value
 
     filtered_history: List[Dict[str, float]] = []
+    has_started = False
     for idx, entry in enumerate(history):
         had_market_price = bool(entry.pop("_had_market_price", False))
         had_benchmark_price = bool(entry.pop("_had_benchmark_price", False))
         had_activity = bool(entry.pop("_had_activity", False))
-        if idx == 0 or had_market_price or had_benchmark_price or had_activity:
+        portfolio_value = safe_float(entry.get("portfolio_value"))
+
+        if had_market_price or had_activity or abs(portfolio_value) > 1e-9:
+            has_started = True
+
+        if idx == 0 or had_market_price or had_benchmark_price or had_activity or has_started:
             filtered_history.append(entry)
 
     return filtered_history
@@ -535,6 +659,7 @@ def build_portfolio_snapshot(
     transactions: List[Dict[str, Any]] | None = None,
     cash_adjustments: List[Dict[str, Any]] | None = None,
     database_path: str | None = None,
+    holdings_metadata: Sequence[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     append_log(
         f"Recalculating portfolio snapshot for {len(holdings)} holdings"
@@ -545,6 +670,7 @@ def build_portfolio_snapshot(
     total_current_value = 0.0
     top_mover: Dict[str, Any] | None = None
 
+    metadata_lookup = _build_metadata_lookup(holdings, holdings_metadata)
     benchmark_returns = get_benchmark_returns(benchmark=benchmark_ticker)
     invested_history: pd.Series | None = None
     cash_balance = max(safe_float(cash_balance), 0.0)
@@ -711,8 +837,8 @@ def build_portfolio_snapshot(
         computed_holdings.append(
             {
                 "ticker": ticker,
-                "name": name,
-                "logo_url": logo_url,
+                "name": name or metadata_lookup.get(ticker, {}).get("name", ticker),
+                "logo_url": logo_url or metadata_lookup.get(ticker, {}).get("logo_url"),
                 "quantity": quantity,
                 "average_cost": avg_cost,
                 "current_price": current_price,
@@ -839,6 +965,8 @@ def build_portfolio_snapshot(
         (portfolio_var_value / total_current_value) * 100 if total_current_value else 0.0
     )
 
+    closed_positions = _build_closed_positions(transactions, metadata_lookup)
+
     summary = {
         "total_cost": total_cost,
         "current_value": total_portfolio_value,
@@ -933,4 +1061,5 @@ def build_portfolio_snapshot(
         "performance_index": performance_history,
         "cash_balance": cash_balance,
         "benchmark_ticker": (benchmark_ticker or "").upper().strip() or None,
+        "historical_positions": closed_positions,
     }

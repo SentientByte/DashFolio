@@ -1,0 +1,50 @@
+<div class="card mt-4" id="historical-holdings-card">
+    <div class="card-header">
+        <h5 class="mb-1">Former Holdings</h5>
+        <small class="text-muted">Fully closed positions with realised outcomes</small>
+    </div>
+    <div class="table-responsive text-nowrap {% if not snapshot.historical_positions %}d-none{% endif %}" id="historical-table-wrapper">
+        <table class="table mb-0">
+            <thead>
+            <tr>
+                <th class="logo-cell"></th>
+                <th class="text-uppercase text-muted small">Ticker</th>
+                <th class="text-uppercase text-muted small">Quantity</th>
+                <th class="text-uppercase text-muted small">Avg. Cost</th>
+                <th class="text-uppercase text-muted small">Avg. Sell Price</th>
+                <th class="text-uppercase text-muted small">Total Cost</th>
+                <th class="text-uppercase text-muted small">Total Selling Value</th>
+                <th class="text-uppercase text-muted small">Profit / Loss</th>
+            </tr>
+            </thead>
+            <tbody class="table-border-bottom-0" id="historical-body">
+            {% if snapshot.historical_positions %}
+                {% for position in snapshot.historical_positions %}
+                {% set profit_positive = position.profit_loss >= 0 %}
+                <tr>
+                    <td class="logo-cell">
+                        {% if position.logo_url %}
+                            <img src="{{ position.logo_url }}" alt="{{ position.ticker }} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
+                        {% else %}
+                            <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
+                        {% endif %}
+                    </td>
+                    <td class="fw-semibold">{{ position.ticker }}</td>
+                    <td><span class="fw-semibold">{{ '%.2f'|format(position.quantity) }}</span></td>
+                    <td><span class="fw-semibold">{{ format_currency(position.average_cost) }}</span></td>
+                    <td><span class="fw-semibold">{{ format_currency(position.average_sell_price) }}</span></td>
+                    <td><span class="fw-semibold">{{ format_currency(position.total_cost) }}</span></td>
+                    <td><span class="fw-semibold">{{ format_currency(position.total_sell_value) }}</span></td>
+                    <td>
+                        <span class="fw-semibold {{ 'text-success' if profit_positive else 'text-danger' }}">{{ format_signed_currency(position.profit_loss) }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body text-center py-4 {% if snapshot.historical_positions %}d-none{% endif %}" id="historical-empty-state">
+        <p class="text-muted mb-0">Closed positions will appear here once realised.</p>
+    </div>
+</div>

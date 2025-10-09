@@ -480,6 +480,10 @@
             realizedPlEl.textContent = formatSignedCurrency(realizedValue);
             realizedPlEl.classList.toggle('metric-positive', realizedValue >= 0);
             realizedPlEl.classList.toggle('metric-negative', realizedValue < 0);
+            const realizedLabelEl = document.getElementById('metric-realized-label');
+            if (realizedLabelEl) {
+                realizedLabelEl.textContent = realizedValue >= 0 ? 'Realized Profit' : 'Realized Loss';
+            }
         }
 
         const unrealizedPlEl = document.getElementById('metric-unrealized-pl');
@@ -488,6 +492,10 @@
             unrealizedPlEl.textContent = formatSignedCurrency(unrealizedValue);
             unrealizedPlEl.classList.toggle('metric-positive', unrealizedValue >= 0);
             unrealizedPlEl.classList.toggle('metric-negative', unrealizedValue < 0);
+            const unrealizedLabelEl = document.getElementById('metric-unrealized-label');
+            if (unrealizedLabelEl) {
+                unrealizedLabelEl.textContent = unrealizedValue >= 0 ? 'Unrealized Profit' : 'Unrealized Loss';
+            }
         }
 
         const betaEl = document.getElementById('metric-portfolio-beta');
@@ -607,6 +615,9 @@
         const kpiBody = document.getElementById('kpi-body');
         const kpiWrapper = document.getElementById('kpi-table-wrapper');
         const kpiEmptyState = document.getElementById('kpi-empty-state');
+        const historicalBody = document.getElementById('historical-body');
+        const historicalWrapper = document.getElementById('historical-table-wrapper');
+        const historicalEmptyState = document.getElementById('historical-empty-state');
 
         if (!tbody) {
             window.location.reload();
@@ -614,6 +625,51 @@
         }
 
         const holdings = updateHoldingsCache(snapshot);
+        const historicalPositions = Array.isArray(snapshot && snapshot.historical_positions)
+            ? snapshot.historical_positions
+            : [];
+
+        if (historicalBody) {
+            historicalBody.innerHTML = '';
+            historicalPositions.forEach(position => {
+                if (!position) {
+                    return;
+                }
+                const logoSrc = position.logo_url || 'https://via.placeholder.com/42?text=%20';
+                const quantity = formatQuantity(position.quantity || 0);
+                const avgCost = formatCurrency(position.average_cost || 0);
+                const avgSell = formatCurrency(position.average_sell_price || 0);
+                const totalCost = formatCurrency(position.total_cost || 0);
+                const totalSell = formatCurrency(position.total_sell_value || 0);
+                const profitLossValue = Number(position.profit_loss || 0);
+                const profitLoss = formatSignedCurrency(profitLossValue);
+                const profitClass = profitLossValue >= 0 ? 'text-success' : 'text-danger';
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="logo-cell">
+                        <img src="${logoSrc}" alt="${position.ticker || ''} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
+                    </td>
+                    <td class="fw-semibold">${position.ticker || ''}</td>
+                    <td><span class="fw-semibold">${quantity}</span></td>
+                    <td><span class="fw-semibold">${avgCost}</span></td>
+                    <td><span class="fw-semibold">${avgSell}</span></td>
+                    <td><span class="fw-semibold">${totalCost}</span></td>
+                    <td><span class="fw-semibold">${totalSell}</span></td>
+                    <td><span class="fw-semibold ${profitClass}">${profitLoss}</span></td>
+                `;
+                historicalBody.appendChild(row);
+            });
+        }
+
+        if (historicalWrapper && historicalEmptyState) {
+            if (historicalPositions.length) {
+                historicalWrapper.classList.remove('d-none');
+                historicalEmptyState.classList.add('d-none');
+            } else {
+                historicalWrapper.classList.add('d-none');
+                historicalEmptyState.classList.remove('d-none');
+            }
+        }
 
         if (kpiBody) {
             kpiBody.innerHTML = '';

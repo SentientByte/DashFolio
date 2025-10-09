@@ -4,7 +4,6 @@
             <div class="card-body">
                 <span class="metric-label">Total Cost</span>
                 <h4 class="metric-value" id="metric-total-cost">{{ format_currency(snapshot.summary.total_cost) }}</h4>
-                <p class="metric-subvalue mb-0">Total invested capital</p>
             </div>
         </div>
     </div>
@@ -37,7 +36,6 @@
                         {{ '+' if todays_positive else '-' }}{{ '%.2f'|format(snapshot.summary.dod_pct|abs) }}%
                     </span>
                 </div>
-                <p class="metric-subvalue mb-0">Across the entire portfolio</p>
             </div>
         </div>
     </div>
@@ -70,11 +68,10 @@
         {% set realized_value = snapshot.summary.realized_pl_value %}
         <div class="card metric-card h-100">
             <div class="card-body">
-                <span class="metric-label">Realized Profit / Loss</span>
+                <span class="metric-label" id="metric-realized-label">{{ 'Realized Profit' if realized_value >= 0 else 'Realized Loss' }}</span>
                 <h5 class="metric-value {{ 'metric-positive' if realized_value >= 0 else 'metric-negative' }}" id="metric-realized-pl">
                     {{ format_signed_currency(realized_value) }}
                 </h5>
-                <p class="metric-subvalue mb-0">Closed positions and cash activity</p>
             </div>
         </div>
     </div>
@@ -82,11 +79,10 @@
         {% set unrealized_value = snapshot.summary.unrealized_pl_value %}
         <div class="card metric-card h-100">
             <div class="card-body">
-                <span class="metric-label">Unrealized Profit / Loss</span>
+                <span class="metric-label" id="metric-unrealized-label">{{ 'Unrealized Profit' if unrealized_value >= 0 else 'Unrealized Loss' }}</span>
                 <h5 class="metric-value {{ 'metric-positive' if unrealized_value >= 0 else 'metric-negative' }}" id="metric-unrealized-pl">
                     {{ format_signed_currency(unrealized_value) }}
                 </h5>
-                <p class="metric-subvalue mb-0">Mark-to-market gains across holdings</p>
             </div>
         </div>
     </div>
@@ -96,7 +92,6 @@
             <div class="card-body">
                 <span class="metric-label">Portfolio Beta</span>
                 <h5 class="metric-value" id="metric-portfolio-beta">{{ '%.2f'|format(portfolio_beta) }}</h5>
-                <p class="metric-subvalue mb-0">Weighted vs {{ benchmark_ticker }}</p>
             </div>
         </div>
     </div>

@@ -422,6 +422,7 @@ def portfolio_analysis():
         cash_balance,
         transactions=transactions,
         cash_adjustments=cash_adjustments,
+        holdings_metadata=portfolio_state.get('metadata', []),
     )
     return render_template(
         'portfolio_analysis.html',
@@ -455,6 +456,7 @@ def allocation_planner():
         cash_balance,
         transactions=transactions,
         cash_adjustments=cash_adjustments,
+        holdings_metadata=portfolio_state.get('metadata', []),
     )
     return render_template(
         'allocation.html',
@@ -511,6 +513,7 @@ def settings():
         cash_balance,
         transactions=transactions,
         cash_adjustments=cash_adjustments,
+        holdings_metadata=portfolio_state.get('metadata', []),
     )
 
     return render_template(
@@ -556,6 +559,7 @@ def api_get_portfolio():
         cash_adjustments=cash_adjustments,
         refresh_async=not force_refresh,
         force_recompute=force_refresh,
+        holdings_metadata=portfolio_state.get('metadata', []),
     )
     return jsonify(snapshot)
 
@@ -605,6 +609,7 @@ def api_save_transactions():
         cash_adjustments=cash_adjustments,
         refresh_async=True,
         force_recompute=True,
+        holdings_metadata=state.get('metadata', []),
     )
 
     holdings_summary = fetch_holdings_with_market_values(state.get('holdings', []))
@@ -685,6 +690,7 @@ def api_apply_transactions():
         cash_adjustments=cash_adjustments,
         refresh_async=True,
         force_recompute=True,
+        holdings_metadata=state.get('metadata', []),
     )
 
     holdings_summary = fetch_holdings_with_market_values(state.get('holdings', []))
@@ -902,6 +908,7 @@ def api_update_logos():
         cash_adjustments=cash_adjustments,
         refresh_async=True,
         force_recompute=True,
+        holdings_metadata=state.get('metadata', []),
     )
 
     return jsonify({
