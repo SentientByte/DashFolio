@@ -96,6 +96,20 @@ def _series_with_flow_days(series: pd.Series, flow_days: Set[str]) -> pd.Series:
     return reindexed
 
 
+def _optional_float(value: Any) -> Optional[float]:
+    """Attempt to coerce ``value`` to ``float`` while preserving ``None``."""
+
+    if value is None or pd.isna(value):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(numeric):
+        return None
+    return numeric
+
+
 def _build_twr_index(
     days: Sequence[str],
     invested: Dict[str, float],
@@ -741,12 +755,13 @@ def build_portfolio_snapshot(
         else 0.0
     )
 
-    total_pl_value = invested_current - total_cost
+    total_portfolio_value = invested_current + cash_balance
+    total_pl_value = total_portfolio_value - total_cost
     total_pl_pct = (total_pl_value / total_cost * 100) if total_cost else 0.0
 
     summary = {
         "total_cost": total_cost,
-        "current_value": invested_current + cash_balance,
+        "current_value": total_portfolio_value,
         "dod_value": dod_value,
         "dod_pct": dod_pct,
         "weekly_change_value": weekly_change_value,
@@ -776,6 +791,28 @@ def build_portfolio_snapshot(
         database_path,
         benchmark_history,
     )
+
+    if performance_history:
+        latest_entry = performance_history[-1]
+        latest_value = _optional_float(latest_entry.get("portfolio_value"))
+        previous_value: Optional[float] = None
+        for candidate in reversed(performance_history[:-1]):
+            previous_value = _optional_float(candidate.get("portfolio_value"))
+            if previous_value is not None:
+                break
+        if latest_value is not None:
+            if previous_value is not None:
+                dod_value = latest_value - previous_value
+                dod_pct = (
+                    (dod_value / previous_value) * 100
+                    if abs(previous_value) > 1e-9
+                    else 0.0
+                )
+            else:
+                dod_value = 0.0
+                dod_pct = 0.0
+            summary["dod_value"] = dod_value
+            summary["dod_pct"] = dod_pct
 
     if database_path:
         try:
