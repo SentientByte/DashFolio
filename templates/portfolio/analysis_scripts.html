@@ -9,6 +9,7 @@
     let statusHideTimer = null;
     let latestSnapshot = initialSnapshot;
     const holdingsCache = new Map();
+    const historicalHoldingsCache = new Map();
     if (window.DashFolioHoldingDetail) {
         window.DashFolioHoldingDetail.configure({
             currencySettings,
@@ -599,15 +600,66 @@
                 todays_gain_reason: todayChange.reason || null,
             };
         });
-        if (window.DashFolioHoldingDetail) {
-            window.DashFolioHoldingDetail.setHoldings(normalized);
-        }
         normalized.forEach(holding => {
             if (holding && holding.ticker) {
                 holdingsCache.set(holding.ticker, holding);
             }
         });
         return normalized;
+    }
+
+    function buildHistoricalDetail(position) {
+        if (!position || !position.ticker) {
+            return null;
+        }
+        const ticker = String(position.ticker).toUpperCase();
+        const quantity = Number(position.quantity || 0);
+        const averageCost = Number(position.average_cost || 0);
+        const averageSell = Number(position.average_sell_price || 0);
+        const totalCost = Number(position.total_cost || 0);
+        const totalSell = Number(position.total_sell_value || 0);
+        const profitLoss = Number(position.profit_loss || 0);
+        const profitLossPct = totalCost ? (profitLoss / totalCost) * 100 : 0;
+
+        return {
+            ticker,
+            name: position.name || ticker,
+            logo_url: position.logo_url || '',
+            quantity,
+            average_cost: averageCost,
+            average_sell_price: averageSell,
+            total_cost: totalCost,
+            total_sell_value: totalSell,
+            profit_loss: profitLoss,
+            realized_pl_value: profitLoss,
+            realized_pl_pct: profitLossPct,
+            current_price: averageSell,
+            current_value: totalSell,
+            allocation_pct: 0,
+            target_pct: 0,
+            todays_gain: 0,
+            todays_gain_pct: 0,
+            todays_gain_reason: 'Closed position',
+            price_history: Array.isArray(position.price_history) ? position.price_history : [],
+            is_historical: true,
+        };
+    }
+
+    function syncHoldingDetail(activeHoldings, historicalPositions) {
+        const combined = Array.isArray(activeHoldings) ? activeHoldings.slice() : [];
+        historicalHoldingsCache.clear();
+        const historicalDetails = Array.isArray(historicalPositions)
+            ? historicalPositions.map(buildHistoricalDetail).filter(Boolean)
+            : [];
+        historicalDetails.forEach(detail => {
+            if (detail && detail.ticker) {
+                historicalHoldingsCache.set(detail.ticker, detail);
+            }
+        });
+        combined.push(...historicalDetails);
+        if (window.DashFolioHoldingDetail) {
+            window.DashFolioHoldingDetail.setHoldings(combined);
+        }
     }
 
     function refreshTable(snapshot) {
@@ -645,6 +697,8 @@
                 const profitLoss = formatSignedCurrency(profitLossValue);
                 const profitClass = profitLossValue >= 0 ? 'text-success' : 'text-danger';
                 const row = document.createElement('tr');
+                row.dataset.ticker = position.ticker || '';
+                row.classList.add('holding-detail-trigger');
                 row.innerHTML = `
                     <td class="logo-cell">
                         <img src="${logoSrc}" alt="${position.ticker || ''} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
@@ -670,6 +724,8 @@
                 historicalEmptyState.classList.remove('d-none');
             }
         }
+
+        syncHoldingDetail(holdings, historicalPositions);
 
         if (kpiBody) {
             kpiBody.innerHTML = '';
@@ -778,7 +834,11 @@
         }
     }
 
-    updateHoldingsCache(initialSnapshot);
+    const initialHoldings = updateHoldingsCache(initialSnapshot);
+    const initialHistorical = Array.isArray(initialSnapshot?.historical_positions)
+        ? initialSnapshot.historical_positions
+        : [];
+    syncHoldingDetail(initialHoldings, initialHistorical);
 
     const holdingsCard = document.getElementById('holdings-card');
     if (holdingsCard) {
@@ -822,6 +882,30 @@
             const holding = holdingsCache.get(ticker);
             if (holding) {
                 window.DashFolioHoldingDetail.openHolding(holding);
+            } else {
+                window.DashFolioHoldingDetail.openByTicker(ticker);
+            }
+        });
+    }
+
+    const historicalCard = document.getElementById('historical-holdings-card');
+    if (historicalCard) {
+        historicalCard.addEventListener('click', event => {
+            const target = event.target;
+            if (!target) {
+                return;
+            }
+            const row = target.closest('tr[data-ticker]');
+            if (!row) {
+                return;
+            }
+            const ticker = row.dataset.ticker;
+            if (!ticker || !window.DashFolioHoldingDetail) {
+                return;
+            }
+            const detail = historicalHoldingsCache.get(ticker);
+            if (detail) {
+                window.DashFolioHoldingDetail.openHolding(detail);
             } else {
                 window.DashFolioHoldingDetail.openByTicker(ticker);
             }
