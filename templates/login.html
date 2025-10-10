@@ -1,16 +1,18 @@
 {% extends 'auth_base.html' %}
 {% block title %}Login | DashFolio{% endblock %}
 {% block content %}
-<div class="card">
+<div class="card auth-card">
     <div class="card-body">
-        <div class="app-brand justify-content-center mb-4">
-            <a href="{{ url_for('login') }}" class="app-brand-link gap-2">
-                <span class="app-brand-logo demo"><i class="bx bx-pie-chart-alt-2"></i></span>
-                <span class="app-brand-text demo text-body fw-bold">DashFolio</span>
-            </a>
+        <div class="auth-brand mb-4">
+            <span class="auth-brand-icon">
+                <i class="bx bx-pie-chart-alt-2"></i>
+            </span>
+            <div class="auth-brand-text">
+                <span class="label">Welcome</span>
+                <h1 class="title">Welcome to DashFolio! 👋</h1>
+                <p class="subtitle">Please sign-in to your account and start the adventure.</p>
+            </div>
         </div>
-        <h4 class="mb-1">Welcome back 👋</h4>
-        <p class="mb-4 text-muted">Sign in to continue to your personalised dashboard.</p>
         {% if errors %}
         <div class="alert alert-danger" role="alert">
             <ul class="mb-0 ps-3">
@@ -18,19 +20,30 @@
             </ul>
         </div>
         {% endif %}
-        <form method="post" novalidate>
-            <div class="mb-3">
-                <label for="username" class="form-label">Username</label>
+        <form method="post" class="auth-form" novalidate>
+            <div class="form-field">
+                <label for="username" class="form-label">Email or Username</label>
                 <input type="text" class="form-control" id="username" name="username" value="{{ username }}" autocomplete="username" required autofocus>
             </div>
-            <div class="mb-3">
+            <div class="form-field">
                 <div class="d-flex justify-content-between align-items-center">
                     <label for="password" class="form-label mb-0">Password</label>
+                    <a class="form-link" href="#">Forgot Password?</a>
                 </div>
                 <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" required>
             </div>
-            <button type="submit" class="btn btn-primary d-block w-100">Log in</button>
+            <div class="d-flex flex-wrap align-items-center justify-content-between form-helpers">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="remember" name="remember">
+                    <label class="form-check-label" for="remember">Remember Me</label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Login</button>
         </form>
+        <p class="text-center auth-footer">
+            New on our platform?
+            <a href="{{ url_for('register') }}">Create an account</a>
+        </p>
     </div>
 </div>
 {% endblock %}
