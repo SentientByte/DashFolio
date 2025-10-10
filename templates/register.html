@@ -9,8 +9,22 @@
                 <span class="app-brand-text demo text-body fw-bold">DashFolio</span>
             </a>
         </div>
-        <h4 class="mb-1">Create your administrator account 🚀</h4>
+        <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2 mb-3">
+            <div class="text-center text-sm-start">
+                <h4 class="mb-1">{{ page_title or 'Create your administrator account' }} 🚀</h4>
+                {% if page_subtitle %}
+                <p class="mb-0 text-muted">{{ page_subtitle }}</p>
+                {% endif %}
+            </div>
+            {% if onboarding_step and onboarding_total %}
+            <span class="onboarding-progress">Step {{ onboarding_step }} of {{ onboarding_total }}</span>
+            {% endif %}
+        </div>
+        {% if page_description %}
+        <p class="mb-4 text-muted">{{ page_description }}</p>
+        {% elif not page_subtitle %}
         <p class="mb-4 text-muted">Provide your details to secure access to the dashboard.</p>
+        {% endif %}
         {% if errors %}
         <div class="alert alert-danger" role="alert">
             <ul class="mb-0 ps-3">
