@@ -20,8 +20,37 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 2rem 1rem;
-    background-color: var(--layout-bg);
+    padding: clamp(2.5rem, 5vw, 5rem) clamp(1.5rem, 5vw, 4rem);
+    background: radial-gradient(circle at top right, rgba(85, 110, 230, 0.15), transparent 60%),
+        radial-gradient(circle at bottom left, rgba(255, 167, 81, 0.18), transparent 55%),
+        #f5f6ff;
+    position: relative;
+    overflow: hidden;
+}
+
+.authentication-wrapper.authentication-basic::before,
+.authentication-wrapper.authentication-basic::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.authentication-wrapper.authentication-basic::before {
+    width: 420px;
+    height: 420px;
+    top: -180px;
+    right: -140px;
+    background: linear-gradient(135deg, rgba(85, 110, 230, 0.18), rgba(85, 110, 230, 0));
+}
+
+.authentication-wrapper.authentication-basic::after {
+    width: 300px;
+    height: 300px;
+    bottom: -160px;
+    left: -120px;
+    background: linear-gradient(135deg, rgba(105, 214, 190, 0.2), rgba(105, 214, 190, 0));
 }
 
 .authentication-inner {
