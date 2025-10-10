@@ -80,15 +80,14 @@
             {% else %}
             <p class="text-muted mb-0">No deposits recorded yet. Add your first deposit using the form.</p>
             {% endif %}
-            <hr class="my-4">
-            <div class="d-flex flex-column flex-sm-row justify-content-sm-between align-items-sm-center gap-2">
-                <div class="text-muted small">You can record more deposits later from the Transactions page.</div>
-                <a href="{{ url_for('onboarding_upload') }}" class="btn btn-success">
-                    Continue to Step 3
-                    <i class="bx bx-right-arrow-alt ms-1"></i>
-                </a>
-            </div>
         </div>
     </div>
+</div>
+<div class="onboarding-footer">
+    <div class="text-muted small">You can record more deposits later from the Transactions page.</div>
+    <a href="{{ url_for('onboarding_upload') }}" class="btn btn-success">
+        Continue to Step 3
+        <i class="bx bx-right-arrow-alt ms-1"></i>
+    </a>
 </div>
 {% endblock %}
