@@ -1,85 +1,88 @@
-{% extends 'layout.html' %}
+{% extends 'onboarding_base.html' %}
 {% block title %}Onboarding | DashFolio{% endblock %}
-{% block content %}
+{% block onboarding_content %}
+<div class="alert alert-info border-0 onboarding-banner" role="alert">
+    <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-2">
+        <i class="bx bx-info-circle fs-4"></i>
+        <div>
+            <strong>You're almost there!</strong>
+            <span class="d-block">Record your initial cash deposits so DashFolio can track your starting balance.</span>
+        </div>
+    </div>
+</div>
+
+{% if errors %}
+<div class="alert alert-danger" role="alert">
+    <ul class="mb-0 ps-3">
+        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if success_message %}
+<div class="alert alert-success" role="alert">{{ success_message }}</div>
+{% endif %}
+
 <div class="row g-4">
-    <div class="col-12">
-        <div class="alert alert-info" role="alert">
-            <strong>Step 2 of 3:</strong> Record your initial cash deposits. You can add as many entries as needed before moving on.
-        </div>
-    </div>
-    <div class="col-lg-7">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-1">Add a deposit transaction</h5>
-                <small class="text-muted">Deposits update the cash balance used across your dashboards.</small>
-            </div>
-            <div class="card-body">
-                {% if errors %}
-                <div class="alert alert-danger" role="alert">
-                    <ul class="mb-0 ps-3">
-                        {% for error in errors %}<li>{{ error }}</li>{% endfor %}
-                    </ul>
+    <div class="col-lg-6">
+        <div class="onboarding-panel h-100">
+            <h5 class="mb-1">Add a deposit transaction</h5>
+            <p class="text-muted mb-4">Deposits update the cash balance used across your dashboards.</p>
+            <form method="post" class="row g-3" novalidate>
+                <div class="col-sm-6">
+                    <label for="deposit-timestamp" class="form-label">Date &amp; time</label>
+                    <input type="datetime-local" class="form-control" id="deposit-timestamp" name="timestamp" value="{{ form_timestamp }}" required>
                 </div>
-                {% endif %}
-                {% if success_message %}
-                <div class="alert alert-success" role="alert">{{ success_message }}</div>
-                {% endif %}
-                <form method="post" class="row g-3" novalidate>
-                    <div class="col-md-6">
-                        <label for="deposit-timestamp" class="form-label">Date &amp; time</label>
-                        <input type="datetime-local" class="form-control" id="deposit-timestamp" name="timestamp" value="{{ form_timestamp }}" required>
+                <div class="col-sm-6">
+                    <label for="deposit-amount" class="form-label">Amount</label>
+                    <div class="input-group">
+                        <span class="input-group-text">{{ currency_context.symbol }}</span>
+                        <input type="number" class="form-control" id="deposit-amount" name="amount" min="0" step="0.01" value="{{ form_amount }}" required>
                     </div>
-                    <div class="col-md-6">
-                        <label for="deposit-amount" class="form-label">Amount</label>
-                        <div class="input-group">
-                            <span class="input-group-text">{{ currency_context.symbol }}</span>
-                            <input type="number" class="form-control" id="deposit-amount" name="amount" min="0" step="0.01" value="{{ form_amount }}" required>
-                        </div>
-                    </div>
-                    <div class="col-12 d-flex justify-content-md-end">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bx bx-plus me-1"></i>
-                            Save deposit
-                        </button>
-                    </div>
-                </form>
-            </div>
+                </div>
+                <div class="col-12 text-sm-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bx bx-plus me-1"></i>
+                        Save deposit
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
-    <div class="col-lg-5">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="col-lg-6">
+        <div class="onboarding-panel h-100">
+            <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                 <div>
                     <h5 class="mb-1">Deposit history</h5>
                     <small class="text-muted">Total recorded deposits: {{ format_currency(deposit_total, currency_context) }}</small>
                 </div>
-                <span class="badge bg-label-primary">Cash balance: {{ format_currency(cash_balance, currency_context) }}</span>
+                <span class="badge bg-label-success text-success">Cash balance: {{ format_currency(cash_balance, currency_context) }}</span>
             </div>
-            <div class="card-body">
-                {% if deposits %}
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                        <tr>
-                            <th>Date &amp; time</th>
-                            <th class="text-end">Amount</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {% for deposit in deposits %}
-                        <tr>
-                            <td>{{ deposit.timestamp | replace('T', ' ') }}</td>
-                            <td class="text-end">{{ format_currency(deposit.amount, currency_context) }}</td>
-                        </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <p class="text-muted mb-0">No deposits recorded yet. Add your first deposit using the form.</p>
-                {% endif %}
+            {% if deposits %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                    <tr>
+                        <th>Date &amp; time</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for deposit in deposits %}
+                    <tr>
+                        <td>{{ deposit.timestamp | replace('T', ' ') }}</td>
+                        <td class="text-end fw-semibold">{{ format_currency(deposit.amount, currency_context) }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
             </div>
-            <div class="card-footer text-end">
+            {% else %}
+            <p class="text-muted mb-0">No deposits recorded yet. Add your first deposit using the form.</p>
+            {% endif %}
+            <hr class="my-4">
+            <div class="d-flex flex-column flex-sm-row justify-content-sm-between align-items-sm-center gap-2">
+                <div class="text-muted small">You can record more deposits later from the Transactions page.</div>
                 <a href="{{ url_for('onboarding_upload') }}" class="btn btn-success">
                     Continue to Step 3
                     <i class="bx bx-right-arrow-alt ms-1"></i>
