@@ -20,6 +20,7 @@ import pandas as pd
 from app_paths import BASE_DIR, DATA_STORE, MAIN_SCRIPT, VENV_PYTHON
 from Calculations.allocations import normalize_target_allocations
 from Calculations.snapshot_cache import get_portfolio_snapshot as get_cached_portfolio_snapshot
+from Calculations.market_data import get_market_snapshot
 from Calculations.storage import (
     connect,
     ensure_risk_results_table,
@@ -56,6 +57,7 @@ from services.formatting import (
     format_signed_currency_value,
     format_snapshot_update,
 )
+from services.market_hours import get_market_status
 from services.portfolio import (
     ensure_default_portfolio_file,
     load_portfolio_file,
@@ -76,6 +78,7 @@ log_output_table: List[Dict[str, Any]] = [] # parsed table (list of dicts) built
 def inject_global_helpers():
     config = load_config()
     currency_context = get_currency_context(config)
+    market_status = get_market_status()
     return {
         "datetime": datetime,
         "currency_context": currency_context,
@@ -84,6 +87,7 @@ def inject_global_helpers():
         "format_snapshot_update": format_snapshot_update,
         "current_user": getattr(g, 'user', None),
         "is_authenticated": getattr(g, 'is_authenticated', False),
+        "market_status": market_status,
     }
 
 # ------------------------------
@@ -424,6 +428,10 @@ def portfolio_analysis():
         cash_adjustments=cash_adjustments,
         holdings_metadata=portfolio_state.get('metadata', []),
     )
+    market_status = get_market_status()
+    if snapshot is not None:
+        snapshot = dict(snapshot)
+        snapshot['market_status'] = market_status
     return render_template(
         'portfolio_analysis.html',
         snapshot=snapshot,
@@ -458,10 +466,14 @@ def allocation_planner():
         cash_adjustments=cash_adjustments,
         holdings_metadata=portfolio_state.get('metadata', []),
     )
+    market_status = get_market_status()
+    if snapshot is not None:
+        snapshot = dict(snapshot)
+        snapshot['market_status'] = market_status
     return render_template(
         'allocation.html',
         snapshot=snapshot,
-        target_allocations=snapshot.get('target_allocations', {}),
+        target_allocations=snapshot.get('target_allocations', {}) if snapshot else {},
         active_page='allocation',
         page_title='Allocation Planner',
         page_subtitle='Rebalance towards your target mix',
@@ -515,6 +527,10 @@ def settings():
         cash_adjustments=cash_adjustments,
         holdings_metadata=portfolio_state.get('metadata', []),
     )
+    market_status = get_market_status()
+    if snapshot is not None:
+        snapshot = dict(snapshot)
+        snapshot['market_status'] = market_status
 
     return render_template(
         'settings.html',
@@ -561,7 +577,39 @@ def api_get_portfolio():
         force_recompute=force_refresh,
         holdings_metadata=portfolio_state.get('metadata', []),
     )
-    return jsonify(snapshot)
+    market_status = get_market_status()
+    payload = dict(snapshot) if snapshot else {}
+    payload['market_status'] = market_status
+    return jsonify(payload)
+
+
+@app.route('/api/market/status', methods=['GET'])
+def api_market_status():
+    return jsonify(get_market_status())
+
+
+@app.route('/api/market/<ticker>', methods=['GET'])
+def api_market_lookup(ticker: str):
+    symbol = str(ticker or '').strip().upper()
+    if not symbol:
+        return jsonify({'error': 'Ticker is required.'}), 400
+
+    snapshot = get_market_snapshot(symbol)
+    price = safe_float(snapshot.get('current_price'))
+    if price is None or price <= 0:
+        return jsonify({'error': 'Unable to fetch price for the selected ticker.'}), 404
+
+    response = {
+        'ticker': symbol,
+        'price': price,
+    }
+    name = snapshot.get('short_name') or snapshot.get('long_name') or snapshot.get('symbol')
+    if name:
+        response['name'] = name
+    logo = snapshot.get('logo_url')
+    if logo:
+        response['logo_url'] = logo
+    return jsonify(response)
 
 
 @app.route('/api/transactions', methods=['GET'])
@@ -611,6 +659,9 @@ def api_save_transactions():
         force_recompute=True,
         holdings_metadata=state.get('metadata', []),
     )
+    market_status = get_market_status()
+    snapshot_payload = dict(snapshot) if snapshot else {}
+    snapshot_payload['market_status'] = market_status
 
     holdings_summary = fetch_holdings_with_market_values(state.get('holdings', []))
     return jsonify({
@@ -618,7 +669,7 @@ def api_save_transactions():
         'transactions': load_transactions(DATA_STORE),
         'holdings': holdings_summary,
         'cash_balance': cash_balance,
-        'snapshot': snapshot,
+        'snapshot': snapshot_payload,
     })
 
 
@@ -692,6 +743,9 @@ def api_apply_transactions():
         force_recompute=True,
         holdings_metadata=state.get('metadata', []),
     )
+    market_status = get_market_status()
+    snapshot_payload = dict(snapshot) if snapshot else {}
+    snapshot_payload['market_status'] = market_status
 
     holdings_summary = fetch_holdings_with_market_values(state.get('holdings', []))
 
@@ -701,7 +755,7 @@ def api_apply_transactions():
         'transactions': load_transactions(DATA_STORE),
         'holdings': holdings_summary,
         'cash_balance': cash_balance,
-        'snapshot': snapshot,
+        'snapshot': snapshot_payload,
     })
 
 
@@ -759,7 +813,10 @@ def api_update_targets():
         refresh_async=True,
         force_recompute=True,
     )
-    return jsonify({'status': 'ok', 'targets': normalized, 'snapshot': snapshot, 'cash_balance': cash_balance})
+    market_status = get_market_status()
+    snapshot_payload = dict(snapshot) if snapshot else {}
+    snapshot_payload['market_status'] = market_status
+    return jsonify({'status': 'ok', 'targets': normalized, 'snapshot': snapshot_payload, 'cash_balance': cash_balance})
 
 
 @app.route('/api/config', methods=['POST'])

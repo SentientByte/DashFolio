@@ -15,6 +15,8 @@ experience for exploring holdings, allocations, and simulated risk scenarios.
   so you can anticipate drawdowns before they happen.
 - **Cash-flow awareness** – log deposits, withdrawals, dividends, and interest
   adjustments, and apply them to derived holdings in a normalized ledger.
+- **Allocation sandboxing** – model hypothetical assets directly in the allocation
+  planner and explore rebalancing actions without impacting live holdings.
 - **Audit-friendly data trail** – persist every snapshot, calculation, and user event
   in an embedded SQLite database for reproducibility and historical comparisons.
 - **Single-user secure onboarding** – password-protected authentication, guided

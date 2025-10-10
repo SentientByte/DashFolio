@@ -11,6 +11,21 @@
     let latestSnapshot = initialSnapshot;
     const holdingsCache = new Map();
     const historicalHoldingsCache = new Map();
+    function getCurrentMarketStatus() {
+        if (window.DashFolio && window.DashFolio.marketStatus) {
+            return window.DashFolio.marketStatus;
+        }
+        return initialSnapshot?.market_status || {};
+    }
+
+    function isMarketOpen() {
+        const status = getCurrentMarketStatus();
+        return Boolean(status && status.is_open);
+    }
+
+    if (initialSnapshot?.market_status && window.DashFolio && typeof window.DashFolio.setMarketStatus === 'function') {
+        window.DashFolio.setMarketStatus(initialSnapshot.market_status);
+    }
     if (window.DashFolioHoldingDetail) {
         window.DashFolioHoldingDetail.configure({
             currencySettings,
@@ -275,7 +290,7 @@
             destroyPerformanceGauge();
             gaugeEl.innerHTML = '<div class="text-muted text-center py-4">No performance data yet.</div>';
             if (summaryEl) {
-                summaryEl.textContent = 'Company growth unavailable';
+                summaryEl.textContent = 'Portfolio growth unavailable';
             }
             const portfolioValueEl = document.getElementById('performance-portfolio-value');
             if (portfolioValueEl) {
@@ -296,7 +311,7 @@
         const gaugeLabel = displayValue >= 0 ? 'Growth' : 'Decline';
 
         if (summaryEl) {
-            const descriptor = displayValue >= 0 ? 'Company growth' : 'Company decline';
+            const descriptor = displayValue >= 0 ? 'Portfolio growth' : 'Portfolio decline';
             summaryEl.textContent = `${formatPercentPlain(displayValue)} ${descriptor}`;
         }
 
@@ -957,6 +972,16 @@
                 refreshButton.disabled = true;
             }
         }
+        if (!isMarketOpen()) {
+            if (showStatusPill) {
+                showStatus('Market closed – updates paused');
+                hideStatus(1200);
+                if (refreshButton) {
+                    refreshButton.disabled = false;
+                }
+            }
+            return;
+        }
         try {
             const url = new URL('{{ url_for('api_get_portfolio') }}', window.location.origin);
             if (force) {
@@ -966,6 +991,9 @@
             if (!response.ok) throw new Error('Request failed');
             const snapshot = await response.json();
             latestSnapshot = snapshot;
+            if (window.DashFolio && typeof window.DashFolio.setMarketStatus === 'function' && snapshot.market_status) {
+                window.DashFolio.setMarketStatus(snapshot.market_status);
+            }
             updateMetrics(snapshot);
             refreshTable(snapshot);
             renderIncomeChart(snapshot.performance_index || []);
@@ -984,6 +1012,10 @@
     function scheduleAutoRefresh() {
         if (autoRefreshHandle) {
             clearInterval(autoRefreshHandle);
+        }
+        if (!isMarketOpen()) {
+            autoRefreshHandle = null;
+            return;
         }
         if (autoRefreshInterval && autoRefreshInterval >= 1) {
             autoRefreshHandle = setInterval(() => {
@@ -1069,6 +1101,19 @@
             }
         });
     }
+
+    document.addEventListener('dashfolio:market-status', event => {
+        const status = event?.detail || {};
+        if (!status.is_open) {
+            if (autoRefreshHandle) {
+                clearInterval(autoRefreshHandle);
+                autoRefreshHandle = null;
+            }
+            return;
+        }
+        scheduleAutoRefresh();
+        fetchSnapshot({ force: true });
+    });
 
     const manualRefreshButton = document.getElementById('portfolio-refresh-btn');
     if (manualRefreshButton) {

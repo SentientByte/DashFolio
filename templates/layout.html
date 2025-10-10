@@ -78,8 +78,26 @@
                         </div>
                     </div>
                     <ul class="navbar-nav flex-row align-items-center ms-auto">
-                        <li class="nav-item lh-1 me-3 text-muted small" id="update-status">
-                            {{ format_snapshot_update(snapshot.generated_at if snapshot else None) }}
+                        {% set header_market_status = market_status or {} %}
+                        <li class="nav-item me-3" id="status-indicators">
+                            <div class="d-flex flex-column align-items-end text-end">
+                                <span
+                                    id="market-status-indicator"
+                                    class="badge rounded-pill {% if header_market_status.is_open %}bg-label-success text-success{% else %}bg-label-secondary text-muted{% endif %}"
+                                    title="{% if header_market_status.next_open %}Next open {{ header_market_status.next_open }}{% else %}Market session status{% endif %}"
+                                >
+                                    {{ header_market_status.label or 'Market status unavailable' }}
+                                </span>
+                                <small
+                                    id="market-status-reason"
+                                    class="text-muted small {% if header_market_status.is_open or not header_market_status.reason %}d-none{% endif %}"
+                                >
+                                    {{ header_market_status.reason or '' }}
+                                </small>
+                                <span class="text-muted small mt-1" id="update-status">
+                                    {{ format_snapshot_update(snapshot.generated_at if snapshot else None) }}
+                                </span>
+                            </div>
                         </li>
                         {% if is_authenticated %}
                         <li class="nav-item">
@@ -151,6 +169,112 @@
             }
         });
     });
+</script>
+<script>
+    window.DashFolio = window.DashFolio || {};
+    (function () {
+        const REFRESH_INTERVAL = 5 * 60 * 1000;
+        let statusTimer = null;
+
+        function parseStatus(status) {
+            return status && typeof status === 'object' ? status : {};
+        }
+
+        function formatNextOpen(status) {
+            if (!status || !status.next_open) {
+                return '';
+            }
+            const date = new Date(status.next_open);
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+            return date.toLocaleString(undefined, {
+                hour: '2-digit',
+                minute: '2-digit',
+                month: 'short',
+                day: 'numeric',
+            });
+        }
+
+        function updateIndicator(status) {
+            const indicator = document.getElementById('market-status-indicator');
+            const reasonEl = document.getElementById('market-status-reason');
+            const nextOpen = formatNextOpen(status);
+            if (indicator) {
+                const open = Boolean(status && status.is_open);
+                indicator.textContent = open ? 'Market open' : 'Market closed';
+                indicator.classList.toggle('bg-label-success', open);
+                indicator.classList.toggle('text-success', open);
+                indicator.classList.toggle('bg-label-secondary', !open);
+                indicator.classList.toggle('text-muted', !open);
+                const titleBits = [];
+                if (!open && status && status.reason) {
+                    titleBits.push(status.reason);
+                }
+                if (nextOpen) {
+                    titleBits.push(`Next open ${nextOpen}`);
+                }
+                indicator.setAttribute('title', titleBits.join(' • ') || 'Market session status');
+            }
+            if (reasonEl) {
+                const showReason = Boolean(status && !status.is_open && status.reason);
+                reasonEl.textContent = showReason ? status.reason : '';
+                reasonEl.classList.toggle('d-none', !showReason);
+            }
+        }
+
+        function setMarketStatus(status) {
+            const normalized = parseStatus(status);
+            const previous = window.DashFolio.marketStatus || {};
+            const changed = (
+                previous.is_open !== normalized.is_open ||
+                previous.reason !== normalized.reason ||
+                previous.next_open !== normalized.next_open
+            );
+            window.DashFolio.marketStatus = normalized;
+            updateIndicator(normalized);
+            if (changed) {
+                document.dispatchEvent(new CustomEvent('dashfolio:market-status', { detail: normalized }));
+            }
+            return normalized;
+        }
+
+        async function fetchMarketStatus() {
+            try {
+                const response = await fetch('{{ url_for('api_market_status') }}', { cache: 'no-cache' });
+                if (!response.ok) {
+                    throw new Error('Request failed');
+                }
+                const data = await response.json();
+                setMarketStatus(data);
+                return data;
+            } catch (error) {
+                console.error('Failed to refresh market status', error);
+                return null;
+            }
+        }
+
+        function scheduleStatusRefresh() {
+            if (statusTimer) {
+                clearInterval(statusTimer);
+            }
+            statusTimer = setInterval(fetchMarketStatus, REFRESH_INTERVAL);
+            window.DashFolio.marketStatusTimer = statusTimer;
+        }
+
+        window.DashFolio.updateMarketStatusIndicator = updateIndicator;
+        window.DashFolio.setMarketStatus = setMarketStatus;
+        window.DashFolio.fetchMarketStatus = fetchMarketStatus;
+        window.DashFolio.scheduleMarketStatusRefresh = scheduleStatusRefresh;
+
+        const initialStatus = setMarketStatus(parseStatus({{ market_status|tojson }}));
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateIndicator(initialStatus);
+            scheduleStatusRefresh();
+            fetchMarketStatus();
+        });
+    })();
 </script>
 {% block scripts %}{% endblock %}
 </body>
