@@ -1,0 +1,32 @@
+{% extends 'auth_base.html' %}
+
+{% block auth_wrapper_classes %}authentication-basic authentication-onboarding{% endblock %}
+{% block auth_inner_classes %}authentication-inner-onboarding{% endblock %}
+
+{% block content %}
+<div class="card onboarding-card">
+    <div class="card-body p-4 p-md-5">
+        <div class="d-flex flex-column flex-md-row align-items-md-start align-items-center justify-content-between gap-3 mb-4">
+            <div class="text-center text-md-start">
+                <div class="app-brand justify-content-center justify-content-md-start mb-3">
+                    <a href="{{ url_for('register') }}" class="app-brand-link gap-2">
+                        <span class="app-brand-logo demo"><i class="bx bx-pie-chart-alt-2"></i></span>
+                        <span class="app-brand-text demo text-body fw-bold">DashFolio</span>
+                    </a>
+                </div>
+                <h4 class="mb-1">{{ page_title or 'Complete your setup' }}</h4>
+                {% if page_subtitle %}
+                <p class="text-muted mb-0">{{ page_subtitle }}</p>
+                {% endif %}
+            </div>
+            {% if onboarding_step and onboarding_total %}
+            <span class="onboarding-progress">
+                <i class="bx bx-flag"></i>
+                Step {{ onboarding_step }} of {{ onboarding_total }}
+            </span>
+            {% endif %}
+        </div>
+        {% block onboarding_content %}{% endblock %}
+    </div>
+</div>
+{% endblock %}

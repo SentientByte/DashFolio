@@ -358,6 +358,8 @@ def onboarding_deposits():
         active_page=None,
         page_title='Record initial deposits',
         page_subtitle='Step 2 of 3: Capture your starting cash position',
+        onboarding_step=2,
+        onboarding_total=3,
     )
 
 
@@ -413,6 +415,8 @@ def onboarding_upload():
         active_page=None,
         page_title='Upload transaction history',
         page_subtitle='Step 3 of 3: Import your trades or skip for later',
+        onboarding_step=3,
+        onboarding_total=3,
     )
 
 
