@@ -1,7 +1,7 @@
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 <script>
     const initialSnapshot = {{ snapshot|tojson }} || {};
-    const initialPerformanceData = initialSnapshot.performance_index || [];
+    const initialPerformanceData = extractPerformanceSeries(initialSnapshot);
     const currencySettings = {{ currency_settings|tojson }};
     const autoRefreshInterval = Math.min(60, Math.max(1, Number({{ config['AUTO_REFRESH_INTERVAL']|default(60) }}) || 60));
     let incomeChart = null;
@@ -25,6 +25,25 @@
             currencySettings,
             defaultRange: '6M',
         });
+    }
+
+    function extractPerformanceSeries(snapshotLike) {
+        if (!snapshotLike || typeof snapshotLike !== 'object') {
+            return [];
+        }
+        const indexSeries = Array.isArray(snapshotLike.performance_index)
+            ? snapshotLike.performance_index
+            : [];
+        if (indexSeries.length) {
+            return indexSeries;
+        }
+        return Array.isArray(snapshotLike.performance_history)
+            ? snapshotLike.performance_history
+            : [];
+    }
+
+    function normalizeTicker(value) {
+        return String(value || '').toUpperCase().trim();
     }
 
     function getThemeColors() {
@@ -441,14 +460,25 @@
         }
 
         const { skipCache = false } = options;
+        const providedSeries = Array.isArray(performanceData) ? performanceData : null;
         if (!skipCache) {
-            performanceDataCache = Array.isArray(performanceData) ? performanceData.slice() : [];
+            if (providedSeries) {
+                performanceDataCache = providedSeries.slice();
+            } else if (!Array.isArray(performanceDataCache)) {
+                performanceDataCache = [];
+            }
         }
+        if (!Array.isArray(performanceDataCache)) {
+            performanceDataCache = [];
+        }
+        const workingSeries = performanceDataCache.length
+            ? performanceDataCache
+            : (providedSeries || []);
 
         const benchmarkTicker = (latestSnapshot?.benchmark_ticker || initialSnapshot?.benchmark_ticker || '').trim();
 
-        const rawPoints = Array.isArray(performanceDataCache)
-            ? performanceDataCache.map(point => ({
+        const rawPoints = Array.isArray(workingSeries)
+            ? workingSeries.map(point => ({
                 date: point.date,
                 cumulative: Number(point.cumulative_return ?? point.cumulative ?? NaN),
                 legacyIndex: Number(point.index ?? point.value ?? point.portfolio ?? NaN),
@@ -791,6 +821,13 @@
         const settings = options || {};
         const placeholder = typeof settings.placeholder === 'string' ? settings.placeholder : '—';
         const tooltip = typeof settings.tooltip === 'string' ? settings.tooltip : '';
+        const hasRawValue = value !== null && value !== undefined && value !== '';
+        const hasRawPercent = percent !== null && percent !== undefined && percent !== '';
+        if (!hasRawValue || !hasRawPercent) {
+            const tooltipAttr = tooltip ? ` title="${tooltip}"` : '';
+            return `<span class="d-block text-muted"${tooltipAttr}>${placeholder}</span>`;
+        }
+
         const numericValue = Number(value);
         const numericPercent = Number(percent);
         const hasValue = Number.isFinite(numericValue);
@@ -810,18 +847,26 @@
     function updateHoldingsCache(snapshot) {
         holdingsCache.clear();
         const holdings = snapshot && Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
-        const normalized = holdings.map(holding => {
-            if (!holding || !holding.ticker) {
-                return holding;
-            }
-            const todayChange = computeTodayChange(holding);
-            return {
-                ...holding,
-                todays_gain: todayChange.value,
-                todays_gain_pct: todayChange.pct,
-                todays_gain_reason: todayChange.reason || null,
-            };
-        });
+        const normalized = holdings
+            .map(holding => {
+                if (!holding) {
+                    return null;
+                }
+                const ticker = normalizeTicker(holding.ticker);
+                if (!ticker) {
+                    return null;
+                }
+                const todayChange = computeTodayChange(holding);
+                const enriched = {
+                    ...holding,
+                    ticker,
+                    todays_gain: todayChange.value,
+                    todays_gain_pct: todayChange.pct,
+                    todays_gain_reason: todayChange.reason || null,
+                };
+                return enriched;
+            })
+            .filter(Boolean);
         normalized.forEach(holding => {
             if (holding && holding.ticker) {
                 holdingsCache.set(holding.ticker, holding);
@@ -909,6 +954,10 @@
                 if (!position) {
                     return;
                 }
+                const ticker = normalizeTicker(position.ticker);
+                if (!ticker) {
+                    return;
+                }
                 const logoSrc = position.logo_url || 'https://via.placeholder.com/42?text=%20';
                 const quantity = formatQuantity(position.quantity || 0);
                 const avgCost = formatCurrency(position.average_cost || 0);
@@ -919,13 +968,13 @@
                 const profitLoss = formatSignedCurrency(profitLossValue);
                 const profitClass = profitLossValue >= 0 ? 'text-success' : 'text-danger';
                 const row = document.createElement('tr');
-                row.dataset.ticker = position.ticker || '';
+                row.dataset.ticker = ticker;
                 row.classList.add('holding-detail-trigger');
                 row.innerHTML = `
                     <td class="logo-cell">
-                        <img src="${logoSrc}" alt="${position.ticker || ''} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
+                        <img src="${logoSrc}" alt="${ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';">
                     </td>
-                    <td class="fw-semibold">${position.ticker || ''}</td>
+                    <td class="fw-semibold">${ticker}</td>
                     <td><span class="fw-semibold">${quantity}</span></td>
                     <td><span class="fw-semibold">${avgCost}</span></td>
                     <td><span class="fw-semibold">${avgSell}</span></td>
@@ -972,13 +1021,17 @@
             if (!holding) {
                 return;
             }
+            const ticker = normalizeTicker(holding.ticker);
+            if (!ticker) {
+                return;
+            }
             const row = document.createElement('tr');
-            row.dataset.ticker = holding.ticker;
+            row.dataset.ticker = ticker;
             row.classList.add('holding-detail-trigger');
             const logoSrc = holding.logo_url || 'https://via.placeholder.com/42?text=%20';
             row.innerHTML = `
-                <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
-                <td class="fw-semibold ticker-col">${holding.ticker}</td>
+                <td class="logo-cell"><img src="${logoSrc}" alt="${ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
+                <td class="fw-semibold ticker-col">${ticker}</td>
                 <td class="numeric-col"><span class="fw-semibold">${formatQuantity(holding.quantity)}</span></td>
                 <td class="numeric-col">${formatCurrency(holding.average_cost)}</td>
                 <td class="current-price numeric-col">${formatCurrency(holding.current_price)}</td>
@@ -996,11 +1049,11 @@
 
             if (kpiBody) {
                 const kpiRow = document.createElement('tr');
-                kpiRow.dataset.ticker = holding.ticker;
+                kpiRow.dataset.ticker = ticker;
                 kpiRow.classList.add('holding-detail-trigger');
                 kpiRow.innerHTML = `
-                    <td class="logo-cell"><img src="${logoSrc}" alt="${holding.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
-                    <td class="fw-semibold">${holding.ticker}</td>
+                    <td class="logo-cell"><img src="${logoSrc}" alt="${ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
+                    <td class="fw-semibold">${ticker}</td>
                     <td><span class="fw-semibold">${formatPercentPlain(holding.volatility_pct || 0)}</span></td>
                     <td><span class="fw-semibold">${formatNumber(holding.sharpe_ratio || 0)}</span></td>
                     <td><span class="fw-semibold">${formatPercentPlain(holding.max_drawdown_pct || 0)}</span></td>
@@ -1032,7 +1085,7 @@
             latestSnapshot = snapshot;
             updateMetrics(snapshot);
             refreshTable(snapshot);
-            renderIncomeChart(snapshot.performance_index || []);
+            renderIncomeChart(extractPerformanceSeries(snapshot));
         } catch (err) {
             console.error('Failed to refresh portfolio snapshot', err);
         } finally {
