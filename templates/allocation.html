@@ -32,6 +32,30 @@
                         <label class="form-check-label" for="buyOnlyToggle">Buy only mode</label>
                     </div>
                 </div>
+                <div class="border rounded-3 p-3 bg-light mb-3" id="hypothetical-simulation-panel">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                        <h6 class="mb-0">Simulate a new asset</h6>
+                        <small class="text-muted">Add hypothetical holdings without affecting your actual portfolio.</small>
+                    </div>
+                    <form class="row g-3 align-items-end" id="hypothetical-form">
+                        <div class="col-sm-4 col-md-3">
+                            <label for="hypotheticalTicker" class="form-label small text-uppercase text-muted fw-semibold">Ticker</label>
+                            <input type="text" class="form-control" id="hypotheticalTicker" placeholder="e.g. NVDA" required>
+                        </div>
+                        <div class="col-sm-4 col-md-3">
+                            <label for="hypotheticalPrice" class="form-label small text-uppercase text-muted fw-semibold">Price per share ({{ currency_context.code }})</label>
+                            <input type="number" class="form-control" id="hypotheticalPrice" min="0" step="0.01" placeholder="0.00" required>
+                        </div>
+                        <div class="col-sm-4 col-md-4 col-lg-3">
+                            <label for="hypotheticalLogo" class="form-label small text-uppercase text-muted fw-semibold">Logo URL (optional)</label>
+                            <input type="url" class="form-control" id="hypotheticalLogo" placeholder="https://example.com/logo.png">
+                        </div>
+                        <div class="col-md-2 col-lg-3 d-grid">
+                            <button type="submit" class="btn btn-outline-primary">Add simulated asset</button>
+                        </div>
+                    </form>
+                    <div class="small text-muted d-none mt-2" id="hypothetical-feedback"></div>
+                </div>
                 <div class="table-responsive text-nowrap">
                     <table class="table align-middle mb-0" id="rebalance-table">
                         <thead>
@@ -43,6 +67,7 @@
                             <th class="text-uppercase text-muted small">Action</th>
                             <th class="text-uppercase text-muted small">Quantity</th>
                             <th class="text-uppercase text-muted small">Trade value ({{ currency_context.code }})</th>
+                            <th class="text-uppercase text-muted small text-end">Manage</th>
                         </tr>
                         </thead>
                         <tbody></tbody>
@@ -108,16 +133,47 @@
 {% include 'holding_detail_scripts.html' %}
 <script>
     const holdingsSnapshot = {{ snapshot.holdings|tojson }};
-    let holdingsData = Array.isArray(holdingsSnapshot) ? holdingsSnapshot.slice() : [];
-    let targetMap = {{ target_allocations|tojson }};
+    let actualHoldings = Array.isArray(holdingsSnapshot)
+        ? holdingsSnapshot.map(holding => ({ ...holding, isHypothetical: false }))
+        : [];
+    let hypotheticalHoldings = [];
+    let holdingsData = [];
+    let targetMap = {{ target_allocations|tojson }} || {};
+    const hypotheticalTargets = {};
     const currencySettings = {{ currency_settings|tojson }};
+
+    function normalizeTicker(value) {
+        return String(value || '').trim().toUpperCase();
+    }
+
+    function normalizeTargetMap(map) {
+        const normalized = {};
+        if (!map || typeof map !== 'object') {
+            return normalized;
+        }
+        Object.entries(map).forEach(([key, val]) => {
+            const ticker = normalizeTicker(key);
+            if (ticker) {
+                normalized[ticker] = Number(val) || 0;
+            }
+        });
+        return normalized;
+    }
+
+    targetMap = normalizeTargetMap(targetMap);
+
+    function refreshHoldingsData() {
+        holdingsData = actualHoldings.concat(hypotheticalHoldings);
+    }
+
+    refreshHoldingsData();
 
     if (window.DashFolioHoldingDetail) {
         window.DashFolioHoldingDetail.configure({
             currencySettings,
             defaultRange: '6M',
         });
-        window.DashFolioHoldingDetail.setHoldings(holdingsData);
+        window.DashFolioHoldingDetail.setHoldings(actualHoldings);
     }
 
     const chartColors = ['#696cff', '#8592a3', '#71dd37', '#ffab00', '#ff3e1d', '#03c3ec', '#fd3550', '#9c27b0'];
@@ -158,6 +214,111 @@
             value = 0;
         }
         return `${value.toFixed(2)}%`;
+    }
+
+    function getTargetPct(ticker) {
+        const normalized = normalizeTicker(ticker);
+        if (!normalized) {
+            return 0;
+        }
+        if (Object.prototype.hasOwnProperty.call(targetMap, normalized)) {
+            return Number(targetMap[normalized] || 0);
+        }
+        if (Object.prototype.hasOwnProperty.call(hypotheticalTargets, normalized)) {
+            return Number(hypotheticalTargets[normalized] || 0);
+        }
+        return 0;
+    }
+
+    function setHypotheticalTarget(ticker, value) {
+        const normalized = normalizeTicker(ticker);
+        if (!normalized) {
+            return;
+        }
+        hypotheticalTargets[normalized] = Number(value) || 0;
+    }
+
+    function clearHypotheticalTarget(ticker) {
+        const normalized = normalizeTicker(ticker);
+        if (!normalized) {
+            return;
+        }
+        delete hypotheticalTargets[normalized];
+    }
+
+    function showHypotheticalFeedback(message, variant = 'muted') {
+        const feedbackEl = document.getElementById('hypothetical-feedback');
+        if (!feedbackEl) {
+            return;
+        }
+        feedbackEl.classList.remove('text-muted', 'text-danger', 'text-success');
+        let cls = 'text-muted';
+        if (variant === 'error') {
+            cls = 'text-danger';
+        } else if (variant === 'success') {
+            cls = 'text-success';
+        }
+        feedbackEl.classList.add(cls);
+        feedbackEl.textContent = message || '';
+        feedbackEl.classList.toggle('d-none', !message);
+    }
+
+    function addHypotheticalAsset(ticker, price, logoUrl) {
+        showHypotheticalFeedback('');
+        const normalizedTicker = normalizeTicker(ticker);
+        if (!normalizedTicker) {
+            showHypotheticalFeedback('Enter a ticker symbol to simulate.', 'error');
+            return false;
+        }
+        const priceValue = Number(price);
+        if (!Number.isFinite(priceValue) || priceValue <= 0) {
+            showHypotheticalFeedback('Provide a valid price greater than zero.', 'error');
+            return false;
+        }
+        const exists = holdingsData.some(holding => normalizeTicker(holding.ticker) === normalizedTicker);
+        if (exists) {
+            showHypotheticalFeedback(`${normalizedTicker} is already part of your plan.`, 'error');
+            return false;
+        }
+
+        const asset = {
+            ticker: normalizedTicker,
+            name: normalizedTicker,
+            current_price: priceValue,
+            quantity: 0,
+            current_value: 0,
+            logo_url: (logoUrl || '').trim(),
+            isHypothetical: true,
+        };
+
+        hypotheticalHoldings.push(asset);
+        setHypotheticalTarget(normalizedTicker, hypotheticalTargets[normalizedTicker] || 0);
+        refreshHoldingsData();
+
+        renderChart();
+        const buyOnlyToggle = document.getElementById('buyOnlyToggle');
+        renderRebalanceTable(buyOnlyToggle?.checked);
+        populateTargetForm();
+        showHypotheticalFeedback(`${normalizedTicker} added to the simulation.`, 'success');
+        return true;
+    }
+
+    function removeHypotheticalAsset(ticker) {
+        const normalizedTicker = normalizeTicker(ticker);
+        if (!normalizedTicker) {
+            return;
+        }
+        const initialLength = hypotheticalHoldings.length;
+        hypotheticalHoldings = hypotheticalHoldings.filter(asset => normalizeTicker(asset.ticker) !== normalizedTicker);
+        clearHypotheticalTarget(normalizedTicker);
+        refreshHoldingsData();
+        renderChart();
+        const buyOnlyToggle = document.getElementById('buyOnlyToggle');
+        renderRebalanceTable(buyOnlyToggle?.checked);
+        populateTargetForm();
+        if (initialLength !== hypotheticalHoldings.length) {
+            showHypotheticalFeedback(`${normalizedTicker} removed from the simulation.`);
+        }
     }
 
     function formatSignedQuantity(value) {
@@ -202,14 +363,17 @@
         }
 
         const base = holdingsData.map(holding => {
-            const ticker = holding.ticker;
-            const targetPct = Number(targetMap?.[ticker] ?? 0);
+            const normalizedTicker = normalizeTicker(holding.ticker);
+            const displayTicker = holding.ticker || normalizedTicker || 'N/A';
+            const targetPct = getTargetPct(normalizedTicker || displayTicker);
             const targetWeight = targetPct / 100;
             const currentValue = Number(holding.current_value || 0);
             const currentWeight = total ? currentValue / total : 0;
             return {
-                ticker,
+                ticker: normalizedTicker || displayTicker,
+                displayTicker,
                 logo_url: holding.logo_url,
+                isHypothetical: Boolean(holding.isHypothetical),
                 targetPct,
                 targetWeight,
                 currentPct: currentWeight * 100,
@@ -255,7 +419,9 @@
             const postTradeValue = item.currentValue + tradeValue;
             return {
                 ticker: item.ticker,
+                displayTicker: item.displayTicker,
                 logo_url: item.logo_url,
+                isHypothetical: item.isHypothetical,
                 currentPct: item.currentPct,
                 quantity,
                 tradeValue,
@@ -270,7 +436,9 @@
             const achievedPct = adjustedTotal ? (item.postTradeValue / adjustedTotal) * 100 : 0;
             return {
                 ticker: item.ticker,
+                displayTicker: item.displayTicker,
                 logo_url: item.logo_url,
+                isHypothetical: item.isHypothetical,
                 targetPct: achievedPct,
                 currentPct: item.currentPct,
                 quantity: item.quantity,
@@ -286,7 +454,7 @@
         }
         tableBody.innerHTML = '';
         if (!holdingsData.length || !getTotalValue()) {
-            tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No holdings to rebalance.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No holdings to rebalance.</td></tr>';
             return;
         }
 
@@ -295,6 +463,7 @@
             const row = document.createElement('tr');
             row.dataset.ticker = item.ticker;
             row.classList.add('holding-detail-trigger');
+            row.dataset.hypothetical = item.isHypothetical ? 'true' : 'false';
             const logoSrc = item.logo_url || 'https://via.placeholder.com/42?text=%20';
             let actionBadge = '<span class="badge bg-label-secondary">Hold</span>';
             if (item.quantity > 0) {
@@ -302,14 +471,21 @@
             } else if (item.quantity < 0) {
                 actionBadge = '<span class="badge bg-label-danger">Sell</span>';
             }
+            const tickerLabel = item.isHypothetical
+                ? `${item.displayTicker} <span class="badge bg-label-primary ms-1">Simulated</span>`
+                : item.displayTicker;
+            const manageCell = item.isHypothetical
+                ? `<button type="button" class="btn btn-sm btn-outline-danger hypothetical-remove-button" data-ticker="${item.ticker}"><i class="bx bx-trash"></i></button>`
+                : '&mdash;';
             row.innerHTML = `
-                <td class="logo-cell"><img src="${logoSrc}" alt="${item.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
-                <td class="fw-semibold">${item.ticker}</td>
+                <td class="logo-cell"><img src="${logoSrc}" alt="${item.displayTicker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
+                <td class="fw-semibold">${tickerLabel}</td>
                 <td>${formatPercentPlain(item.targetPct)}</td>
                 <td>${formatPercentPlain(item.currentPct)}</td>
                 <td>${actionBadge}</td>
                 <td class="fw-semibold">${formatSignedQuantity(item.quantity)}</td>
                 <td class="fw-semibold">${formatSignedCurrency(item.tradeValue)}</td>
+                <td class="text-end">${manageCell}</td>
             `;
             tableBody.appendChild(row);
         });
@@ -425,12 +601,16 @@
         tbody.innerHTML = '';
         holdingsData.forEach(holding => {
             const row = document.createElement('tr');
-            const targetValue = Number(targetMap?.[holding.ticker] ?? 0);
+            const displayTicker = holding.ticker || normalizeTicker(holding.ticker);
+            const label = holding.isHypothetical
+                ? `${displayTicker} <span class="badge bg-label-primary ms-1">Simulated</span>`
+                : displayTicker;
+            const targetValue = getTargetPct(holding.ticker);
             const currentPct = getTotalValue() ? (Number(holding.current_value || 0) / getTotalValue()) * 100 : 0;
             row.innerHTML = `
-                <td class="fw-semibold">${holding.ticker}</td>
+                <td class="fw-semibold">${label}</td>
                 <td>${formatPercentPlain(currentPct)}</td>
-                <td><input type="number" class="form-control target-input" data-ticker="${holding.ticker}" min="0" step="0.01" value="${targetValue.toFixed(2)}"></td>
+                <td><input type="number" class="form-control target-input" data-ticker="${holding.ticker}" data-hypothetical="${holding.isHypothetical ? 'true' : 'false'}" min="0" step="0.01" value="${Number(targetValue || 0).toFixed(2)}"></td>
             `;
             tbody.appendChild(row);
         });
@@ -468,8 +648,14 @@
         inputs.forEach(input => {
             const ticker = input.dataset.ticker;
             const value = parseFloat(input.value);
-            if (ticker) {
-                payload.push({ ticker, target_pct: isNaN(value) ? 0 : value });
+            if (!ticker) {
+                return;
+            }
+            const normalizedValue = isNaN(value) ? 0 : value;
+            if (input.dataset.hypothetical === 'true') {
+                setHypotheticalTarget(ticker, normalizedValue);
+            } else {
+                payload.push({ ticker, target_pct: normalizedValue });
             }
         });
 
@@ -485,13 +671,14 @@
                 throw new Error(message);
             }
             if (data.targets) {
-                targetMap = data.targets;
+                targetMap = normalizeTargetMap(data.targets);
             }
             if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
-                holdingsData = data.snapshot.holdings;
-                if (window.DashFolioHoldingDetail) {
-                    window.DashFolioHoldingDetail.setHoldings(holdingsData);
-                }
+                actualHoldings = data.snapshot.holdings.map(holding => ({ ...holding, isHypothetical: false }));
+            }
+            refreshHoldingsData();
+            if (window.DashFolioHoldingDetail) {
+                window.DashFolioHoldingDetail.setHoldings(actualHoldings);
             }
             const modalEl = document.getElementById('targetModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
@@ -500,6 +687,7 @@
             }
             renderChart();
             renderRebalanceTable(document.getElementById('buyOnlyToggle')?.checked);
+            showHypotheticalFeedback('Targets updated. Simulated assets remain local to this planner.', 'success');
         } catch (error) {
             console.error(error);
             alert(error.message || 'Unable to save targets. Please ensure your allocations sum to more than 0%.');
@@ -536,15 +724,26 @@
                 if (!target) {
                     return;
                 }
+                const removeButton = target.closest('.hypothetical-remove-button');
+                if (removeButton) {
+                    const ticker = removeButton.dataset.ticker;
+                    if (ticker) {
+                        removeHypotheticalAsset(ticker);
+                    }
+                    return;
+                }
                 const row = target.closest('tr[data-ticker]');
                 if (!row) {
+                    return;
+                }
+                if (row.dataset.hypothetical === 'true') {
                     return;
                 }
                 const ticker = row.dataset.ticker;
                 if (!ticker || !window.DashFolioHoldingDetail) {
                     return;
                 }
-                const holding = holdingsData.find(item => item.ticker === ticker);
+                const holding = actualHoldings.find(item => normalizeTicker(item.ticker) === normalizeTicker(ticker));
                 if (holding) {
                     window.DashFolioHoldingDetail.openHolding(holding);
                 } else {
@@ -552,6 +751,22 @@
                 }
             });
         }
+
+        const hypotheticalForm = document.getElementById('hypothetical-form');
+        if (hypotheticalForm) {
+            hypotheticalForm.addEventListener('submit', event => {
+                event.preventDefault();
+                const tickerInput = document.getElementById('hypotheticalTicker');
+                const priceInput = document.getElementById('hypotheticalPrice');
+                const logoInput = document.getElementById('hypotheticalLogo');
+                const success = addHypotheticalAsset(tickerInput?.value, priceInput?.value, logoInput?.value);
+                if (success && hypotheticalForm) {
+                    hypotheticalForm.reset();
+                }
+            });
+        }
+
+        showHypotheticalFeedback('');
 
         renderChart();
         renderRebalanceTable(false);
