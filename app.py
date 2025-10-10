@@ -5,6 +5,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     session,
     url_for,
 )
@@ -17,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from app_paths import BASE_DIR, DATA_STORE, MAIN_SCRIPT, VENV_PYTHON
+from app_paths import ASSETS_DIR, BASE_DIR, DATA_STORE, MAIN_SCRIPT, VENV_PYTHON
 from Calculations.allocations import normalize_target_allocations
 from Calculations.snapshot_cache import get_portfolio_snapshot as get_cached_portfolio_snapshot
 from Calculations.market_data import get_market_snapshot
@@ -96,6 +97,18 @@ def inject_global_helpers():
 ensure_default_config_file()
 ensure_default_portfolio_file()
 apply_session_duration(app, load_config())
+
+
+# ------------------------------
+# Static asset serving
+# ------------------------------
+
+
+@app.route('/assets/<path:filename>')
+def theme_assets(filename: str):
+    """Serve bundled Sneat theme assets locally."""
+
+    return send_from_directory(ASSETS_DIR, filename)
 
 
 # ------------------------------
