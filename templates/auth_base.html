@@ -17,9 +17,9 @@
     <script src="{{ url_for('theme_assets', filename='js/config.js') }}"></script>
     {% block head_extra %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
-<div class="authentication-wrapper container-p-y {% block auth_wrapper_classes %}authentication-basic{% endblock %}">
-    <div class="authentication-inner {% block auth_inner_classes %}{% endblock %}">
+<body>
+<div class="authentication-wrapper authentication-basic container-p-y">
+    <div class="authentication-inner">
         {% block content %}{% endblock %}
     </div>
 </div>
