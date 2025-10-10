@@ -29,58 +29,6 @@ body {
     max-width: 420px;
 }
 
-.authentication-wrapper.authentication-onboarding {
-    padding-top: 4rem;
-    padding-bottom: 4rem;
-}
-
-.authentication-inner.authentication-inner-onboarding {
-    max-width: 960px;
-}
-
-.onboarding-card {
-    border: none;
-    border-radius: 1.25rem;
-    box-shadow: var(--card-shadow);
-}
-
-.onboarding-progress {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-weight: 600;
-    padding: 0.4rem 0.9rem;
-    border-radius: 999px;
-    font-size: 0.85rem;
-    background: rgba(85, 110, 230, 0.12);
-    color: #556ee6;
-}
-
-.onboarding-progress i {
-    font-size: 1rem;
-}
-
-.onboarding-panel {
-    background: #fff;
-    border: 1px solid rgba(86, 106, 127, 0.12);
-    border-radius: 1rem;
-    padding: 1.5rem;
-    box-shadow: 0 8px 24px rgba(86, 106, 127, 0.05);
-}
-
-.onboarding-panel.bg-soft {
-    background: rgba(85, 110, 230, 0.05);
-    border-color: rgba(85, 110, 230, 0.15);
-}
-
-.onboarding-banner {
-    border-radius: 1rem;
-    background: rgba(3, 195, 236, 0.12);
-    color: #0f6e82;
-    padding: 1rem 1.5rem;
-    margin-bottom: 2rem;
-}
-
 .authentication-inner .card {
     box-shadow: var(--card-shadow);
     border-radius: 1rem;
