@@ -6,15 +6,6 @@
     const autoRefreshInterval = Math.min(60, Math.max(1, Number({{ config['AUTO_REFRESH_INTERVAL']|default(60) }}) || 60));
     let incomeChart = null;
     let performanceGauge = null;
-    let performanceDataCache = Array.isArray(initialPerformanceData) ? initialPerformanceData.slice() : [];
-    let activePerformanceRange = 'ytd';
-    const PERFORMANCE_RANGES = {
-        ytd: { label: 'YTD', type: 'yearToDate' },
-        '1y': { label: '1 Year', months: 12 },
-        '6m': { label: '6 Months', months: 6 },
-        '3m': { label: '3 Months', months: 3 },
-        '1w': { label: '1 Week', days: 7 },
-    };
     let autoRefreshHandle = null;
     let statusHideTimer = null;
     let latestSnapshot = initialSnapshot;
@@ -128,54 +119,6 @@
 
     function formatQuantity(value) {
         return formatNumber(value, 2);
-    }
-
-    function getRangeStart(rangeKey) {
-        const range = PERFORMANCE_RANGES[rangeKey];
-        if (!range) {
-            return null;
-        }
-        const now = new Date();
-        if (range.type === 'yearToDate') {
-            return new Date(now.getFullYear(), 0, 1);
-        }
-        if (typeof range.months === 'number') {
-            const start = new Date(now);
-            start.setMonth(start.getMonth() - range.months);
-            return start;
-        }
-        if (typeof range.days === 'number') {
-            const start = new Date(now);
-            start.setDate(start.getDate() - range.days);
-            return start;
-        }
-        return null;
-    }
-
-    function filterSeriesByRange(series, rangeKey) {
-        if (!Array.isArray(series) || !series.length) {
-            return [];
-        }
-        const start = getRangeStart(rangeKey);
-        if (!start) {
-            return series.map(point => ({ ...point }));
-        }
-        const startTime = start.getTime();
-        return series.filter(point => {
-            const pointTime = new Date(point.x).getTime();
-            return !Number.isNaN(pointTime) && pointTime >= startTime;
-        }).map(point => ({ ...point }));
-    }
-
-    function rebaseSeries(series) {
-        if (!Array.isArray(series) || !series.length) {
-            return [];
-        }
-        const baseline = Number(series[0].y) || 0;
-        return series.map(point => ({
-            ...point,
-            y: Number((Number(point.y) - baseline).toFixed(4)),
-        }));
     }
 
     function isValidNumber(value) {
@@ -295,12 +238,25 @@
         }
     }
 
-    function renderPerformanceGauge(portfolioValue, benchmarkValue, benchmarkTicker, rangeKey = activePerformanceRange) {
+    function renderPerformanceGauge(portfolioValue, benchmarkValue, benchmarkTicker) {
         const gaugeEl = document.getElementById('performanceGauge');
         const benchmarkEl = document.getElementById('performance-benchmark');
-        const rangeNoteEl = document.getElementById('performance-range-note');
-        const rangeMeta = PERFORMANCE_RANGES[rangeKey] || PERFORMANCE_RANGES[activePerformanceRange] || PERFORMANCE_RANGES.ytd;
-        const rangeLabel = rangeMeta ? rangeMeta.label : 'Selected range';
+        const summaryEl = document.getElementById('performance-gauge-summary');
+        const portfolioYearEl = document.getElementById('performance-portfolio-year');
+        const benchmarkYearEl = document.getElementById('performance-benchmark-year');
+        const gaugeYearButton = document.getElementById('performance-gauge-year');
+
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        if (gaugeYearButton) {
+            gaugeYearButton.textContent = currentYear;
+        }
+        if (portfolioYearEl) {
+            portfolioYearEl.textContent = currentYear;
+        }
+        if (benchmarkYearEl) {
+            benchmarkYearEl.textContent = currentYear - 1;
+        }
 
         if (!gaugeEl) {
             return;
@@ -309,20 +265,25 @@
         const tickerLabel = (benchmarkTicker || 'Benchmark').toUpperCase();
         if (benchmarkEl) {
             if (Number.isFinite(benchmarkValue)) {
-                benchmarkEl.textContent = `${rangeLabel} ${tickerLabel} change ${formatPercentPlain(Number(benchmarkValue))}`;
+                benchmarkEl.textContent = `${tickerLabel} performance ${formatPercentPlain(Number(benchmarkValue))}`;
             } else {
-                benchmarkEl.textContent = `${rangeLabel} ${tickerLabel} change N/A`;
+                benchmarkEl.textContent = `${tickerLabel} performance N/A`;
             }
         }
 
         if (!Number.isFinite(portfolioValue)) {
             destroyPerformanceGauge();
             gaugeEl.innerHTML = '<div class="text-muted text-center py-4">No performance data yet.</div>';
-            if (rangeNoteEl) {
-                rangeNoteEl.textContent = 'Portfolio growth unavailable';
+            if (summaryEl) {
+                summaryEl.textContent = 'Company growth unavailable';
             }
-            if (benchmarkEl) {
-                benchmarkEl.textContent = `${rangeLabel} ${tickerLabel} change N/A`;
+            const portfolioValueEl = document.getElementById('performance-portfolio-value');
+            if (portfolioValueEl) {
+                portfolioValueEl.textContent = '--';
+            }
+            const benchmarkValueEl = document.getElementById('performance-benchmark-value');
+            if (benchmarkValueEl) {
+                benchmarkValueEl.textContent = '--';
             }
             return;
         }
@@ -334,15 +295,15 @@
         const gradientStart = displayValue >= 0 ? '#c6c9ff' : '#ffcbc2';
         const gaugeLabel = displayValue >= 0 ? 'Growth' : 'Decline';
 
-        if (rangeNoteEl) {
-            const descriptor = displayValue >= 0 ? 'Portfolio growth' : 'Portfolio decline';
-            rangeNoteEl.textContent = `${rangeLabel} ${descriptor.toLowerCase()}`;
+        if (summaryEl) {
+            const descriptor = displayValue >= 0 ? 'Company growth' : 'Company decline';
+            summaryEl.textContent = `${formatPercentPlain(displayValue)} ${descriptor}`;
         }
 
         const options = {
             chart: {
                 type: 'radialBar',
-                height: '100%',
+                height: 260,
                 sparkline: { enabled: true },
             },
             series: [normalizedValue],
@@ -409,46 +370,16 @@
         }
     }
 
-    function syncPerformanceRangeUI() {
-        const button = document.getElementById('performance-range-button');
-        if (button) {
-            button.textContent = PERFORMANCE_RANGES[activePerformanceRange]?.label || 'YTD';
-        }
-        const items = document.querySelectorAll('[data-performance-range]');
-        items.forEach(item => {
-            const range = item.dataset.performanceRange;
-            item.classList.toggle('active', range === activePerformanceRange);
-        });
-    }
-
-    function setPerformanceRange(rangeKey) {
-        if (!PERFORMANCE_RANGES[rangeKey]) {
-            return;
-        }
-        if (rangeKey === activePerformanceRange) {
-            syncPerformanceRangeUI();
-            return;
-        }
-        activePerformanceRange = rangeKey;
-        syncPerformanceRangeUI();
-        renderIncomeChart(null, { skipCache: true });
-    }
-
-    function renderIncomeChart(performanceData, options = {}) {
+    function renderIncomeChart(performanceData) {
         const chartEl = document.getElementById('incomeChart');
         if (!chartEl) {
             return;
         }
 
-        const { skipCache = false } = options;
-        if (!skipCache) {
-            performanceDataCache = Array.isArray(performanceData) ? performanceData.slice() : [];
-        }
-
         const benchmarkTicker = (latestSnapshot?.benchmark_ticker || initialSnapshot?.benchmark_ticker || '').trim();
 
-        const rawPoints = Array.isArray(performanceDataCache)
-            ? performanceDataCache.map(point => ({
+        const rawPoints = Array.isArray(performanceData)
+            ? performanceData.map(point => ({
                 date: point.date,
                 cumulative: Number(point.cumulative_return ?? point.cumulative ?? NaN),
                 legacyIndex: Number(point.index ?? point.value ?? point.portfolio ?? NaN),
@@ -498,21 +429,15 @@
             })
             .filter(Boolean);
 
-        const filteredPortfolio = filterSeriesByRange(portfolioPoints, activePerformanceRange);
-        const filteredBenchmark = filterSeriesByRange(benchmarkPoints, activePerformanceRange);
-
-        const finalPortfolioPoints = rebaseSeries(filteredPortfolio.length ? filteredPortfolio : portfolioPoints.slice(-1));
-        const finalBenchmarkPoints = rebaseSeries(filteredBenchmark.length ? filteredBenchmark : benchmarkPoints.slice(-1));
-
-        if (!finalPortfolioPoints.length) {
+        if (!portfolioPoints.length) {
             destroyIncomeChart();
             chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to display cumulative performance yet.</div>';
-            const latestBenchmark = finalBenchmarkPoints.length ? finalBenchmarkPoints[finalBenchmarkPoints.length - 1].y : null;
-            renderPerformanceGauge(null, latestBenchmark, benchmarkTicker, activePerformanceRange);
+            const latestBenchmark = benchmarkPoints.length ? benchmarkPoints[benchmarkPoints.length - 1].y : null;
+            renderPerformanceGauge(null, latestBenchmark, benchmarkTicker);
             return;
         }
 
-        const allPoints = finalBenchmarkPoints.length ? finalPortfolioPoints.concat(finalBenchmarkPoints) : finalPortfolioPoints;
+        const allPoints = benchmarkPoints.length ? portfolioPoints.concat(benchmarkPoints) : portfolioPoints;
         const yValues = allPoints.map(point => point.y);
         let rawMin = 0;
         let rawMax = 0;
@@ -541,11 +466,11 @@
         const benchmarkColor = '#94a3b8';
 
         const series = [
-            { name: 'Portfolio return', data: finalPortfolioPoints },
+            { name: 'Portfolio return', data: portfolioPoints },
         ];
-        if (finalBenchmarkPoints.length) {
+        if (benchmarkPoints.length) {
             const label = benchmarkTicker ? `${benchmarkTicker} benchmark` : 'Benchmark';
-            series.push({ name: label, data: finalBenchmarkPoints });
+            series.push({ name: label, data: benchmarkPoints });
         }
 
         const yAxisAnnotations = [];
@@ -584,7 +509,7 @@
         const options = {
             chart: {
                 type: 'line',
-                height: '100%',
+                height: 320,
                 toolbar: { show: false },
             },
             series,
@@ -644,9 +569,9 @@
             },
         };
 
-        const latestPortfolio = finalPortfolioPoints.length ? finalPortfolioPoints[finalPortfolioPoints.length - 1].y : null;
-        const latestBenchmark = finalBenchmarkPoints.length ? finalBenchmarkPoints[finalBenchmarkPoints.length - 1].y : null;
-        renderPerformanceGauge(latestPortfolio, latestBenchmark, benchmarkTicker, activePerformanceRange);
+        const latestPortfolio = portfolioPoints.length ? portfolioPoints[portfolioPoints.length - 1].y : null;
+        const latestBenchmark = benchmarkPoints.length ? benchmarkPoints[benchmarkPoints.length - 1].y : null;
+        renderPerformanceGauge(latestPortfolio, latestBenchmark, benchmarkTicker);
 
         if (!incomeChart) {
             chartEl.innerHTML = '';
@@ -675,6 +600,17 @@
 
         document.getElementById('metric-total-cost').textContent = formatCurrency(summary.total_cost || 0);
         document.getElementById('metric-current-value').textContent = formatCurrency(summary.current_value || 0);
+
+        const gaugePortfolioValueEl = document.getElementById('performance-portfolio-value');
+        if (gaugePortfolioValueEl) {
+            gaugePortfolioValueEl.textContent = formatCompactCurrency(summary.current_value || 0);
+        }
+
+        const gaugeBenchmarkValueEl = document.getElementById('performance-benchmark-value');
+        if (gaugeBenchmarkValueEl) {
+            const investedValue = Number(summary.total_cost || summary.invested_value || 0);
+            gaugeBenchmarkValueEl.textContent = formatCompactCurrency(investedValue);
+        }
 
         const totalPlEl = document.getElementById('metric-total-pl');
         if (totalPlEl) {
@@ -1140,24 +1076,6 @@
             fetchSnapshot({ force: true, showStatusPill: true });
         });
     }
-
-    const performanceRangeItems = document.querySelectorAll('[data-performance-range]');
-    if (performanceRangeItems.length) {
-        performanceRangeItems.forEach(item => {
-            item.addEventListener('click', event => {
-                const target = event.currentTarget;
-                if (!target) {
-                    return;
-                }
-                const range = target.dataset.performanceRange;
-                if (range) {
-                    setPerformanceRange(range);
-                }
-            });
-        });
-    }
-
-    syncPerformanceRangeUI();
 
     renderIncomeChart(initialPerformanceData);
     fetchSnapshot({ force: true });
