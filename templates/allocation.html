@@ -3,10 +3,16 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <p class="text-muted mb-0">Visualize your current allocation and calculate the trades required to reach your targets.</p>
-    <button class="btn btn-primary d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#targetModal">
-        <i class="bx bx-slider me-2"></i>
-        Adjust target allocation
-    </button>
+    <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-outline-primary d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addAssetModal">
+            <i class="bx bx-plus me-2"></i>
+            Add hypothetical asset
+        </button>
+        <button class="btn btn-primary d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#targetModal">
+            <i class="bx bx-slider me-2"></i>
+            Adjust target allocation
+        </button>
+    </div>
 </div>
 
 {% if snapshot.holdings %}
@@ -84,6 +90,7 @@
                             <th>Ticker</th>
                             <th>Current allocation</th>
                             <th>Target %</th>
+                            <th class="text-end">Actions</th>
                         </tr>
                         </thead>
                         <tbody id="target-form-body"></tbody>
@@ -100,6 +107,48 @@
         </div>
     </div>
 </div>
+<div class="modal fade" id="addAssetModal" tabindex="-1" aria-labelledby="addAssetModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="add-asset-form">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addAssetModalLabel">Add hypothetical asset</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="add-asset-ticker" class="form-label">Ticker</label>
+                        <input type="text" class="form-control text-uppercase" id="add-asset-ticker" placeholder="e.g. MSFT" required>
+                        <div class="form-text">Simulated assets won't modify your actual holdings.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add-asset-name" class="form-label">Display name <span class="text-muted small">(optional)</span></label>
+                        <input type="text" class="form-control" id="add-asset-name" placeholder="Company or fund name">
+                    </div>
+                    <div class="mb-3">
+                        <label for="add-asset-price" class="form-label">Simulated price ({{ currency_context.code }})</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="add-asset-price" min="0" step="0.01" required>
+                            <button class="btn btn-outline-secondary" type="button" id="fetch-asset-price">
+                                <i class="bx bx-refresh me-1"></i>
+                                Fetch price
+                            </button>
+                        </div>
+                        <div class="form-text">Use the latest market quote or any value you'd like to model.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add-asset-logo" class="form-label">Logo URL <span class="text-muted small">(optional)</span></label>
+                        <input type="url" class="form-control" id="add-asset-logo" placeholder="https://example.com/logo.png">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add asset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% include 'holding_detail_modal.html' %}
 {% endblock %}
 
@@ -108,16 +157,66 @@
 {% include 'holding_detail_scripts.html' %}
 <script>
     const holdingsSnapshot = {{ snapshot.holdings|tojson }};
-    let holdingsData = Array.isArray(holdingsSnapshot) ? holdingsSnapshot.slice() : [];
-    let targetMap = {{ target_allocations|tojson }};
+    let baseHoldings = Array.isArray(holdingsSnapshot) ? holdingsSnapshot.slice() : [];
+    let hypotheticalHoldings = [];
+    let holdingsData = baseHoldings.slice();
+    let serverTargetMap = normalizeTargetMap({{ target_allocations|tojson }} || {});
+    let hypotheticalTargetMap = {};
     const currencySettings = {{ currency_settings|tojson }};
+    const marketLookupUrlTemplate = '{{ url_for('api_market_lookup', ticker='__TICKER__') }}';
+
+    function normalizeTargetMap(map) {
+        const normalized = {};
+        if (!map || typeof map !== 'object') {
+            return normalized;
+        }
+        Object.entries(map).forEach(([ticker, value]) => {
+            if (!ticker) {
+                return;
+            }
+            const key = String(ticker).toUpperCase();
+            const numeric = Number(value);
+            normalized[key] = Number.isFinite(numeric) ? numeric : 0;
+        });
+        return normalized;
+    }
+
+    function refreshHoldingsData() {
+        holdingsData = baseHoldings.concat(hypotheticalHoldings);
+    }
+
+    function hasTicker(ticker) {
+        if (!ticker) {
+            return false;
+        }
+        const upper = String(ticker).toUpperCase();
+        return baseHoldings.some(holding => String(holding.ticker).toUpperCase() === upper) ||
+            hypotheticalHoldings.some(holding => String(holding.ticker).toUpperCase() === upper);
+    }
+
+    function getTargetPct(ticker) {
+        if (!ticker) {
+            return 0;
+        }
+        const upper = String(ticker).toUpperCase();
+        if (Object.prototype.hasOwnProperty.call(hypotheticalTargetMap, upper)) {
+            return Number(hypotheticalTargetMap[upper]) || 0;
+        }
+        return Number(serverTargetMap?.[upper] ?? 0) || 0;
+    }
+
+    function buildMarketLookupUrl(ticker) {
+        return marketLookupUrlTemplate.replace('__TICKER__', encodeURIComponent(String(ticker || '').toUpperCase()));
+    }
+
+    refreshHoldingsData();
 
     if (window.DashFolioHoldingDetail) {
         window.DashFolioHoldingDetail.configure({
             currencySettings,
             defaultRange: '6M',
         });
-        window.DashFolioHoldingDetail.setHoldings(holdingsData);
+        window.DashFolioHoldingDetail.setHoldings(baseHoldings);
     }
 
     const chartColors = ['#696cff', '#8592a3', '#71dd37', '#ffab00', '#ff3e1d', '#03c3ec', '#fd3550', '#9c27b0'];
@@ -192,10 +291,11 @@
     }
 
     function getTotalValue() {
-        return holdingsData.reduce((sum, holding) => sum + (holding.current_value || 0), 0);
+        return baseHoldings.reduce((sum, holding) => sum + (Number(holding.current_value || 0) || 0), 0);
     }
 
     function computePlan(buyOnly) {
+        refreshHoldingsData();
         const total = getTotalValue();
         if (!total) {
             return [];
@@ -203,19 +303,22 @@
 
         const base = holdingsData.map(holding => {
             const ticker = holding.ticker;
-            const targetPct = Number(targetMap?.[ticker] ?? 0);
+            const targetPct = getTargetPct(ticker);
             const targetWeight = targetPct / 100;
             const currentValue = Number(holding.current_value || 0);
             const currentWeight = total ? currentValue / total : 0;
+            const price = Number(holding.current_price || holding.price || holding.simulated_price || 0);
             return {
                 ticker,
                 logo_url: holding.logo_url,
+                displayName: holding.name || holding.display_name || '',
                 targetPct,
                 targetWeight,
                 currentPct: currentWeight * 100,
                 currentValue,
-                price: Number(holding.current_price || 0),
+                price,
                 quantityHeld: Number(holding.quantity || 0),
+                isHypothetical: Boolean(holding.is_hypothetical),
                 rawQuantity: 0,
                 tradeValue: 0,
             };
@@ -256,6 +359,8 @@
             return {
                 ticker: item.ticker,
                 logo_url: item.logo_url,
+                displayName: item.displayName,
+                isHypothetical: item.isHypothetical,
                 currentPct: item.currentPct,
                 quantity,
                 tradeValue,
@@ -271,6 +376,8 @@
             return {
                 ticker: item.ticker,
                 logo_url: item.logo_url,
+                displayName: item.displayName,
+                isHypothetical: item.isHypothetical,
                 targetPct: achievedPct,
                 currentPct: item.currentPct,
                 quantity: item.quantity,
@@ -280,6 +387,7 @@
     }
 
     function renderRebalanceTable(buyOnly) {
+        refreshHoldingsData();
         const tableBody = document.querySelector('#rebalance-table tbody');
         if (!tableBody) {
             return;
@@ -295,6 +403,10 @@
             const row = document.createElement('tr');
             row.dataset.ticker = item.ticker;
             row.classList.add('holding-detail-trigger');
+            if (item.isHypothetical) {
+                row.dataset.hypothetical = '1';
+                row.classList.add('table-hypothetical');
+            }
             const logoSrc = item.logo_url || 'https://via.placeholder.com/42?text=%20';
             let actionBadge = '<span class="badge bg-label-secondary">Hold</span>';
             if (item.quantity > 0) {
@@ -302,9 +414,11 @@
             } else if (item.quantity < 0) {
                 actionBadge = '<span class="badge bg-label-danger">Sell</span>';
             }
+            const badge = item.isHypothetical ? '<span class="badge bg-label-info ms-2">Simulated</span>' : '';
+            const nameLine = item.displayName ? `<div class="text-muted small">${item.displayName}</div>` : '';
             row.innerHTML = `
                 <td class="logo-cell"><img src="${logoSrc}" alt="${item.ticker} logo" onerror="this.src='https://via.placeholder.com/42?text=%20';"></td>
-                <td class="fw-semibold">${item.ticker}</td>
+                <td class="fw-semibold">${item.ticker}${badge}${nameLine}</td>
                 <td>${formatPercentPlain(item.targetPct)}</td>
                 <td>${formatPercentPlain(item.currentPct)}</td>
                 <td>${actionBadge}</td>
@@ -323,6 +437,7 @@
     }
 
     function renderChart() {
+        refreshHoldingsData();
         const container = document.getElementById('allocationChart');
         if (!container || !holdingsData.length || !getTotalValue()) {
             destroyAllocationChart();
@@ -423,14 +538,22 @@
             return;
         }
         tbody.innerHTML = '';
+        refreshHoldingsData();
         holdingsData.forEach(holding => {
             const row = document.createElement('tr');
-            const targetValue = Number(targetMap?.[holding.ticker] ?? 0);
+            const targetValue = getTargetPct(holding.ticker);
             const currentPct = getTotalValue() ? (Number(holding.current_value || 0) / getTotalValue()) * 100 : 0;
+            const isHypothetical = Boolean(holding.is_hypothetical);
+            const badge = isHypothetical ? '<span class="badge bg-label-info ms-2">Simulated</span>' : '';
+            const nameLine = holding.name || holding.display_name ? `<div class=\"text-muted small\">${holding.name || holding.display_name}</div>` : '';
             row.innerHTML = `
-                <td class="fw-semibold">${holding.ticker}</td>
+                <td>
+                    <span class="fw-semibold d-block">${holding.ticker}${badge}</span>
+                    ${nameLine}
+                </td>
                 <td>${formatPercentPlain(currentPct)}</td>
-                <td><input type="number" class="form-control target-input" data-ticker="${holding.ticker}" min="0" step="0.01" value="${targetValue.toFixed(2)}"></td>
+                <td><input type="number" class="form-control target-input" data-ticker="${holding.ticker}" data-hypothetical="${isHypothetical ? '1' : '0'}" min="0" step="0.01" value="${targetValue.toFixed(2)}"></td>
+                <td class="text-end">${isHypothetical ? '<button type="button" class="btn btn-sm btn-outline-danger remove-hypothetical" data-ticker="' + holding.ticker + '" aria-label="Remove simulated asset"><i class="bx bx-trash"></i></button>' : ''}</td>
             `;
             tbody.appendChild(row);
         });
@@ -464,45 +587,201 @@
 
     async function saveTargets() {
         const inputs = document.querySelectorAll('#target-form-body .target-input');
-        const payload = [];
+        const actualPayload = [];
+        const simulatedUpdates = {};
         inputs.forEach(input => {
-            const ticker = input.dataset.ticker;
+            const ticker = String(input.dataset.ticker || '').toUpperCase();
+            if (!ticker) {
+                return;
+            }
+            const isHypothetical = input.dataset.hypothetical === '1';
             const value = parseFloat(input.value);
-            if (ticker) {
-                payload.push({ ticker, target_pct: isNaN(value) ? 0 : value });
+            const sanitized = Number.isFinite(value) ? value : 0;
+            if (isHypothetical) {
+                simulatedUpdates[ticker] = sanitized;
+            } else {
+                actualPayload.push({ ticker, target_pct: sanitized });
             }
         });
 
+        Object.assign(hypotheticalTargetMap, simulatedUpdates);
+
+        if (actualPayload.length > 0) {
+            try {
+                const response = await fetch('{{ url_for('api_update_targets') }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targets: actualPayload })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const message = data.error || 'Unable to save targets. Please ensure your allocations sum to more than 0%.';
+                    throw new Error(message);
+                }
+                if (data.targets) {
+                    serverTargetMap = normalizeTargetMap(data.targets);
+                }
+                if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
+                    baseHoldings = data.snapshot.holdings;
+                    if (window.DashFolioHoldingDetail) {
+                        window.DashFolioHoldingDetail.setHoldings(baseHoldings);
+                    }
+                }
+                if (data.snapshot && data.snapshot.market_status && window.DashFolio && typeof window.DashFolio.setMarketStatus === 'function') {
+                    window.DashFolio.setMarketStatus(data.snapshot.market_status);
+                }
+            } catch (error) {
+                console.error(error);
+                alert(error.message || 'Unable to save targets. Please ensure your allocations sum to more than 0%.');
+                return;
+            }
+        }
+
+        refreshHoldingsData();
+        renderChart();
+        renderRebalanceTable(document.getElementById('buyOnlyToggle')?.checked);
+        const modalEl = document.getElementById('targetModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) {
+            modal.hide();
+        }
+    }
+
+    function addHypotheticalHolding({ ticker, name, price, logo }) {
+        const upper = String(ticker || '').toUpperCase();
+        if (!upper) {
+            throw new Error('Ticker is required.');
+        }
+        if (hasTicker(upper)) {
+            throw new Error('This ticker is already part of your allocation plan.');
+        }
+        const numericPrice = Number(price);
+        if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+            throw new Error('Enter a valid price for the simulated asset.');
+        }
+        hypotheticalHoldings.push({
+            ticker: upper,
+            name: name || '',
+            display_name: name || '',
+            logo_url: logo || '',
+            current_price: numericPrice,
+            price: numericPrice,
+            current_value: 0,
+            quantity: 0,
+            is_hypothetical: true,
+        });
+        if (!Object.prototype.hasOwnProperty.call(hypotheticalTargetMap, upper)) {
+            hypotheticalTargetMap[upper] = 0;
+        }
+        refreshHoldingsData();
+        renderChart();
+        renderRebalanceTable(document.getElementById('buyOnlyToggle')?.checked);
+        const targetModalEl = document.getElementById('targetModal');
+        if (targetModalEl && targetModalEl.classList.contains('show')) {
+            populateTargetForm();
+        }
+    }
+
+    function removeHypotheticalAsset(ticker) {
+        const upper = String(ticker || '').toUpperCase();
+        if (!upper) {
+            return;
+        }
+        hypotheticalHoldings = hypotheticalHoldings.filter(holding => String(holding.ticker).toUpperCase() !== upper);
+        if (Object.prototype.hasOwnProperty.call(hypotheticalTargetMap, upper)) {
+            delete hypotheticalTargetMap[upper];
+        }
+        refreshHoldingsData();
+        renderChart();
+        renderRebalanceTable(document.getElementById('buyOnlyToggle')?.checked);
+        const targetModalEl = document.getElementById('targetModal');
+        if (targetModalEl && targetModalEl.classList.contains('show')) {
+            populateTargetForm();
+        } else {
+            updateTargetTotalBadge();
+        }
+    }
+
+    function resetAddAssetForm() {
+        const form = document.getElementById('add-asset-form');
+        if (form) {
+            form.reset();
+        }
+    }
+
+    async function handleFetchAssetPrice(button, tickerInput, priceInput, nameInput, logoInput, defaultLabel) {
+        if (!button || !tickerInput || !priceInput) {
+            return;
+        }
+        const ticker = String(tickerInput.value || '').trim().toUpperCase();
+        if (!ticker) {
+            alert('Enter a ticker symbol to fetch pricing.');
+            tickerInput.focus();
+            return;
+        }
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Fetching';
         try {
-            const response = await fetch('{{ url_for('api_update_targets') }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targets: payload })
-            });
+            const response = await fetch(buildMarketLookupUrl(ticker), { cache: 'no-cache' });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                const message = data.error || 'Unable to save targets. Please ensure your allocations sum to more than 0%.';
+                const message = data.error || 'Unable to fetch price for the selected ticker.';
                 throw new Error(message);
             }
-            if (data.targets) {
-                targetMap = data.targets;
+            const numericPrice = Number(data.price);
+            if (Number.isFinite(numericPrice)) {
+                priceInput.value = numericPrice.toFixed(2);
             }
-            if (data.snapshot && Array.isArray(data.snapshot.holdings)) {
-                holdingsData = data.snapshot.holdings;
-                if (window.DashFolioHoldingDetail) {
-                    window.DashFolioHoldingDetail.setHoldings(holdingsData);
-                }
+            if (data.name && nameInput && !nameInput.value) {
+                nameInput.value = data.name;
             }
-            const modalEl = document.getElementById('targetModal');
+            if (data.logo_url && logoInput && !logoInput.value) {
+                logoInput.value = data.logo_url;
+            }
+        } catch (error) {
+            console.error(error);
+            alert(error.message || 'Unable to fetch price for the selected ticker.');
+        } finally {
+            button.disabled = false;
+            button.innerHTML = defaultLabel;
+        }
+    }
+
+    function handleAddAssetSubmit(event, form, tickerInput, priceInput, nameInput, logoInput) {
+        event.preventDefault();
+        if (!tickerInput || !priceInput) {
+            return;
+        }
+        const ticker = String(tickerInput.value || '').trim().toUpperCase();
+        const price = parseFloat(priceInput.value);
+        const name = nameInput ? String(nameInput.value || '').trim() : '';
+        const logo = logoInput ? String(logoInput.value || '').trim() : '';
+        if (!ticker) {
+            alert('Ticker is required.');
+            tickerInput.focus();
+            return;
+        }
+        if (hasTicker(ticker)) {
+            alert('This ticker already exists in your allocation plan.');
+            return;
+        }
+        if (!Number.isFinite(price) || price <= 0) {
+            alert('Enter a positive price to simulate trades.');
+            priceInput.focus();
+            return;
+        }
+        try {
+            addHypotheticalHolding({ ticker, name, price, logo });
+            const modalEl = document.getElementById('addAssetModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) {
                 modal.hide();
             }
-            renderChart();
-            renderRebalanceTable(document.getElementById('buyOnlyToggle')?.checked);
+            if (form) {
+                form.reset();
+            }
         } catch (error) {
-            console.error(error);
-            alert(error.message || 'Unable to save targets. Please ensure your allocations sum to more than 0%.');
+            alert(error.message || 'Unable to add simulated asset.');
         }
     }
 
@@ -522,11 +801,62 @@
         const targetFormBody = document.getElementById('target-form-body');
         if (targetFormBody) {
             targetFormBody.addEventListener('input', updateTargetTotalBadge);
+            targetFormBody.addEventListener('click', event => {
+                const removeButton = event.target.closest('.remove-hypothetical');
+                if (!removeButton) {
+                    return;
+                }
+                const ticker = removeButton.dataset.ticker;
+                removeHypotheticalAsset(ticker);
+            });
         }
 
         const saveTargetsBtn = document.getElementById('save-targets');
         if (saveTargetsBtn) {
             saveTargetsBtn.addEventListener('click', saveTargets);
+        }
+
+        const addAssetForm = document.getElementById('add-asset-form');
+        const addAssetModalEl = document.getElementById('addAssetModal');
+        const addAssetTickerInput = document.getElementById('add-asset-ticker');
+        const addAssetPriceInput = document.getElementById('add-asset-price');
+        const addAssetNameInput = document.getElementById('add-asset-name');
+        const addAssetLogoInput = document.getElementById('add-asset-logo');
+        const fetchAssetPriceButton = document.getElementById('fetch-asset-price');
+        const fetchAssetPriceDefault = fetchAssetPriceButton ? fetchAssetPriceButton.innerHTML : '';
+
+        if (addAssetModalEl) {
+            addAssetModalEl.addEventListener('show.bs.modal', () => {
+                if (addAssetForm) {
+                    addAssetForm.reset();
+                }
+                if (addAssetTickerInput) {
+                    addAssetTickerInput.focus();
+                }
+                if (fetchAssetPriceButton) {
+                    fetchAssetPriceButton.disabled = false;
+                    fetchAssetPriceButton.innerHTML = fetchAssetPriceDefault;
+                }
+            });
+            addAssetModalEl.addEventListener('hidden.bs.modal', () => {
+                resetAddAssetForm();
+                if (fetchAssetPriceButton) {
+                    fetchAssetPriceButton.disabled = false;
+                    fetchAssetPriceButton.innerHTML = fetchAssetPriceDefault;
+                }
+            });
+        }
+
+        if (addAssetForm) {
+            addAssetForm.addEventListener('submit', event => {
+                handleAddAssetSubmit(event, addAssetForm, addAssetTickerInput, addAssetPriceInput, addAssetNameInput, addAssetLogoInput);
+            });
+        }
+
+        if (fetchAssetPriceButton) {
+            fetchAssetPriceButton.addEventListener('click', () => {
+                handleFetchAssetPrice(fetchAssetPriceButton, addAssetTickerInput, addAssetPriceInput, addAssetNameInput, addAssetLogoInput, fetchAssetPriceDefault);
+            });
         }
 
         const rebalanceBody = document.querySelector('#rebalance-table tbody');
@@ -540,10 +870,14 @@
                 if (!row) {
                     return;
                 }
+                if (row.dataset.hypothetical === '1') {
+                    return;
+                }
                 const ticker = row.dataset.ticker;
                 if (!ticker || !window.DashFolioHoldingDetail) {
                     return;
                 }
+                refreshHoldingsData();
                 const holding = holdingsData.find(item => item.ticker === ticker);
                 if (holding) {
                     window.DashFolioHoldingDetail.openHolding(holding);

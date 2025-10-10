@@ -42,6 +42,10 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
     """Fetch current and recent pricing information for ``ticker``."""
 
     result: Dict[str, Any] = {
+        "symbol": ticker.upper(),
+        "short_name": None,
+        "long_name": None,
+        "logo_url": None,
         "current_price": None,
         "previous_close": None,
         "week_close": None,
@@ -71,6 +75,9 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
             day_high = fast_info.get("day_high") or fast_info.get("dayHigh")
             day_low = fast_info.get("day_low") or fast_info.get("dayLow")
             market_cap = fast_info.get("market_cap") or fast_info.get("marketCap")
+            short_name = fast_info.get("short_name") or fast_info.get("shortName")
+            long_name = fast_info.get("long_name") or fast_info.get("longName")
+            logo_url = fast_info.get("logo_url") or fast_info.get("logoUrl")
 
             if last_price is not None:
                 result["current_price"] = safe_float(last_price)
@@ -84,6 +91,12 @@ def get_market_snapshot(ticker: str) -> Dict[str, Any]:
                 result["day_low"] = safe_float(day_low)
             if market_cap is not None:
                 result["market_cap"] = safe_float(market_cap)
+            if short_name:
+                result["short_name"] = str(short_name)
+            if long_name:
+                result["long_name"] = str(long_name)
+            if logo_url:
+                result["logo_url"] = str(logo_url)
 
         history = ticker_obj.history(period="1y", interval="1d")
         if not history.empty:

@@ -192,6 +192,14 @@ body {
     font-weight: 600;
 }
 
+.table-hypothetical {
+    background-color: rgba(3, 195, 236, 0.05);
+}
+
+.table-hypothetical td {
+    border-top-color: rgba(3, 195, 236, 0.15);
+}
+
 .holdings-table-wrapper {
     overflow-x: auto;
 }
