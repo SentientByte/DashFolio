@@ -43,6 +43,22 @@ body {
     font-size: 1.25rem;
 }
 
+.app-brand-logo-image {
+    width: 40px;
+    height: auto;
+    display: block;
+}
+
+.performance-chart {
+    min-height: 320px;
+    height: 100%;
+}
+
+.navbar-logo {
+    height: 32px;
+    width: auto;
+}
+
 .layout-menu.open {
     transform: translateX(0);
 }

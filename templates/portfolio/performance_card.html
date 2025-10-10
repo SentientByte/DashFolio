@@ -4,11 +4,23 @@
             <h5 class="mb-1">Performance</h5>
             <small class="text-muted">Time-weighted index for invested assets, excluding cash and external flows.</small>
         </div>
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="performance-range-button" data-bs-toggle="dropdown" aria-expanded="false">
+                YTD
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="performance-range-button">
+                <li><button class="dropdown-item active" type="button" data-performance-range="ytd">YTD</button></li>
+                <li><button class="dropdown-item" type="button" data-performance-range="1y">1 Year</button></li>
+                <li><button class="dropdown-item" type="button" data-performance-range="6m">6 Months</button></li>
+                <li><button class="dropdown-item" type="button" data-performance-range="3m">3 Months</button></li>
+                <li><button class="dropdown-item" type="button" data-performance-range="1w">1 Week</button></li>
+            </ul>
+        </div>
     </div>
     <div class="card-body">
         <div class="row g-4 align-items-stretch">
             <div class="col-12 col-xl-8">
-                <div id="incomeChart" style="min-height: 320px;"></div>
+                <div id="incomeChart" class="performance-chart h-100"></div>
             </div>
             <div class="col-12 col-xl-4">
                 <div class="performance-gauge-tile h-100 d-flex flex-column">
@@ -17,47 +29,13 @@
                             <small class="text-muted text-uppercase fw-semibold d-block">Performance</small>
                             <h5 class="mb-0">Growth overview</h5>
                         </div>
-                        <div class="dropdown">
-                            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="performance-gauge-year" data-bs-toggle="dropdown" aria-expanded="false">
-                                2024
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="performance-gauge-year">
-                                <li><button class="dropdown-item active" type="button" data-range="ytd">Year to date</button></li>
-                                <li><button class="dropdown-item" type="button" data-range="1y">Last 12 months</button></li>
-                                <li><button class="dropdown-item" type="button" data-range="max">Max available</button></li>
-                            </ul>
-                        </div>
                     </div>
                     <div class="performance-gauge-chart flex-grow-1 d-flex align-items-center justify-content-center">
                         <div id="performanceGauge"></div>
                     </div>
                     <div class="text-center mt-3">
-                        <div class="fw-semibold" id="performance-gauge-summary">Company growth unavailable</div>
-                        <div class="text-muted small" id="performance-benchmark">Benchmark performance N/A</div>
-                    </div>
-                    <div class="row g-4 mt-4 performance-gauge-stats">
-                        <div class="col-12 col-sm-6">
-                            <div class="d-flex align-items-center gap-3">
-                                <span class="performance-gauge-icon performance-gauge-icon-primary">
-                                    <i class="bx bx-trending-up"></i>
-                                </span>
-                                <div>
-                                    <small class="text-muted d-block" id="performance-portfolio-year">2024</small>
-                                    <div class="fw-semibold" id="performance-portfolio-value">--</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-12 col-sm-6">
-                            <div class="d-flex align-items-center gap-3">
-                                <span class="performance-gauge-icon performance-gauge-icon-info">
-                                    <i class="bx bx-line-chart"></i>
-                                </span>
-                                <div>
-                                    <small class="text-muted d-block" id="performance-benchmark-year">2023</small>
-                                    <div class="fw-semibold" id="performance-benchmark-value">--</div>
-                                </div>
-                            </div>
-                        </div>
+                        <div class="text-muted small" id="performance-range-note">Select a range to view growth.</div>
+                        <div class="fw-semibold" id="performance-benchmark">Benchmark change N/A</div>
                     </div>
                 </div>
             </div>

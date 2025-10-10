@@ -19,9 +19,9 @@
     <div class="layout-container">
         <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
             <div class="app-brand demo d-flex align-items-center justify-content-between py-3 px-4">
-                <a href="{{ url_for('portfolio_analysis') }}" class="app-brand-link">
+                <a href="{{ url_for('portfolio_analysis') }}" class="app-brand-link d-flex align-items-center">
                     <span class="app-brand-logo demo">
-                        <i class="bx bx-pie-chart-alt-2"></i>
+                        <img src="{{ url_for('static', filename='logo.png') }}" alt="DashFolio logo" class="app-brand-logo-image">
                     </span>
                     <span class="app-brand-text demo menu-text fw-bold ms-2">DashFolio</span>
                 </a>
@@ -72,9 +72,12 @@
                 </div>
                 <div class="navbar-nav-right d-flex align-items-center flex-grow-1" id="navbar-collapse">
                     <div class="navbar-nav align-items-center">
-                        <div class="nav-item">
-                            <h4 class="mb-0 fw-semibold">{{ page_title or 'Dashboard' }}</h4>
-                            {% if page_subtitle %}<small class="text-muted">{{ page_subtitle }}</small>{% endif %}
+                        <div class="nav-item d-flex align-items-center gap-3">
+                            <img src="{{ url_for('static', filename='logo.png') }}" alt="DashFolio logo" class="navbar-logo d-none d-md-inline-block">
+                            <div>
+                                <h4 class="mb-0 fw-semibold">{{ page_title or 'Dashboard' }}</h4>
+                                {% if page_subtitle %}<small class="text-muted">{{ page_subtitle }}</small>{% endif %}
+                            </div>
                         </div>
                     </div>
                     <ul class="navbar-nav flex-row align-items-center ms-auto">
