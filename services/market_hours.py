@@ -165,7 +165,7 @@ def get_market_status(now: Optional[datetime] = None) -> Dict[str, Optional[str]
     elif is_holiday:
         reason = "Market holiday"
     elif current.time() < MARKET_OPEN_TIME:
-        reason = "Pre-market"
+        reason = None
     elif current.time() >= MARKET_CLOSE_TIME:
         reason = "After hours"
     else:
