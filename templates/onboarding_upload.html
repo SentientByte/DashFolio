@@ -11,46 +11,48 @@
     </div>
 </div>
 
-{% if error %}
-<div class="alert alert-danger" role="alert">{{ error }}</div>
-{% endif %}
+<div class="onboarding-content-card mt-4">
+    {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+    {% endif %}
 
-<div class="row g-4">
-    <div class="col-lg-6">
-        <div class="onboarding-panel h-100">
-            <h5 class="mb-1">Upload transaction history</h5>
-            <p class="text-muted mb-4">CSV files should include Symbol, Date/Time, Quantity, Price, and optional Commission columns.</p>
-            <form method="post" enctype="multipart/form-data" class="row g-3" novalidate>
-                <input type="hidden" name="action" value="upload">
-                <div class="col-12">
-                    <label for="csv-file" class="form-label">Choose CSV file</label>
-                    <input class="form-control" type="file" id="csv-file" name="csv_file" accept=".csv,text/csv" required>
-                </div>
-                <div class="col-12 col-sm-6">
-                    <label for="upload-mode" class="form-label">Import mode</label>
-                    <select id="upload-mode" name="mode" class="form-select">
-                        <option value="replace" selected>Replace existing transactions</option>
-                        <option value="append">Append to existing transactions</option>
-                    </select>
-                </div>
-                <div class="col-12 text-sm-end">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bx bx-upload me-1"></i>
-                        Upload &amp; finish
-                    </button>
-                </div>
-            </form>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="onboarding-panel h-100">
+                <h5 class="mb-1">Upload transaction history</h5>
+                <p class="text-muted mb-4">CSV files should include Symbol, Date/Time, Quantity, Price, and optional Commission columns.</p>
+                <form method="post" enctype="multipart/form-data" class="row g-3" novalidate>
+                    <input type="hidden" name="action" value="upload">
+                    <div class="col-12">
+                        <label for="csv-file" class="form-label">Choose CSV file</label>
+                        <input class="form-control" type="file" id="csv-file" name="csv_file" accept=".csv,text/csv" required>
+                    </div>
+                    <div class="col-12 col-sm-6">
+                        <label for="upload-mode" class="form-label">Import mode</label>
+                        <select id="upload-mode" name="mode" class="form-select">
+                            <option value="replace" selected>Replace existing transactions</option>
+                            <option value="append">Append to existing transactions</option>
+                        </select>
+                    </div>
+                    <div class="col-12 text-sm-end">
+                        <button type="submit" class="btn btn-onboarding btn-onboarding-primary">
+                            <i class="bx bx-upload"></i>
+                            Upload &amp; finish
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="onboarding-panel h-100 bg-soft">
-            <h5 class="mb-1">Need more time?</h5>
-            <p class="text-muted">You currently have {{ transaction_count }} saved transaction{{ transaction_count != 1 and 's' or '' }}.</p>
-            <p class="text-muted">Skip for now and start exploring the dashboard—you can import transactions whenever you're ready from the Transactions page.</p>
-            <form method="post" class="d-flex flex-column flex-sm-row gap-2 align-items-sm-center">
-                <input type="hidden" name="action" value="skip">
-                <button type="submit" class="btn btn-success flex-fill flex-sm-grow-0">Skip &amp; enter dashboard</button>
-            </form>
+        <div class="col-lg-6">
+            <div class="onboarding-panel h-100 bg-soft">
+                <h5 class="mb-1">Need more time?</h5>
+                <p class="text-muted">You currently have {{ transaction_count }} saved transaction{{ transaction_count != 1 and 's' or '' }}.</p>
+                <p class="text-muted">Skip for now and start exploring the dashboard—you can import transactions whenever you're ready from the Transactions page.</p>
+                <form method="post" class="d-flex flex-column flex-sm-row gap-2 align-items-sm-center">
+                    <input type="hidden" name="action" value="skip">
+                    <button type="submit" class="btn btn-onboarding btn-onboarding-ghost flex-fill flex-sm-grow-0">Skip &amp; enter dashboard</button>
+                </form>
+            </div>
         </div>
     </div>
 </div>

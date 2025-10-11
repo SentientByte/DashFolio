@@ -275,6 +275,93 @@ body {
     border-color: rgba(85, 110, 230, 0.15);
 }
 
+.onboarding-content-card {
+    background: linear-gradient(150deg, rgba(85, 110, 230, 0.08), rgba(255, 255, 255, 0.95));
+    border-radius: 1.5rem;
+    padding: 2rem;
+    border: 1px solid rgba(86, 106, 127, 0.08);
+    box-shadow: 0 24px 48px rgba(86, 106, 127, 0.12);
+}
+
+.btn-onboarding {
+    border-radius: 999px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 0.65rem 1.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-onboarding i {
+    font-size: 1.1rem;
+}
+
+.btn-onboarding:hover {
+    transform: translateY(-1px);
+}
+
+.btn-onboarding:active {
+    transform: translateY(0);
+}
+
+.btn-onboarding-primary {
+    background: linear-gradient(135deg, #556ee6, #768bff);
+    border: none;
+    color: #fff;
+    box-shadow: 0 16px 32px rgba(85, 110, 230, 0.35);
+}
+
+.btn-onboarding-primary:hover {
+    color: #fff;
+    box-shadow: 0 20px 38px rgba(85, 110, 230, 0.4);
+}
+
+.btn-onboarding-primary:active {
+    box-shadow: 0 10px 20px rgba(85, 110, 230, 0.28);
+}
+
+.btn-onboarding-success {
+    background: linear-gradient(135deg, #1fbd8c, #27d5a4);
+    border: none;
+    color: #fff;
+    box-shadow: 0 16px 32px rgba(31, 189, 140, 0.35);
+}
+
+.btn-onboarding-success:hover {
+    color: #fff;
+    box-shadow: 0 20px 38px rgba(31, 189, 140, 0.4);
+}
+
+.btn-onboarding-success:active {
+    box-shadow: 0 10px 20px rgba(31, 189, 140, 0.28);
+}
+
+.btn-onboarding-ghost {
+    background: rgba(85, 110, 230, 0.12);
+    border: 1px solid rgba(85, 110, 230, 0.25);
+    color: #556ee6;
+    box-shadow: 0 10px 24px rgba(85, 110, 230, 0.16);
+}
+
+.btn-onboarding-ghost:hover {
+    background: rgba(85, 110, 230, 0.18);
+    color: #475cd8;
+    box-shadow: 0 14px 30px rgba(85, 110, 230, 0.22);
+}
+
+.btn-onboarding-ghost:active {
+    box-shadow: 0 8px 16px rgba(85, 110, 230, 0.16);
+}
+
+@media (max-width: 767.98px) {
+    .onboarding-content-card {
+        padding: 1.25rem;
+    }
+}
+
 .onboarding-banner {
     border-radius: 1rem;
     background: rgba(3, 195, 236, 0.12);
