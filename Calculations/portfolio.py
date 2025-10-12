@@ -21,6 +21,9 @@ def _read_portfolio_file(portfolio_file: str) -> Dict:
 
 
 def _write_portfolio_file(portfolio_file: str, payload: Dict) -> None:
+    directory = os.path.dirname(portfolio_file)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     with open(portfolio_file, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=4)
 
