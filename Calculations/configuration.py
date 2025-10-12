@@ -21,10 +21,15 @@ DEFAULT_CONFIG = {
 
 def load_config(config_path: str) -> Dict:
     """Load configuration data from ``config_path``."""
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Missing config.json at {config_path}")
-    with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, PermissionError, json.JSONDecodeError) as exc:
+        print(
+            "Warning: using built-in calculation defaults because config file "
+            f"'{config_path}' could not be read. {exc}"
+        )
+        return dict(DEFAULT_CONFIG)
 
 
 def normalize_config(raw_config: Dict) -> Dict:
