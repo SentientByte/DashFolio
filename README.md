@@ -53,65 +53,26 @@ DashFolio consumes data from multiple sources:
    source .venv/bin/activate
    pip install -r requirements.txt
    ```
-2. *(Optional)* **Choose a configuration directory** if you do not want
-   DashFolio to store `config.json`, `portfolio.json`, and `dashfolio.db` in the
-   project root:
-   ```bash
-   export DASHFOLIO_CONFIG_DIR="$HOME/.local/share/dashfolio"
-   ```
-3. **Provision the database** by running the calculation engine once:
+   _If a `requirements.txt` file is not yet available, install Flask, pandas,
+   yfinance, numpy, and SQLAlchemy equivalents manually._
+2. **Provision the database** by running the calculation engine once:
    ```bash
    python main.py
    ```
    This fetches the initial market data, updates holdings prices, and seeds the
    risk-analysis tables.
-4. **Launch the Flask application** and explore the dashboard:
+3. **Launch the Flask application** and explore the dashboard:
    ```bash
-   export FLASK_SECRET_KEY="replace-with-a-long-random-string"
    export FLASK_APP=app.py
    flask run --debug
    ```
    Visit `http://127.0.0.1:5000` to complete onboarding, upload transactions, and
    review portfolio analytics.
-5. **Run the TypeScript unit tests** that cover the client-side allocation logic:
+4. **Run the TypeScript unit tests** that cover the client-side allocation logic:
    ```bash
    npm install
    npm test
    ```
-
-### Running with Docker
-
-DashFolio ships with a multi-stage Dockerfile and Compose definition that mount a
-durable configuration volume at `/config` inside the container. To build and run
-the stack:
-
-```bash
-export FLASK_SECRET_KEY="replace-with-a-long-random-string"
-docker compose up --build
-```
-
-The compose file binds `/mnt/nas-share/config/stocks` on the host to `/config`
-in the container so your SQLite database and JSON files persist across restarts.
-To skip the initial analytics bootstrap on start-up set `DASHFOLIO_SKIP_BOOTSTRAP=1`.
-
-### Currency configuration
-
-Set the `CURRENCY` field in `config.json` to any supported ISO code (`USD`,
-`BHD`, `EUR`, `GBP`, `CAD`, etc.). Provide custom rates or symbols via the
-`CURRENCY_RATE_OVERRIDES` mapping:
-
-```json
-{
-  "CURRENCY": "EUR",
-  "CURRENCY_RATE_OVERRIDES": {
-    "EUR": {"rate": 0.92, "symbol": "€", "symbol_first": true}
-  }
-}
-```
-
-To fetch live USD exchange rates, export `DASHFOLIO_ENABLE_LIVE_FX=1`. You can
-override the default API endpoint (`https://open.er-api.com/v6/latest/{base}`)
-with `DASHFOLIO_FX_API_URL`.
 
 ## Dashboard walkthrough
 

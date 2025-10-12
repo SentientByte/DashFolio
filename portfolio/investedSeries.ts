@@ -5,11 +5,8 @@ export function investedValue(qtys: QtyBySymbol, closes: CloseBySymbol): number 
   let value = 0;
   for (const symbol in qtys) {
     if (Object.prototype.hasOwnProperty.call(qtys, symbol)) {
-      const quantity = qtys[symbol];
-      const close = closes[symbol];
-      if (!Number.isFinite(quantity) || !Number.isFinite(close)) {
-        continue;
-      }
+      const quantity = qtys[symbol] ?? 0;
+      const close = closes[symbol] ?? 0;
       value += quantity * close;
     }
   }

@@ -9,9 +9,8 @@ about data flow, analytics, and persistence without diving into source code.
 
 1. **User session** – A single authenticated investor signs in through
    `app.py`, which wires registration, login, onboarding, and dashboard routes.
-   Session duration, currency metadata, and benchmark preferences are resolved
-   via `services/configuration.py`, which now supports configurable durations
-   and additional fiat currencies.
+   Session duration, currency, and benchmark preferences are loaded via
+   `services/configuration.py`.
 2. **Portfolio bootstrap** – Onboarding captures deposits and uploads CSV trade
    history. Normalisation functions in `Calculations/transactions.py` reconcile
    buys, sells, and cash adjustments into canonical holdings and cash balances,
@@ -23,9 +22,7 @@ about data flow, analytics, and persistence without diving into source code.
 4. **Analytics pipeline** – `main.py` orchestrates the calculation loop:
    holdings are priced (`Calculations/portfolio.py`), EWMA statistics are
    computed (`Calculations/statistics.py`), and trailing-stop risk simulations
-   are persisted (`Calculations/risk_analysis.py`). When launched from the
-   dashboard the pipeline now runs in a background thread so the UI can poll
-   progress without blocking the request thread.
+   are persisted (`Calculations/risk_analysis.py`).
 5. **Presentation** – Flask templates in `templates/` render the stored results
    into cards, charts, and tables. Client-side helpers under `portfolio/*.ts`
    format day-over-day gains and time-weighted return indices for the UI.
@@ -59,7 +56,7 @@ sequenceDiagram
 | Component | Role | Key files |
 | --- | --- | --- |
 | Flask entry point | Registers routes, enforces single-user guards, coordinates onboarding, portfolio, risk, transaction, and settings views. | `app.py` |
-| Configuration service | Ensures default `config.json`, applies session lifetime preferences, resolves multi-currency metadata (including live FX when enabled), and persists overrides. | `services/configuration.py` |
+| Configuration service | Ensures default `config.json`, applies session lifetime, resolves currency symbols and precision. | `services/configuration.py` |
 | Portfolio service | Synchronises JSON holdings with cached state, loads and saves snapshots, and persists rebalancing targets. | `services/portfolio.py` |
 | Authentication service | Hashes credentials, stores the single-user record, and manages login/out flags in SQLite. | `services/auth.py` |
 | Calculation package | Provides reusable functions for loading config, prices, portfolio holdings, and running analytics. | `Calculations/__init__.py` |
@@ -83,14 +80,7 @@ sequenceDiagram
 | `SPAN_EWMA` | Span parameter for exponentially weighted metrics. |
 | `BENCHMARK_TICKER` | Symbol representing the comparison index (default `SPY`). |
 | `CURRENCY` | ISO currency code used for formatting. |
-| `SESSION_DURATION_HOURS` | Lifetime for authenticated sessions (0 disables permanence). |
 | `AUTO_REFRESH_INTERVAL` | Front-end polling cadence (seconds). |
-| `CURRENCY_RATE_OVERRIDES` | Optional mapping of ISO code to custom rate, symbol, and placement. |
-
-Configuration, portfolio JSON, and the SQLite datastore are resolved relative to
-`DASHFOLIO_CONFIG_DIR`. When unset the application stores them alongside the
-source tree; Docker deployments mount `/config` to a persistent volume so data
-survives container rebuilds.
 
 ### Portfolio payload (`portfolio.json`)
 
