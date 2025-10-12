@@ -17,6 +17,9 @@ from app_paths import PORTFOLIO_FILE
 
 
 def ensure_default_portfolio_file() -> None:
+    directory = os.path.dirname(PORTFOLIO_FILE)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     if os.path.exists(PORTFOLIO_FILE):
         return
     default_portfolio = {"holdings": [], "target_allocations": {}}
@@ -42,6 +45,9 @@ def load_portfolio_file() -> Dict[str, Any]:
 
 
 def save_portfolio_file(payload: Dict[str, Any]) -> None:
+    directory = os.path.dirname(PORTFOLIO_FILE)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     with open(PORTFOLIO_FILE, "w", encoding="utf-8") as file:
         json.dump(payload, file, indent=4)
 
