@@ -119,7 +119,8 @@ def theme_assets(filename: str):
 @app.before_request
 def enforce_single_user_access() -> Optional[Any]:
     endpoint = request.endpoint or ""
-    if endpoint.startswith("static"):
+    public_endpoints = {"theme_assets"}
+    if endpoint.startswith("static") or endpoint in public_endpoints:
         return None
 
     user = load_user_record(DATA_STORE)
