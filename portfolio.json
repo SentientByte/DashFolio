@@ -1,38 +1,5 @@
 {
-    "holdings": [
-        {
-            "ticker": "SPUS",
-            "quantity": 74.0,
-            "average_cost": 44.455,
-            "name": "SP Funds S&P 500 Sharia Industry Exclusions ETF",
-            "logo_url": "https://s3-symbol-logo.tradingview.com/sp-funds--600.png"
-        },
-        {
-            "ticker": "GLD",
-            "quantity": 4.0,
-            "average_cost": 330.343,
-            "name": "SPDR Gold Trust",
-            "logo_url": "https://cdn-icons-png.flaticon.com/512/4974/4974966.png"
-        },
-        {
-            "ticker": "KSA",
-            "quantity": 6.0,
-            "average_cost": 38.894,
-            "name": "iShares MSCI Saudi Arabia ETF",
-            "logo_url": "https://cdn.worldvectorlogo.com/logos/flag-of-saudi-arabia-vector-logo.svg"
-        },
-        {
-            "ticker": "SNAP",
-            "quantity": 10.0,
-            "average_cost": 9.02,
-            "name": "Snapchat",
-            "logo_url": "https://www.usatoday.com/gcdn/presto/2019/08/16/USAT/bd6538e4-5535-41ce-857b-518451c3a958-Snapchat_Logo_H.png?crop=1125,1500,x674,y0"
-        }
-    ],
-    "target_allocations": {
-        "SPUS": 25.0,
-        "GLD": 25.0,
-        "KSA": 25.0,
-        "SNAP": 25.0
-    }
+    "__comment": "Placeholder portfolio generated automatically. Update holdings via the dashboard or by syncing transactions.",
+    "holdings": [],
+    "target_allocations": {}
 }
