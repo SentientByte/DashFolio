@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  dashfolio:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?Set FLASK_SECRET_KEY before starting DashFolio}
+      DASHFOLIO_CONFIG_DIR: /config
+    volumes:
+      - /mnt/nas-share/config/stocks:/config
+    restart: unless-stopped

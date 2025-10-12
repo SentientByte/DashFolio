@@ -749,6 +749,19 @@ tr.holding-detail-trigger:hover {
     z-index: 1200;
 }
 
+/* Visual states for the async risk-analysis status pill */
+#status-pill.status-pill--running {
+    background: rgba(105, 108, 255, 0.95);
+}
+
+#status-pill.status-pill--failed {
+    background: rgba(255, 86, 48, 0.95);
+}
+
+#status-pill.status-pill--completed {
+    background: rgba(40, 199, 111, 0.95);
+}
+
 .performance-gauge-tile {
     border: 1px solid var(--bs-border-color, #e0e6ed);
     border-radius: 18px;

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 from Calculations.allocations import normalize_target_allocations
@@ -16,7 +17,14 @@ from Calculations.transactions import (
 from app_paths import PORTFOLIO_FILE
 
 
+def _ensure_portfolio_directory() -> None:
+    """Ensure the directory that stores portfolio files exists."""
+
+    Path(PORTFOLIO_FILE).parent.mkdir(parents=True, exist_ok=True)
+
+
 def ensure_default_portfolio_file() -> None:
+    _ensure_portfolio_directory()
     if os.path.exists(PORTFOLIO_FILE):
         return
     default_portfolio = {"holdings": [], "target_allocations": {}}
@@ -42,6 +50,7 @@ def load_portfolio_file() -> Dict[str, Any]:
 
 
 def save_portfolio_file(payload: Dict[str, Any]) -> None:
+    _ensure_portfolio_directory()
     with open(PORTFOLIO_FILE, "w", encoding="utf-8") as file:
         json.dump(payload, file, indent=4)
 
