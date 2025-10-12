@@ -63,9 +63,7 @@ def load_portfolio(portfolio_file: str, database_path: str | None = None) -> pd.
 
     df = pd.DataFrame(holdings)
     if df.empty:
-        # Return an empty frame with the expected schema so downstream callers can
-        # safely access columns like ``df["Ticker"]`` without triggering ``KeyError``.
-        return _empty_portfolio_frame()
+        return df
 
     # Normalise column names expected by downstream calculations
     column_mapping = {
@@ -78,17 +76,7 @@ def load_portfolio(portfolio_file: str, database_path: str | None = None) -> pd.
     df = df.rename(columns=column_mapping)
 
     if "Ticker" not in df.columns:
-        print(
-            "Warning: portfolio data is missing required ticker information; "
-            "using in-memory defaults instead."
-        )
-        return _empty_portfolio_frame()
-
-    df = df.dropna(subset=["Ticker"])
-    df["Ticker"] = df["Ticker"].astype(str).str.strip()
-    df = df[df["Ticker"] != ""]
-    if df.empty:
-        return _empty_portfolio_frame()
+        raise ValueError("Portfolio JSON must include a 'ticker' for each holding.")
 
     if "Quantity" not in df.columns:
         df["Quantity"] = df.get("Position", 0)
@@ -137,18 +125,6 @@ def _fetch_current_price(ticker: str) -> Tuple[bool, float]:
 
 def update_portfolio_prices(df_portfolio: pd.DataFrame, portfolio_file: str) -> pd.DataFrame:
     """Update portfolio with current prices and persist to disk."""
-    if "Ticker" not in df_portfolio.columns:
-        print(
-            "Warning: portfolio snapshot missing 'Ticker' column; skipping price "
-            "refresh."
-        )
-        return _empty_portfolio_frame()
-
-    if df_portfolio.empty:
-        _ensure_price_column(df_portfolio)
-        print("No holdings available to refresh prices; skipping persistence.")
-        return df_portfolio
-
     _ensure_price_column(df_portfolio)
 
     updated_holdings = []
@@ -185,13 +161,6 @@ def update_portfolio_prices(df_portfolio: pd.DataFrame, portfolio_file: str) -> 
         merged = {**preserved, **holding}
         merged_holdings.append(merged)
 
-    if merged_holdings:
-        if _write_portfolio_file(portfolio_file, {"holdings": merged_holdings}):
-            print(f"\nPortfolio updated with current prices in {portfolio_file}")
-        else:
-            print(
-                "\nUnable to record updated prices on disk; continuing with in-memory data."
-            )
-    else:
-        print("\nNo holdings detected after refresh; nothing was written to disk.")
+    _write_portfolio_file(portfolio_file, {"holdings": merged_holdings})
+    print(f"\nPortfolio updated with current prices in {portfolio_file}")
     return df_portfolio

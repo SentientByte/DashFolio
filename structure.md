@@ -113,13 +113,8 @@ Each persisted holding entry contains:
 - Optional metadata such as `name` and `logo_url`.
 - `target_allocations`: percentage weights keyed by ticker.
 
-Holdings missing a ticker are ignored and the loader returns an empty
-DataFrame so downstream analytics can continue without raising `KeyError`.
-
 During price refreshes, the calculation layer writes back `current_price` and
-`position` values to keep disk and database snapshots aligned. When the config
-volume is read-only or no valid holdings exist, the refresher logs the skipped
-write instead of claiming success.
+`position` values to keep disk and database snapshots aligned.
 
 ### SQLite schema
 
