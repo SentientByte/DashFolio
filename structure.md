@@ -90,7 +90,9 @@ sequenceDiagram
 Configuration, portfolio JSON, and the SQLite datastore are resolved relative to
 `DASHFOLIO_CONFIG_DIR`. When unset the application stores them alongside the
 source tree; Docker deployments mount `/config` to a persistent volume so data
-survives container rebuilds.
+survives container rebuilds. When that location is read-only the services and
+calculation layers now fall back to in-memory defaults so the dashboard can
+boot, but preference changes will not persist until write access is restored.
 
 ### Portfolio payload (`portfolio.json`)
 
