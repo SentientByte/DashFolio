@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*.sqlite
+*.db
+.venv/
+venv/
+dashfolio-data/
+node_modules/

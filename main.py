@@ -1,6 +1,5 @@
 """Entry point for running DashFolio calculations."""
 
-import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -15,16 +14,18 @@ from Calculations import (
     update_portfolio_prices,
 )
 
+from app_paths import CONFIG_FILE, DATA_STORE, PORTFOLIO_FILE
+from services.configuration import ensure_default_config_file
+from services.portfolio import ensure_default_portfolio_file
+
 
 def main() -> None:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    portfolio_file = os.path.join(base_dir, "portfolio.json")
-    database_path = os.path.join(base_dir, "dashfolio.db")
-    config_file = os.path.join(base_dir, "config.json")
+    ensure_default_config_file()
+    ensure_default_portfolio_file()
 
     today = datetime.now(ZoneInfo("America/New_York"))
 
-    raw_config = load_config(config_file)
+    raw_config = load_config(CONFIG_FILE)
     config = normalize_config(raw_config)
 
     start_date, period_reason = determine_start_date(
@@ -39,11 +40,11 @@ def main() -> None:
         f"using start date {start_date_str} ({period_reason})"
     )
 
-    df_portfolio = load_portfolio(portfolio_file, database_path)
-    df_portfolio = update_portfolio_prices(df_portfolio, portfolio_file)
+    df_portfolio = load_portfolio(PORTFOLIO_FILE, DATA_STORE)
+    df_portfolio = update_portfolio_prices(df_portfolio, PORTFOLIO_FILE)
     tickers = df_portfolio["Ticker"].unique()
 
-    all_data = load_price_data(tickers, start_date, today, database_path)
+    all_data = load_price_data(tickers, start_date, today, DATA_STORE)
 
     calculate_statistics(
         all_data,
@@ -61,7 +62,7 @@ def main() -> None:
         config["SPAN_EWMA"],
         config["CONFIDENCE_LEVEL"],
         config["DATA_PERIOD"],
-        database_path,
+        DATA_STORE,
     )
 
 
