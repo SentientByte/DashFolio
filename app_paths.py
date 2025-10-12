@@ -7,10 +7,31 @@ import sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DEFAULT_DATA_ROOT = "/mnt/config/dashfolio"
-DATA_ROOT = os.environ.get("DASHFOLIO_DATA_DIR", DEFAULT_DATA_ROOT)
-if not os.path.isabs(DATA_ROOT):
-    DATA_ROOT = os.path.join(BASE_DIR, DATA_ROOT)
-DATA_ROOT = os.path.abspath(DATA_ROOT)
+
+
+def _resolve_data_root() -> str:
+    """Return the directory that should store user-modifiable data."""
+
+    candidate = os.environ.get("DASHFOLIO_DATA_DIR", DEFAULT_DATA_ROOT)
+    if not os.path.isabs(candidate):
+        candidate = os.path.join(BASE_DIR, candidate)
+    candidate = os.path.abspath(candidate)
+
+    if "DASHFOLIO_DATA_DIR" in os.environ:
+        os.makedirs(candidate, exist_ok=True)
+        return candidate
+
+    try:
+        os.makedirs(candidate, exist_ok=True)
+    except OSError:
+        fallback = os.path.join(BASE_DIR, "data")
+        os.makedirs(fallback, exist_ok=True)
+        return fallback
+
+    return candidate
+
+
+DATA_ROOT = _resolve_data_root()
 
 
 def ensure_data_root() -> str:
@@ -18,9 +39,6 @@ def ensure_data_root() -> str:
 
     os.makedirs(DATA_ROOT, exist_ok=True)
     return DATA_ROOT
-
-
-ensure_data_root()
 
 # Prefer venv python if available, otherwise use current interpreter
 VENV_PYTHON = os.path.join(BASE_DIR, "venv", "Scripts", "python.exe")

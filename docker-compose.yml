@@ -6,7 +6,7 @@ services:
       - "5000:5000"
     environment:
       FLASK_ENV: production
-      DASHFOLIO_DATA_DIR: /mnt/config/dashfolio
+      DASHFOLIO_DATA_DIR: /config
     volumes:
-      - ./dashfolio-data:/mnt/config/dashfolio
+      - /mnt/config/dashfolio:/config
     restart: unless-stopped

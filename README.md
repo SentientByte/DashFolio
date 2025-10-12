@@ -29,7 +29,7 @@ experience for exploring holdings, allocations, and simulated risk scenarios.
 | **Presentation** | Flask templates render the onboarding, holdings, allocations, and risk dashboards; static CSS styles cards, charts, and modal dialogs. | `templates/`, `static/css/app.css` |
 | **Application services** | Authentication, configuration, formatting, and portfolio state helpers wrap Flask routes with reusable business logic. | `services/auth.py`, `services/configuration.py`, `services/portfolio.py` |
 | **Calculations engine** | Loads transactions, prices, and benchmarks, then runs analytics such as EWMA statistics, trailing-stop simulations, and snapshot caching. | `Calculations/` package |
-| **Data layer** | An embedded SQLite database stores price history, derived holdings, risk simulations, and cached snapshots for fast recomputation. Persistent files (database, `config.json`, `portfolio.json`) live under `/mnt/config/dashfolio` by default so they can be mounted from the host when running in Docker. | `Calculations/storage.py`, `/mnt/config/dashfolio/dashfolio.db` |
+| **Data layer** | An embedded SQLite database stores price history, derived holdings, risk simulations, and cached snapshots for fast recomputation. Persistent files (database, `config.json`, `portfolio.json`) live under `/mnt/config/dashfolio` by default so they can be mounted from the host when running in Docker; if that path is unavailable (e.g., during local development), DashFolio falls back to `./data`. | `Calculations/storage.py`, `/mnt/config/dashfolio/dashfolio.db` |
 
 ## Data sources
 
@@ -76,14 +76,22 @@ DashFolio consumes data from multiple sources:
 
 ### Running with Docker
 
-1. Build the container image and ensure the host directory that will persist the
-   configuration, portfolio JSON, and SQLite database exists:
+1. Create the host directory that will persist the configuration, portfolio JSON,
+   and SQLite database. DashFolio expects this directory to be mounted at
+   `/config` inside the container (backed by `/mnt/config/dashfolio` on the host):
+   ```bash
+   sudo mkdir -p /mnt/config/dashfolio
+   ```
+   If you prefer to store data elsewhere, update the host path in
+   `docker-compose.yml` and export `DASHFOLIO_DATA_DIR` to the matching value
+   before launching the container.
+2. Build the container image:
    ```bash
    docker compose build
-   mkdir -p ./dashfolio-data
    ```
-2. Start the application with the data directory mounted into the container at
-   `/mnt/config/dashfolio` (the location expected by the codebase):
+3. Start the application with the data directory mounted into the container at
+   `/config` (the path advertised to the application through
+   `DASHFOLIO_DATA_DIR`):
    ```bash
    docker compose up
    ```
@@ -92,12 +100,13 @@ DashFolio consumes data from multiple sources:
    docker run \
      -p 5000:5000 \
      -e FLASK_APP=app.py \
-     -e DASHFOLIO_DATA_DIR=/mnt/config/dashfolio \
-     -v /absolute/host/path:/mnt/config/dashfolio \
+     -e DASHFOLIO_DATA_DIR=/config \
+     -v /absolute/host/path:/config \
      dashfolio:latest
    ```
-3. Visit `http://127.0.0.1:5000` and proceed through onboarding. Files written to
-   `/mnt/config/dashfolio` inside the container will now persist on the host.
+4. Visit `http://127.0.0.1:5000` and proceed through onboarding. Files written to
+   `/config` inside the container will now persist on the host at
+   `/mnt/config/dashfolio`.
 
 ## Dashboard walkthrough
 
