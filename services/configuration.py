@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Final, MutableMapping, Optional, TypedDict
 
@@ -58,6 +59,12 @@ _CURRENCY_FALLBACKS: Final[Dict[str, CurrencyContext]] = {
 _FX_CACHE: Dict[str, float] = {}
 
 
+def _default_config_snapshot() -> Dict[str, Any]:
+    """Return a copy of the built-in configuration defaults."""
+
+    return deepcopy(_DEFAULT_CONFIG)
+
+
 def _ensure_config_directory() -> None:
     """Guarantee that the configuration directory exists before writing files."""
 
@@ -70,17 +77,28 @@ def ensure_default_config_file() -> None:
     _ensure_config_directory()
     if os.path.exists(CONFIG_FILE):
         return
-    with open(CONFIG_FILE, "w", encoding="utf-8") as file:
-        json.dump(_DEFAULT_CONFIG, file, indent=4)
-    print(f"Created default config file: {CONFIG_FILE}")
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as file:
+            json.dump(_DEFAULT_CONFIG, file, indent=4)
+    except OSError as exc:
+        print(f"Warning: unable to write default config file '{CONFIG_FILE}'. {exc}")
+    else:
+        print(f"Created default config file: {CONFIG_FILE}")
 
 
 def load_config() -> Dict[str, Any]:
     """Load the configuration file with sensible fallbacks."""
 
     ensure_default_config_file()
-    with open(CONFIG_FILE, "r", encoding="utf-8") as file:
-        config: Dict[str, Any] = json.load(file)
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as file:
+            config: Dict[str, Any] = json.load(file)
+    except (FileNotFoundError, PermissionError, json.JSONDecodeError) as exc:
+        print(
+            "Warning: falling back to in-memory defaults because config file "
+            f"'{CONFIG_FILE}' could not be read. {exc}"
+        )
+        config = _default_config_snapshot()
 
     defaults = {
         "BENCHMARK_TICKER": "SPY",
@@ -120,8 +138,11 @@ def save_config(config: Dict[str, Any]) -> None:
     """Persist ``config`` back to disk, creating directories as needed."""
 
     _ensure_config_directory()
-    with open(CONFIG_FILE, "w", encoding="utf-8") as file:
-        json.dump(config, file, indent=4)
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as file:
+            json.dump(config, file, indent=4)
+    except OSError as exc:
+        print(f"Warning: unable to persist configuration to '{CONFIG_FILE}'. {exc}")
 
 
 def get_session_preferences(config: Dict[str, Any] | None = None) -> SessionPreferences:

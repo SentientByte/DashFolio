@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
-from typing import Dict, Tuple
+from copy import deepcopy
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -12,17 +12,40 @@ import yfinance as yf
 
 from .transactions import load_current_holdings
 
-
-def _read_portfolio_file(portfolio_file: str) -> Dict:
-    if not os.path.exists(portfolio_file):
-        raise FileNotFoundError(f"Missing portfolio file at {portfolio_file}")
-    with open(portfolio_file, "r", encoding="utf-8") as fh:
-        return json.load(fh)
+_DEFAULT_PORTFOLIO: Dict[str, Any] = {"holdings": [], "target_allocations": {}}
 
 
-def _write_portfolio_file(portfolio_file: str, payload: Dict) -> None:
-    with open(portfolio_file, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=4)
+def _default_portfolio_snapshot() -> Dict[str, Any]:
+    """Return a copy of the built-in portfolio defaults."""
+
+    return deepcopy(_DEFAULT_PORTFOLIO)
+
+
+def _read_portfolio_file(portfolio_file: str) -> Dict[str, Any]:
+    try:
+        with open(portfolio_file, "r", encoding="utf-8") as fh:
+            data: Dict[str, Any] = json.load(fh)
+    except (FileNotFoundError, PermissionError, json.JSONDecodeError) as exc:
+        print(
+            "Warning: falling back to in-memory defaults because portfolio file "
+            f"'{portfolio_file}' could not be read. {exc}"
+        )
+        return _default_portfolio_snapshot()
+
+    if not isinstance(data, dict):
+        return _default_portfolio_snapshot()
+
+    data.setdefault("holdings", [])
+    data.setdefault("target_allocations", {})
+    return data
+
+
+def _write_portfolio_file(portfolio_file: str, payload: Dict[str, Any]) -> None:
+    try:
+        with open(portfolio_file, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=4)
+    except OSError as exc:
+        print(f"Warning: unable to persist portfolio to '{portfolio_file}'. {exc}")
 
 
 def load_portfolio(portfolio_file: str, database_path: str | None = None) -> pd.DataFrame:
