@@ -31,6 +31,9 @@ _DEFAULT_CONFIG: Dict[str, Any] = {
 
 def ensure_default_config_file() -> None:
     """Create the default configuration file if it does not exist."""
+    directory = os.path.dirname(CONFIG_FILE)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     if os.path.exists(CONFIG_FILE):
         return
     with open(CONFIG_FILE, "w", encoding="utf-8") as file:
@@ -84,6 +87,9 @@ def load_config() -> Dict[str, Any]:
 
 
 def save_config(config: Dict[str, Any]) -> None:
+    directory = os.path.dirname(CONFIG_FILE)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as file:
         json.dump(config, file, indent=4)
 
