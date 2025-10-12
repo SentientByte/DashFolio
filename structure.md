@@ -94,14 +94,7 @@ survives container rebuilds.
 
 ### Portfolio payload (`portfolio.json`)
 
-DashFolio now ships with an automatically generated placeholder portfolio. When
-the application first runs (or when `portfolio.json` is missing),
-`services.portfolio.ensure_default_portfolio_file` creates a sanitized file with
-an explanatory `__comment`, empty `holdings`, and blank `target_allocations`
-maps. Populate the file via the dashboard or by syncing transactions; committed
-artifacts should never contain real account data.
-
-Each persisted holding entry contains:
+Each holding entry contains:
 
 - `ticker`: Uppercase symbol string.
 - `quantity`: Units currently held.

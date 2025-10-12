@@ -37,8 +37,6 @@ DashFolio consumes data from multiple sources:
 
 - **Portfolio configuration** – base holdings, target allocations, and security metadata
   live in `portfolio.json` and are synchronized with transaction-derived holdings.
-  The repository ships with an auto-generated placeholder so no real holdings are
-  stored in version control.
 - **User preferences** – `config.json` defines the analysis window, stop-loss ranges,
   EWMA spans, benchmark tickers, and UI auto-refresh cadence.
 - **Market data** – live quotes and historical candles are pulled from Yahoo Finance via
