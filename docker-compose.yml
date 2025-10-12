@@ -8,5 +8,5 @@ services:
       FLASK_ENV: production
       DASHFOLIO_DATA_DIR: /mnt/config/dashfolio
     volumes:
-      - /mnt/config/dashfolio:/mnt/config/dashfolio
+      - ./dashfolio-data:/mnt/config/dashfolio
     restart: unless-stopped
