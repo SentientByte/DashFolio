@@ -27,7 +27,14 @@ def ensure_default_portfolio_file() -> None:
     _ensure_portfolio_directory()
     if os.path.exists(PORTFOLIO_FILE):
         return
-    default_portfolio = {"holdings": [], "target_allocations": {}}
+    default_portfolio = {
+        "__comment": (
+            "Placeholder portfolio generated automatically. Update holdings via "
+            "the dashboard or by syncing transactions."
+        ),
+        "holdings": [],
+        "target_allocations": {},
+    }
     with open(PORTFOLIO_FILE, "w", encoding="utf-8") as file:
         json.dump(default_portfolio, file, indent=4)
     print(f"Created default portfolio file: {PORTFOLIO_FILE}")
