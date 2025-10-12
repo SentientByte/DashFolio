@@ -109,6 +109,11 @@ During price refreshes, the calculation layer writes back `current_price` and
 | `portfolio_snapshots` | Cached aggregate views (equity, allocations, benchmark) for rapid dashboard loads. | `cache_key`, `generated_at`, `payload` |
 | `performance_history` | Daily portfolio returns and equity for trend charts. | `date`, `equity`, `cash`, `daily_return` |
 
+All persistent artifacts (`config.json`, `portfolio.json`, `dashfolio.db`) reside
+in the configurable data root pointed to by the `DASHFOLIO_DATA_DIR` environment
+variable. By default the application resolves this to `/mnt/config/dashfolio`,
+which should be mounted from the host when running inside Docker.
+
 ## 4. Analytics and formulas
 
 The analytics layer relies on exponential weighting to emphasise recent market

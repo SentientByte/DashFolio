@@ -29,15 +29,15 @@ experience for exploring holdings, allocations, and simulated risk scenarios.
 | **Presentation** | Flask templates render the onboarding, holdings, allocations, and risk dashboards; static CSS styles cards, charts, and modal dialogs. | `templates/`, `static/css/app.css` |
 | **Application services** | Authentication, configuration, formatting, and portfolio state helpers wrap Flask routes with reusable business logic. | `services/auth.py`, `services/configuration.py`, `services/portfolio.py` |
 | **Calculations engine** | Loads transactions, prices, and benchmarks, then runs analytics such as EWMA statistics, trailing-stop simulations, and snapshot caching. | `Calculations/` package |
-| **Data layer** | An embedded SQLite database stores price history, derived holdings, risk simulations, and cached snapshots for fast recomputation. | `Calculations/storage.py`, `dashfolio.db` |
+| **Data layer** | An embedded SQLite database stores price history, derived holdings, risk simulations, and cached snapshots for fast recomputation. Persistent files (database, `config.json`, `portfolio.json`) live under `/mnt/config/dashfolio` by default so they can be mounted from the host when running in Docker. | `Calculations/storage.py`, `/mnt/config/dashfolio/dashfolio.db` |
 
 ## Data sources
 
 DashFolio consumes data from multiple sources:
 
 - **Portfolio configuration** – base holdings, target allocations, and security metadata
-  live in `portfolio.json` and are synchronized with transaction-derived holdings.
-- **User preferences** – `config.json` defines the analysis window, stop-loss ranges,
+  live in `portfolio.json` (stored under `/mnt/config/dashfolio/` by default) and are synchronized with transaction-derived holdings.
+- **User preferences** – `config.json` (also persisted in `/mnt/config/dashfolio/`) defines the analysis window, stop-loss ranges,
   EWMA spans, benchmark tickers, and UI auto-refresh cadence.
 - **Market data** – live quotes and historical candles are pulled from Yahoo Finance via
   [`yfinance`](https://pypi.org/project/yfinance/), then normalized and cached locally.
@@ -73,6 +73,31 @@ DashFolio consumes data from multiple sources:
    npm install
    npm test
    ```
+
+### Running with Docker
+
+1. Build the container image and ensure the host directory that will persist the
+   configuration, portfolio JSON, and SQLite database exists:
+   ```bash
+   docker compose build
+   mkdir -p ./dashfolio-data
+   ```
+2. Start the application with the data directory mounted into the container at
+   `/mnt/config/dashfolio` (the location expected by the codebase):
+   ```bash
+   docker compose up
+   ```
+   You can alternatively run the image directly:
+   ```bash
+   docker run \
+     -p 5000:5000 \
+     -e FLASK_APP=app.py \
+     -e DASHFOLIO_DATA_DIR=/mnt/config/dashfolio \
+     -v /absolute/host/path:/mnt/config/dashfolio \
+     dashfolio:latest
+   ```
+3. Visit `http://127.0.0.1:5000` and proceed through onboarding. Files written to
+   `/mnt/config/dashfolio` inside the container will now persist on the host.
 
 ## Dashboard walkthrough
 
