@@ -90,7 +90,9 @@ sequenceDiagram
 Configuration, portfolio JSON, and the SQLite datastore are resolved relative to
 `DASHFOLIO_CONFIG_DIR`. When unset the application stores them alongside the
 source tree; Docker deployments mount `/config` to a persistent volume so data
-survives container rebuilds.
+survives container rebuilds. When that location is read-only the services and
+calculation layers now fall back to in-memory defaults so the dashboard can
+boot, but preference changes will not persist until write access is restored.
 
 ### Portfolio payload (`portfolio.json`)
 
@@ -98,8 +100,10 @@ DashFolio now ships with an automatically generated placeholder portfolio. When
 the application first runs (or when `portfolio.json` is missing),
 `services.portfolio.ensure_default_portfolio_file` creates a sanitized file with
 an explanatory `__comment`, empty `holdings`, and blank `target_allocations`
-maps. Populate the file via the dashboard or by syncing transactions; committed
-artifacts should never contain real account data.
+maps. If the configuration volume is read-only the app falls back to the same
+in-memory defaults, so dashboards render but portfolio edits will not persist
+until write access returns. Populate the file via the dashboard or by syncing
+transactions; committed artifacts should never contain real account data.
 
 Each persisted holding entry contains:
 
@@ -109,8 +113,13 @@ Each persisted holding entry contains:
 - Optional metadata such as `name` and `logo_url`.
 - `target_allocations`: percentage weights keyed by ticker.
 
+Holdings missing a ticker are ignored and the loader returns an empty
+DataFrame so downstream analytics can continue without raising `KeyError`.
+
 During price refreshes, the calculation layer writes back `current_price` and
-`position` values to keep disk and database snapshots aligned.
+`position` values to keep disk and database snapshots aligned. When the config
+volume is read-only or no valid holdings exist, the refresher logs the skipped
+write instead of claiming success.
 
 ### SQLite schema
 

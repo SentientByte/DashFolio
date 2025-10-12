@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
-from typing import Dict, Tuple
+from copy import deepcopy
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -12,17 +12,50 @@ import yfinance as yf
 
 from .transactions import load_current_holdings
 
-
-def _read_portfolio_file(portfolio_file: str) -> Dict:
-    if not os.path.exists(portfolio_file):
-        raise FileNotFoundError(f"Missing portfolio file at {portfolio_file}")
-    with open(portfolio_file, "r", encoding="utf-8") as fh:
-        return json.load(fh)
+_DEFAULT_PORTFOLIO: Dict[str, Any] = {"holdings": [], "target_allocations": {}}
 
 
-def _write_portfolio_file(portfolio_file: str, payload: Dict) -> None:
-    with open(portfolio_file, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=4)
+def _empty_portfolio_frame() -> pd.DataFrame:
+    """Return an empty portfolio DataFrame with the expected schema."""
+
+    return pd.DataFrame(
+        columns=["Ticker", "Quantity", "Average Cost", "Current Price", "Position"]
+    )
+
+
+def _default_portfolio_snapshot() -> Dict[str, Any]:
+    """Return a copy of the built-in portfolio defaults."""
+
+    return deepcopy(_DEFAULT_PORTFOLIO)
+
+
+def _read_portfolio_file(portfolio_file: str) -> Dict[str, Any]:
+    try:
+        with open(portfolio_file, "r", encoding="utf-8") as fh:
+            data: Dict[str, Any] = json.load(fh)
+    except (FileNotFoundError, PermissionError, json.JSONDecodeError) as exc:
+        print(
+            "Warning: falling back to in-memory defaults because portfolio file "
+            f"'{portfolio_file}' could not be read. {exc}"
+        )
+        return _default_portfolio_snapshot()
+
+    if not isinstance(data, dict):
+        return _default_portfolio_snapshot()
+
+    data.setdefault("holdings", [])
+    data.setdefault("target_allocations", {})
+    return data
+
+
+def _write_portfolio_file(portfolio_file: str, payload: Dict[str, Any]) -> bool:
+    try:
+        with open(portfolio_file, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=4)
+    except OSError as exc:
+        print(f"Warning: unable to persist portfolio to '{portfolio_file}'. {exc}")
+        return False
+    return True
 
 
 def load_portfolio(portfolio_file: str, database_path: str | None = None) -> pd.DataFrame:
@@ -40,7 +73,9 @@ def load_portfolio(portfolio_file: str, database_path: str | None = None) -> pd.
 
     df = pd.DataFrame(holdings)
     if df.empty:
-        return df
+        # Return an empty frame with the expected schema so downstream callers can
+        # safely access columns like ``df["Ticker"]`` without triggering ``KeyError``.
+        return _empty_portfolio_frame()
 
     # Normalise column names expected by downstream calculations
     column_mapping = {
@@ -53,7 +88,17 @@ def load_portfolio(portfolio_file: str, database_path: str | None = None) -> pd.
     df = df.rename(columns=column_mapping)
 
     if "Ticker" not in df.columns:
-        raise ValueError("Portfolio JSON must include a 'ticker' for each holding.")
+        print(
+            "Warning: portfolio data is missing required ticker information; "
+            "using in-memory defaults instead."
+        )
+        return _empty_portfolio_frame()
+
+    df = df.dropna(subset=["Ticker"])
+    df["Ticker"] = df["Ticker"].astype(str).str.strip()
+    df = df[df["Ticker"] != ""]
+    if df.empty:
+        return _empty_portfolio_frame()
 
     if "Quantity" not in df.columns:
         df["Quantity"] = df.get("Position", 0)
@@ -102,6 +147,18 @@ def _fetch_current_price(ticker: str) -> Tuple[bool, float]:
 
 def update_portfolio_prices(df_portfolio: pd.DataFrame, portfolio_file: str) -> pd.DataFrame:
     """Update portfolio with current prices and persist to disk."""
+    if "Ticker" not in df_portfolio.columns:
+        print(
+            "Warning: portfolio snapshot missing 'Ticker' column; skipping price "
+            "refresh."
+        )
+        return _empty_portfolio_frame()
+
+    if df_portfolio.empty:
+        _ensure_price_column(df_portfolio)
+        print("No holdings available to refresh prices; skipping persistence.")
+        return df_portfolio
+
     _ensure_price_column(df_portfolio)
 
     updated_holdings = []
@@ -138,6 +195,13 @@ def update_portfolio_prices(df_portfolio: pd.DataFrame, portfolio_file: str) -> 
         merged = {**preserved, **holding}
         merged_holdings.append(merged)
 
-    _write_portfolio_file(portfolio_file, {"holdings": merged_holdings})
-    print(f"\nPortfolio updated with current prices in {portfolio_file}")
+    if merged_holdings:
+        if _write_portfolio_file(portfolio_file, {"holdings": merged_holdings}):
+            print(f"\nPortfolio updated with current prices in {portfolio_file}")
+        else:
+            print(
+                "\nUnable to record updated prices on disk; continuing with in-memory data."
+            )
+    else:
+        print("\nNo holdings detected after refresh; nothing was written to disk.")
     return df_portfolio
