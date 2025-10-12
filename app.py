@@ -12,13 +12,13 @@ from flask import (
 import os
 import sqlite3
 import subprocess
-from datetime import datetime, timedelta, timezone
-from threading import Lock, Thread
+import sys
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from app_paths import ASSETS_DIR, BASE_DIR, DATA_STORE, MAIN_SCRIPT, PYTHON_EXECUTABLE
+from app_paths import ASSETS_DIR, BASE_DIR, DATA_STORE, MAIN_SCRIPT, VENV_PYTHON
 from Calculations.allocations import normalize_target_allocations
 from Calculations.snapshot_cache import get_portfolio_snapshot as get_cached_portfolio_snapshot
 from Calculations.market_data import get_market_snapshot
@@ -43,19 +43,13 @@ from Calculations.transactions import (
 )
 from Calculations.utils import safe_float
 from services.activity_log import append_log, get_log_entries
-from services.auth import (
-    complete_onboarding,
-    LoginSessionState,
-    load_user_record,
-    prepare_login_session,
-    record_successful_login,
-)
+from services.auth import complete_onboarding, load_user_record, login_user_session
 from services.configuration import (
     DEFAULT_SESSION_DURATION,
     SESSION_DURATION_CHOICES,
+    apply_session_duration,
     ensure_default_config_file,
     get_currency_context,
-    get_session_preferences,
     load_config,
     save_config,
 )
@@ -76,54 +70,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 
 app = Flask(__name__)
-secret_key = os.environ.get("FLASK_SECRET_KEY")
-if not secret_key or secret_key == "dashfolio-secret-key":
-    raise RuntimeError("FLASK_SECRET_KEY must be set to a non-default value before starting DashFolio.")
-app.secret_key = secret_key
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dashfolio-secret-key")
 
-log_output_table: List[Dict[str, Any]] = []  # parsed table (list of dicts) built from database results
-_risk_job_lock = Lock()
-_risk_job_thread: Thread | None = None
-_risk_job_status: Dict[str, Any] = {
-    "state": "idle",
-    "message": "No risk analysis has been triggered yet.",
-    "started_at": None,
-    "finished_at": None,
-    "exit_code": None,
-}
-
-
-def _utc_now_iso() -> str:
-    """Return the current UTC timestamp in ISO-8601 format."""
-
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _set_risk_job_status(**changes: Any) -> Dict[str, Any]:
-    """Merge ``changes`` into the shared risk job status under a lock."""
-
-    with _risk_job_lock:
-        _risk_job_status.update(changes)
-        return dict(_risk_job_status)
-
-
-def get_risk_job_status() -> Dict[str, Any]:
-    """Return a copy of the current background risk job status."""
-
-    with _risk_job_lock:
-        return dict(_risk_job_status)
-
-
-def _apply_login_session(session_state: LoginSessionState) -> None:
-    """Apply session flags for a freshly authenticated user."""
-
-    session.clear()
-    session["user_id"] = session_state["user_id"]
-    session.permanent = session_state["permanent"]
-    if session_state["permanent"] and session_state["lifetime_hours"] > 0:
-        app.permanent_session_lifetime = timedelta(hours=session_state["lifetime_hours"])
-    else:
-        app.permanent_session_lifetime = timedelta(hours=DEFAULT_SESSION_DURATION)
+log_output_table: List[Dict[str, Any]] = [] # parsed table (list of dicts) built from database results
 
 
 @app.context_processor
@@ -147,11 +96,7 @@ def inject_global_helpers():
 # ------------------------------
 ensure_default_config_file()
 ensure_default_portfolio_file()
-session_preferences = get_session_preferences()
-if session_preferences["permanent"] and session_preferences["lifetime_hours"] > 0:
-    app.permanent_session_lifetime = timedelta(hours=session_preferences["lifetime_hours"])
-else:
-    app.permanent_session_lifetime = timedelta(hours=DEFAULT_SESSION_DURATION)
+apply_session_duration(app, load_config())
 
 
 # ------------------------------
@@ -277,9 +222,7 @@ def register():
             else:
                 user = load_user_record(DATA_STORE)
                 if user:
-                    session_state = prepare_login_session(user)
-                    _apply_login_session(session_state)
-                    record_successful_login(DATA_STORE, session_state["user_id"])
+                    login_user_session(app, DATA_STORE, user)
                     g.user = user
                     g.is_authenticated = True
                     return redirect(url_for('onboarding_deposits'))
@@ -320,9 +263,7 @@ def login():
         if not errors:
             user = g.user or load_user_record(DATA_STORE)
             if user and user.get('username', '').lower() == username_value.lower() and check_password_hash(user.get('password_hash', ''), password):
-                session_state = prepare_login_session(user)
-                _apply_login_session(session_state)
-                record_successful_login(DATA_STORE, session_state["user_id"])
+                login_user_session(app, DATA_STORE, user)
                 g.user = user
                 g.is_authenticated = True
                 if user.get('onboarding_completed'):
@@ -1126,10 +1067,44 @@ def api_delete_cash_adjustment_route(adjustment_id: int):
     })
 
 
-def _load_latest_risk_results() -> None:
-    """Refresh the in-memory risk-analysis table from SQLite."""
-
+def run_main_script():
+    """
+    Run main.py synchronously using the venv/python specified (VENV_PYTHON).
+    Capture stdout/stderr into the in-memory activity log and after completion attempt to read the
+    results into ``log_output_table`` (list of dicts).
+    """
     global log_output_table
+    log_output_table = []
+
+    if not os.path.exists(MAIN_SCRIPT):
+        append_log(f"ERROR: main script not found at {MAIN_SCRIPT}")
+        return
+
+    # Execute main.py
+    append_log("Launching risk analysis script (main.py)")
+    try:
+        process = subprocess.Popen(
+            [VENV_PYTHON, MAIN_SCRIPT],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=BASE_DIR
+        )
+    except Exception as e:
+        append_log(f"Failed to start risk analysis process: {e}")
+        return
+
+    # Stream stdout lines
+    if process.stdout:
+        for line in process.stdout:
+            message = line.rstrip('\n')
+            if message:
+                append_log(f"[main.py] {message}")
+
+    exit_code = process.wait()
+    append_log(f"Risk analysis script completed with exit code {exit_code}")
+
+    # Once done, load the latest results from the SQLite database
     try:
         config = load_config()
         data_period = config.get('DATA_PERIOD', '1y')
@@ -1147,116 +1122,18 @@ def _load_latest_risk_results() -> None:
                 ORDER BY ticker, trailing_stop_pct
             """
             df = pd.read_sql_query(query, conn, params=(data_period,))
-    except Exception as exc:
-        append_log(f"Error reading results from database: {exc}")
-        return
-
-    if not df.empty:
-        df.columns = [str(c) for c in df.columns]
-        log_output_table = df.to_dict(orient='records')
-        append_log(f"Loaded {len(log_output_table)} risk analysis rows for period {data_period}")
-    else:
-        log_output_table = []
-        append_log(f"Note: no risk analysis results found in database for period {data_period}.")
-
-
-def _perform_risk_analysis_job() -> int:
-    """Execute ``main.py`` and refresh the cached risk-analysis table."""
-
-    global log_output_table
-    log_output_table = []
-
-    if not os.path.exists(MAIN_SCRIPT):
-        message = f"ERROR: main script not found at {MAIN_SCRIPT}"
-        append_log(message)
-        raise FileNotFoundError(message)
-
-    append_log("Launching risk analysis script (main.py)")
-    try:
-        process = subprocess.Popen(
-            [PYTHON_EXECUTABLE, MAIN_SCRIPT],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=BASE_DIR,
-        )
-    except Exception as exc:
-        append_log(f"Failed to start risk analysis process: {exc}")
-        raise
-
-    try:
-        if process.stdout:
-            for line in process.stdout:
-                message = line.rstrip('\n')
-                if message:
-                    append_log(f"[main.py] {message}")
-        exit_code = process.wait()
-    finally:
-        if process.stdout:
-            process.stdout.close()
-
-    append_log(f"Risk analysis script completed with exit code {exit_code}")
-    _load_latest_risk_results()
-    return exit_code
-
-
-def _run_risk_analysis_async() -> None:
-    """Thread target that updates global status based on execution outcome."""
-
-    global _risk_job_thread
-    try:
-        exit_code = _perform_risk_analysis_job()
-    except Exception as exc:
-        append_log(f"Risk analysis failed: {exc}")
-        _set_risk_job_status(
-            state="failed",
-            message=f"Risk analysis failed: {exc}",
-            finished_at=_utc_now_iso(),
-            exit_code=None,
-        )
-    else:
-        if exit_code == 0:
-            _set_risk_job_status(
-                state="completed",
-                message="Risk analysis completed successfully.",
-                finished_at=_utc_now_iso(),
-                exit_code=exit_code,
+        if not df.empty:
+            df.columns = [str(c) for c in df.columns]
+            log_output_table = df.to_dict(orient='records')
+            append_log(
+                f"Loaded {len(log_output_table)} risk analysis rows for period {data_period}"
             )
         else:
-            _set_risk_job_status(
-                state="failed",
-                message=f"Risk analysis exited with code {exit_code}.",
-                finished_at=_utc_now_iso(),
-                exit_code=exit_code,
+            append_log(
+                f"Note: no risk analysis results found in database for period {data_period}."
             )
-    finally:
-        _risk_job_thread = None
-
-
-def _start_risk_analysis_job() -> Dict[str, Any]:
-    """Kick off the background risk-analysis job if one is not already running."""
-
-    global _risk_job_thread
-    with _risk_job_lock:
-        if _risk_job_thread and _risk_job_thread.is_alive():
-            return dict(_risk_job_status)
-
-        _risk_job_status.update(
-            {
-                "state": "running",
-                "message": "Risk analysis is running…",
-                "started_at": _utc_now_iso(),
-                "finished_at": None,
-                "exit_code": None,
-            }
-        )
-        thread = Thread(target=_run_risk_analysis_async, daemon=True)
-        _risk_job_thread = thread
-
-    append_log("Starting risk analysis calculations...")
-    thread.start()
-    return get_risk_job_status()
-
+    except Exception as e:
+        append_log(f"Error reading results from database: {e}")
 
 # ------------------------------
 # Routes
@@ -1273,29 +1150,14 @@ def risk_analysis():
         page_title='Portfolio Risk Analysis',
         page_subtitle='Stop-loss simulations & VaR insights',
         snapshot=None,
-        job_status=get_risk_job_status(),
     )
-
 
 @app.route('/run', methods=['POST'])
 def run():
-    status = get_risk_job_status()
-    if status.get('state') == 'running':
-        if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
-            return jsonify(status), 409
-        return redirect(url_for('risk_analysis'))
-
-    status = _start_risk_analysis_job()
-    if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
-        return jsonify(status), 202
+    append_log("Starting risk analysis calculations...")
+    # Run synchronously (Option 1). Will block until main.py completes.
+    run_main_script()
     return redirect(url_for('risk_analysis'))
-
-
-@app.route('/run/status', methods=['GET'])
-def run_status():
-    """Expose the current background job status for AJAX polling."""
-
-    return jsonify(get_risk_job_status())
 
 # ------------------------------
 # Run app

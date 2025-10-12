@@ -59,8 +59,8 @@ export function buildGainCell(
   const tooltip = options.tooltip ?? '';
   const numericValue = Number(value);
   const numericPercent = Number(percent);
-  const hasValue = value !== null && value !== undefined && Number.isFinite(numericValue);
-  const hasPercent = percent !== null && percent !== undefined && Number.isFinite(numericPercent);
+  const hasValue = Number.isFinite(numericValue);
+  const hasPercent = Number.isFinite(numericPercent);
 
   if (!hasValue || !hasPercent) {
     const tooltipAttr = tooltip ? ` title="${tooltip}"` : '';

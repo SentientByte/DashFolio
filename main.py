@@ -1,5 +1,6 @@
 """Entry point for running DashFolio calculations."""
 
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -14,13 +15,12 @@ from Calculations import (
     update_portfolio_prices,
 )
 
-from app_paths import CONFIG_FILE, DATA_STORE, PORTFOLIO_FILE
-
 
 def main() -> None:
-    portfolio_file = PORTFOLIO_FILE
-    database_path = DATA_STORE
-    config_file = CONFIG_FILE
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    portfolio_file = os.path.join(base_dir, "portfolio.json")
+    database_path = os.path.join(base_dir, "dashfolio.db")
+    config_file = os.path.join(base_dir, "config.json")
 
     today = datetime.now(ZoneInfo("America/New_York"))
 
