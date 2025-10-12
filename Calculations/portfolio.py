@@ -15,14 +15,6 @@ from .transactions import load_current_holdings
 _DEFAULT_PORTFOLIO: Dict[str, Any] = {"holdings": [], "target_allocations": {}}
 
 
-def _empty_portfolio_frame() -> pd.DataFrame:
-    """Return an empty portfolio DataFrame with the expected schema."""
-
-    return pd.DataFrame(
-        columns=["Ticker", "Quantity", "Average Cost", "Current Price", "Position"]
-    )
-
-
 def _default_portfolio_snapshot() -> Dict[str, Any]:
     """Return a copy of the built-in portfolio defaults."""
 
@@ -48,14 +40,12 @@ def _read_portfolio_file(portfolio_file: str) -> Dict[str, Any]:
     return data
 
 
-def _write_portfolio_file(portfolio_file: str, payload: Dict[str, Any]) -> bool:
+def _write_portfolio_file(portfolio_file: str, payload: Dict[str, Any]) -> None:
     try:
         with open(portfolio_file, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=4)
     except OSError as exc:
         print(f"Warning: unable to persist portfolio to '{portfolio_file}'. {exc}")
-        return False
-    return True
 
 
 def load_portfolio(portfolio_file: str, database_path: str | None = None) -> pd.DataFrame:
