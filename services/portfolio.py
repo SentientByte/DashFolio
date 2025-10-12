@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict
 
@@ -17,21 +16,6 @@ from Calculations.transactions import (
 
 from app_paths import PORTFOLIO_FILE
 
-_DEFAULT_PORTFOLIO: Dict[str, Any] = {
-    "__comment": (
-        "Placeholder portfolio generated automatically. Update holdings via the "
-        "dashboard or by syncing transactions."
-    ),
-    "holdings": [],
-    "target_allocations": {},
-}
-
-
-def _default_portfolio_snapshot() -> Dict[str, Any]:
-    """Return a copy of the built-in portfolio defaults."""
-
-    return deepcopy(_DEFAULT_PORTFOLIO)
-
 
 def _ensure_portfolio_directory() -> None:
     """Ensure the directory that stores portfolio files exists."""
@@ -40,38 +24,32 @@ def _ensure_portfolio_directory() -> None:
 
 
 def ensure_default_portfolio_file() -> None:
-    """Create the default portfolio file when missing, tolerating read-only dirs."""
-
     _ensure_portfolio_directory()
     if os.path.exists(PORTFOLIO_FILE):
         return
-    try:
-        with open(PORTFOLIO_FILE, "w", encoding="utf-8") as file:
-            json.dump(_DEFAULT_PORTFOLIO, file, indent=4)
-    except OSError as exc:
-        print(
-            f"Warning: unable to write default portfolio file '{PORTFOLIO_FILE}'. {exc}"
-        )
-    else:
-        print(f"Created default portfolio file: {PORTFOLIO_FILE}")
+    default_portfolio = {
+        "__comment": (
+            "Placeholder portfolio generated automatically. Update holdings via "
+            "the dashboard or by syncing transactions."
+        ),
+        "holdings": [],
+        "target_allocations": {},
+    }
+    with open(PORTFOLIO_FILE, "w", encoding="utf-8") as file:
+        json.dump(default_portfolio, file, indent=4)
+    print(f"Created default portfolio file: {PORTFOLIO_FILE}")
 
 
 def load_portfolio_file() -> Dict[str, Any]:
-    """Load the persisted portfolio or fall back to defaults when unavailable."""
-
     ensure_default_portfolio_file()
-    try:
-        with open(PORTFOLIO_FILE, "r", encoding="utf-8") as file:
+    with open(PORTFOLIO_FILE, "r", encoding="utf-8") as file:
+        try:
             data = json.load(file)
-    except (FileNotFoundError, PermissionError, json.JSONDecodeError) as exc:
-        print(
-            "Warning: falling back to in-memory defaults because portfolio file "
-            f"'{PORTFOLIO_FILE}' could not be read. {exc}"
-        )
-        data = _default_portfolio_snapshot()
+        except json.JSONDecodeError:
+            data = {}
 
     if not isinstance(data, dict):
-        data = _default_portfolio_snapshot()
+        data = {}
 
     data.setdefault("holdings", [])
     data.setdefault("target_allocations", {})
@@ -79,14 +57,9 @@ def load_portfolio_file() -> Dict[str, Any]:
 
 
 def save_portfolio_file(payload: Dict[str, Any]) -> None:
-    """Persist the portfolio payload to disk if the location is writable."""
-
     _ensure_portfolio_directory()
-    try:
-        with open(PORTFOLIO_FILE, "w", encoding="utf-8") as file:
-            json.dump(payload, file, indent=4)
-    except OSError as exc:
-        print(f"Warning: unable to persist portfolio to '{PORTFOLIO_FILE}'. {exc}")
+    with open(PORTFOLIO_FILE, "w", encoding="utf-8") as file:
+        json.dump(payload, file, indent=4)
 
 
 def load_portfolio_state(data_store: str) -> Dict[str, Any]:
