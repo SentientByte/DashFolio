@@ -68,7 +68,7 @@
                 <small class="text-muted">Execute Monte Carlo stop-loss analysis with the current configuration.</small>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('run') }}" id="run-form" onsubmit="onRunSubmit(event)">
+                <form method="POST" action="{{ url_for('run') }}" id="run-form" onsubmit="return onRunSubmit(event)">
                     <button id="run-btn" class="btn btn-success">
                         <i class="bx bx-play-circle me-2"></i>
                         Run / Re-run calculations
@@ -121,39 +121,133 @@
 
 </div>
 
-<div id="status-pill" role="status" aria-live="polite" aria-atomic="true">
+{% set job_state = job_status.get('state', 'idle') %}
+<div id="status-pill" role="status" aria-live="polite" aria-atomic="true" data-state="{{ job_state }}" style="display: none;">
     <img id="status-gif" src="https://upload.wikimedia.org/wikipedia/commons/a/ad/YouTube_loading_symbol_3_%28transparent%29.gif" alt="loading">
-    <span class="status-text" id="status-text">Working...</span>
+    <span class="status-text" id="status-text">{{ job_status.get('message', 'Working...') }}</span>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    function showStatus(message) {
+    const RUN_ENDPOINT = {{ url_for('run')|tojson }};
+    const STATUS_ENDPOINT = {{ url_for('run_status')|tojson }};
+    const initialStatus = {{ job_status|tojson }};
+
+    let pollTimeout = null;
+
+    function updateStatusPill(status) {
         const pill = document.getElementById('status-pill');
         const text = document.getElementById('status-text');
-        text.textContent = message;
+        if (!pill || !text) {
+            return;
+        }
+
+        const state = status && status.state ? status.state : 'idle';
+        pill.dataset.state = state;
+
+        if (state === 'idle') {
+            pill.style.display = 'none';
+            return;
+        }
+
+        text.textContent = status && status.message ? status.message : 'Working...';
         pill.style.display = 'inline-flex';
+        pill.classList.remove('status-pill--running', 'status-pill--failed', 'status-pill--completed');
+        if (state === 'running') {
+            pill.classList.add('status-pill--running');
+        } else if (state === 'failed') {
+            pill.classList.add('status-pill--failed');
+        } else if (state === 'completed') {
+            pill.classList.add('status-pill--completed');
+        }
     }
 
-    function hideStatus() {
-        const pill = document.getElementById('status-pill');
-        pill.style.display = 'none';
+    async function fetchStatus() {
+        const response = await fetch(STATUS_ENDPOINT, {
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        if (!response.ok) {
+            throw new Error('Unable to retrieve risk analysis status.');
+        }
+        return response.json();
+    }
+
+    function scheduleNextPoll() {
+        if (pollTimeout) {
+            clearTimeout(pollTimeout);
+        }
+        pollTimeout = setTimeout(pollRiskStatus, 1500);
+    }
+
+    async function pollRiskStatus() {
+        try {
+            const status = await fetchStatus();
+            updateStatusPill(status);
+            if (status.state === 'running') {
+                scheduleNextPoll();
+                return;
+            }
+
+            const button = document.getElementById('run-btn');
+            if (button) {
+                button.disabled = false;
+            }
+
+            if (status.state === 'completed') {
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1200);
+            }
+        } catch (error) {
+            updateStatusPill({ state: 'failed', message: 'Unable to read job status.' });
+            const button = document.getElementById('run-btn');
+            if (button) {
+                button.disabled = false;
+            }
+        }
     }
 
     async function onRunSubmit(event) {
+        event.preventDefault();
         const button = document.getElementById('run-btn');
         if (button) {
             button.disabled = true;
         }
-        showStatus('Running calculations...');
-        setTimeout(() => {
-            hideStatus();
+        updateStatusPill({ state: 'running', message: 'Starting risk analysis...' });
+        try {
+            const response = await fetch(RUN_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            if (response.status === 409) {
+                pollRiskStatus();
+                return false;
+            }
+            if (!response.ok) {
+                throw new Error('Failed to start risk analysis.');
+            }
+            pollRiskStatus();
+        } catch (error) {
+            updateStatusPill({ state: 'failed', message: 'Failed to start risk analysis.' });
             if (button) {
                 button.disabled = false;
             }
-        }, 2000);
-        return true;
+        }
+        return false;
+    }
+
+    updateStatusPill(initialStatus);
+    if (initialStatus.state === 'running') {
+        const button = document.getElementById('run-btn');
+        if (button) {
+            button.disabled = true;
+        }
+        scheduleNextPoll();
     }
 </script>
 {% endblock %}
