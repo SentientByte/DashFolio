@@ -1,8 +1,7 @@
 name: Publish DashFolio image
 
 on:
-  push:
-    branches: ["main"]
+  workflow_dispatch:
 
 env:
   IMAGE_NAME: ${{ vars.DOCKER_IMAGE }}
