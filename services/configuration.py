@@ -26,6 +26,11 @@ _DEFAULT_CONFIG: Dict[str, Any] = {
     "CURRENCY": "USD",
     "AUTO_REFRESH_INTERVAL": 60,
     "SESSION_DURATION_HOURS": DEFAULT_SESSION_DURATION,
+    "NOTIFICATIONS_ENABLED": False,
+    "TELEGRAM_BOT_TOKEN": "",
+    "TELEGRAM_CHAT_ID": "",
+    "NOTIFY_END_OF_DAY": False,
+    "NOTIFY_BEGINNING_OF_DAY": False,
 }
 
 
@@ -52,6 +57,11 @@ def load_config() -> Dict[str, Any]:
         "CURRENCY": "USD",
         "AUTO_REFRESH_INTERVAL": 60,
         "SESSION_DURATION_HOURS": DEFAULT_SESSION_DURATION,
+        "NOTIFICATIONS_ENABLED": False,
+        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_CHAT_ID": "",
+        "NOTIFY_END_OF_DAY": False,
+        "NOTIFY_BEGINNING_OF_DAY": False,
     }
     updated = False
     for key, value in defaults.items():
@@ -79,6 +89,38 @@ def load_config() -> Dict[str, Any]:
         session_duration = DEFAULT_SESSION_DURATION
         updated = True
     config["SESSION_DURATION_HOURS"] = session_duration
+
+    def _coerce_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"", "0", "false", "no", "off"}:
+                return False
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+        return bool(value)
+
+    bool_keys = [
+        "NOTIFICATIONS_ENABLED",
+        "NOTIFY_END_OF_DAY",
+        "NOTIFY_BEGINNING_OF_DAY",
+    ]
+    for key in bool_keys:
+        original = config.get(key)
+        coerced = _coerce_bool(original)
+        if original != coerced:
+            config[key] = coerced
+            updated = True
+
+    for key in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+        value = config.get(key, "")
+        trimmed = str(value or "").strip()
+        if config.get(key) != trimmed:
+            config[key] = trimmed
+            updated = True
 
     if updated:
         save_config(config)
