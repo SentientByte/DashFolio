@@ -10,6 +10,7 @@ import pandas as pd
 from pandas.api.types import is_datetime64tz_dtype
 
 from services.activity_log import append_log
+from services.market_hours import get_market_status
 
 from .allocations import normalize_target_allocations
 from .market_data import (
@@ -675,6 +676,9 @@ def build_portfolio_snapshot(
         f"Recalculating portfolio snapshot for {len(holdings)} holdings"
     )
 
+    market_status = get_market_status()
+    is_market_open = bool(market_status.get("is_open"))
+
     computed_holdings: List[Dict[str, Any]] = []
     total_cost = 0.0
     total_current_value = 0.0
@@ -936,10 +940,16 @@ def build_portfolio_snapshot(
         invested_reference_current if invested_reference_current is not None else invested_current
     )
 
-    dod_value = reference_current - previous_invested if previous_invested is not None else 0.0
+    comparison_current = invested_current if is_market_open else reference_current
+
+    dod_value = (
+        comparison_current - previous_invested
+        if previous_invested is not None
+        else 0.0
+    )
     dod_pct = (
         (dod_value / previous_invested) * 100
-        if previous_invested is not None and previous_invested != 0
+        if previous_invested not in (None, 0)
         else 0.0
     )
 
@@ -1022,7 +1032,7 @@ def build_portfolio_snapshot(
         benchmark_history,
     )
 
-    if performance_history:
+    if performance_history and not is_market_open:
         latest_entry = performance_history[-1]
         latest_value = _optional_float(latest_entry.get("portfolio_value"))
         previous_value: Optional[float] = None

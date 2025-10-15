@@ -174,7 +174,7 @@ $\lambda = \dfrac{2}{\text{SPAN\_EWMA} + 1}$, and $w_i = (1-\lambda)^i$.
   where $z$ is the standard normal quantile estimated in  
   `Calculations/risk_analysis.py`.
 
-- **Time-weighted return index** (`portfolio/performanceIndex.ts`)  
+- **Time-weighted return index** (`portfolio/performanceIndex.ts`)
   After each external cash-flow day $f$, the index is reset so performance
   reflects only market appreciation:
 
@@ -183,6 +183,12 @@ $\lambda = \dfrac{2}{\text{SPAN\_EWMA} + 1}$, and $w_i = (1-\lambda)^i$.
   \qquad
   R_j = \frac{V_{d_j} - V_{d_{j-1}}}{V_{d_{j-1}}}
   ```
+
+- **Day-over-day profit ("Todays Profit" card)**
+  When the U.S. market is open, the snapshot compares the live invested value
+  (using the latest quotes) against the prior trading day's invested value so
+  the card updates intraday. After the closing bell the metric reverts to the
+  stored performance history, mirroring the daily chart.
 
 
 ## 5. Data flow details
