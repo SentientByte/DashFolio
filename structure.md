@@ -81,6 +81,12 @@ sequenceDiagram
 | `BENCHMARK_TICKER` | Symbol representing the comparison index (default `SPY`). |
 | `CURRENCY` | ISO currency code used for formatting. |
 | `AUTO_REFRESH_INTERVAL` | Front-end polling cadence (seconds). |
+| `SESSION_DURATION_HOURS` | Lifetime of authentication cookies; `0` ends the session when the browser closes. |
+| `NOTIFICATIONS_ENABLED` | Master toggle controlling whether Telegram alerts are active. |
+| `TELEGRAM_BOT_TOKEN` | Bot token used to authenticate with the Telegram API. |
+| `TELEGRAM_CHAT_ID` | Destination chat/channel identifier that receives notifications. |
+| `NOTIFY_BEGINNING_OF_DAY` | Enables the market-open insight message (15 minutes after the bell). |
+| `NOTIFY_END_OF_DAY` | Enables the market-close summary message. |
 
 ### Portfolio payload (`portfolio.json`)
 

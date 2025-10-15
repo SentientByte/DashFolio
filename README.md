@@ -38,7 +38,7 @@ DashFolio consumes data from multiple sources:
 - **Portfolio configuration** – base holdings, target allocations, and security metadata
   live in `portfolio.json` (stored under `/mnt/config/dashfolio/` by default) and are synchronized with transaction-derived holdings.
 - **User preferences** – `config.json` (also persisted in `/mnt/config/dashfolio/`) defines the analysis window, stop-loss ranges,
-  EWMA spans, benchmark tickers, and UI auto-refresh cadence.
+  EWMA spans, benchmark tickers, UI auto-refresh cadence, and Telegram notification defaults.
 - **Market data** – live quotes and historical candles are pulled from Yahoo Finance via
   [`yfinance`](https://pypi.org/project/yfinance/), then normalized and cached locally.
 - **User transactions** – CSV uploads and manual adjustments are validated, normalized,
@@ -124,6 +124,27 @@ DashFolio consumes data from multiple sources:
 5. **Settings** – tune the analysis horizon, EWMA span, benchmark ticker, and session
    duration. Changes propagate immediately to the calculation engine and cached
    snapshots.
+
+## Telegram notifications
+
+DashFolio can post automated summaries to a Telegram chat at the beginning and end of
+each U.S. trading day.
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy the token. Use a
+   helper such as [@getidsbot](https://t.me/getidsbot) to look up the destination chat
+   or channel ID.
+2. Open **Settings → Notification** inside the app, enable Telegram notifications, paste
+   the bot token and chat ID, then choose whether to send the beginning-of-day or
+   end-of-day reports.
+3. The scheduler runs while DashFolio is active. At 15 minutes past the opening bell and
+   shortly after the closing bell, it sends templated summaries populated from the
+   latest portfolio snapshot.
+
+Configuration keys backing these preferences live in `config.json`:
+
+- `NOTIFICATIONS_ENABLED`: master toggle for Telegram delivery.
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`: credentials used when posting messages.
+- `NOTIFY_BEGINNING_OF_DAY` / `NOTIFY_END_OF_DAY`: choose which reports to queue.
 
 ## Contributing
 

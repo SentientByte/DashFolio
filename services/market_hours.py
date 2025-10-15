@@ -147,6 +147,37 @@ def get_next_open_datetime(now: Optional[datetime] = None) -> datetime:
         probe += timedelta(days=1)
 
 
+def is_trading_day(check_date: date) -> bool:
+    """Return ``True`` when U.S. equities trade on ``check_date``."""
+
+    holidays = _build_holiday_cache(check_date.year)
+    return _is_trading_day(check_date, holidays)
+
+
+def get_next_close_datetime(now: Optional[datetime] = None) -> datetime:
+    """Return the next market close time at or after ``now``."""
+
+    current = now.astimezone(EASTERN_TZ) if now else datetime.now(EASTERN_TZ)
+    holidays = _build_holiday_cache(current.year)
+    today = current.date()
+    close_today = datetime.combine(today, MARKET_CLOSE_TIME, tzinfo=EASTERN_TZ)
+
+    if _is_trading_day(today, holidays) and current < close_today:
+        return close_today
+
+    probe = current
+    if current >= close_today:
+        probe = datetime.combine(today + timedelta(days=1), time(0, 0), tzinfo=EASTERN_TZ)
+
+    while True:
+        candidate = probe.date()
+        if candidate.year != today.year:
+            holidays = _build_holiday_cache(candidate.year)
+        if _is_trading_day(candidate, holidays):
+            return datetime.combine(candidate, MARKET_CLOSE_TIME, tzinfo=EASTERN_TZ)
+        probe += timedelta(days=1)
+
+
 def get_market_status(now: Optional[datetime] = None) -> Dict[str, Optional[str]]:
     """Return a dictionary describing the NASDAQ market status."""
 

@@ -40,6 +40,12 @@
                     Log
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-semibold" id="settings-tab-notifications" data-bs-toggle="pill" data-bs-target="#settings-pane-notifications" type="button" role="tab" aria-controls="settings-pane-notifications" aria-selected="false">
+                    <i class="bx bx-bell me-1"></i>
+                    Notification
+                </button>
+            </li>
         </ul>
     </div>
     <div class="col-12">
@@ -272,6 +278,76 @@
                     </div>
                 </div>
             </div>
+            <div class="tab-pane fade" id="settings-pane-notifications" role="tabpanel" aria-labelledby="settings-tab-notifications">
+                <div class="card" id="settings-notifications-card">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-3">
+                        <div>
+                            <h5 class="mb-1">Notification</h5>
+                            <small class="text-muted">Send Telegram alerts at the open and close of each trading day.</small>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <form id="settings-notifications-form" class="row g-4">
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="settings-notifications-enabled" {% if config.get('NOTIFICATIONS_ENABLED') %}checked{% endif %}>
+                                    <label class="form-check-label" for="settings-notifications-enabled">Enable Telegram notifications</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="settings-telegram-bot" class="form-label">Telegram bot token</label>
+                                <input type="text" class="form-control" id="settings-telegram-bot" value="{{ config.get('TELEGRAM_BOT_TOKEN', '')|default('', true) }}" autocomplete="off" placeholder="1234567890:ABCDEF" spellcheck="false">
+                                <div class="form-text">Create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noopener">BotFather</a> and paste the token here.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="settings-telegram-chat" class="form-label">Chat ID</label>
+                                <input type="text" class="form-control" id="settings-telegram-chat" value="{{ config.get('TELEGRAM_CHAT_ID', '')|default('', true) }}" autocomplete="off" placeholder="-1001234567890" spellcheck="false">
+                                <div class="form-text">Use <a href="https://t.me/getidsbot" target="_blank" rel="noopener">@getidsbot</a> or similar to look up the chat/channel ID.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="settings-notify-eod" {% if config.get('NOTIFY_END_OF_DAY') %}checked{% endif %}>
+                                    <label class="form-check-label" for="settings-notify-eod">End of day report</label>
+                                </div>
+                                <div class="form-text">Sends a portfolio digest shortly after the U.S. market closes.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="settings-notify-bod" {% if config.get('NOTIFY_BEGINNING_OF_DAY') %}checked{% endif %}>
+                                    <label class="form-check-label" for="settings-notify-bod">Beginning of day insight</label>
+                                </div>
+                                <div class="form-text">Sends a pulse 15 minutes after the opening bell.</div>
+                            </div>
+                            <div class="col-md-6 col-xl-4">
+                                <label for="settings-notifications-test-mode" class="form-label">Test notification type</label>
+                                <select id="settings-notifications-test-mode" class="form-select">
+                                    <option value="end_of_day">End of day report preview</option>
+                                    <option value="beginning_of_day">Beginning of day insight preview</option>
+                                </select>
+                                <div class="form-text">Sends a lightweight confirmation message to your Telegram chat.</div>
+                            </div>
+                            <div class="col-12">
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <button class="btn btn-outline-secondary" type="button" id="settings-notifications-test">
+                                        <i class="bx bx-paper-plane me-1"></i>
+                                        Send test notification
+                                    </button>
+                                    <div class="ms-auto">
+                                        <button class="btn btn-primary" type="submit">
+                                            <i class="bx bx-save me-1"></i>
+                                            Save notification settings
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-text mt-2">Enter a bot token and chat ID to enable test notifications.</div>
+                            </div>
+                        </form>
+                        <div class="alert alert-success mt-3 d-none" role="alert" id="settings-notifications-success">Notification settings saved.</div>
+                        <div class="alert alert-danger mt-3 d-none" role="alert" id="settings-notifications-error"></div>
+                        <div class="alert alert-info mt-3 d-none" role="alert" id="settings-notifications-test-status"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -382,6 +458,79 @@
             statusEl.classList.add('text-danger');
         } else {
             statusEl.classList.add('text-success');
+        }
+    }
+
+    function getNotificationElements() {
+        return {
+            toggle: document.getElementById('settings-notifications-enabled'),
+            botInput: document.getElementById('settings-telegram-bot'),
+            chatInput: document.getElementById('settings-telegram-chat'),
+            endSwitch: document.getElementById('settings-notify-eod'),
+            openSwitch: document.getElementById('settings-notify-bod'),
+            successAlert: document.getElementById('settings-notifications-success'),
+            errorAlert: document.getElementById('settings-notifications-error'),
+            testMode: document.getElementById('settings-notifications-test-mode'),
+            testButton: document.getElementById('settings-notifications-test'),
+            testStatus: document.getElementById('settings-notifications-test-status'),
+        };
+    }
+
+    function hasNotificationCredentials() {
+        const { botInput, chatInput } = getNotificationElements();
+        return !!(botInput?.value?.trim() && chatInput?.value?.trim());
+    }
+
+    function setNotificationTestStatus(message = '', state = 'info') {
+        const { testStatus } = getNotificationElements();
+        if (!testStatus) {
+            return;
+        }
+
+        testStatus.classList.add('d-none');
+        testStatus.classList.remove('alert-info', 'alert-success', 'alert-danger');
+
+        if (!message) {
+            testStatus.textContent = '';
+            return;
+        }
+
+        const variant = state === 'success'
+            ? 'alert-success'
+            : state === 'error'
+                ? 'alert-danger'
+                : 'alert-info';
+        testStatus.textContent = message;
+        testStatus.classList.add(variant);
+        testStatus.classList.remove('d-none');
+    }
+
+    function setNotificationFormState(enabled) {
+        const { endSwitch, openSwitch, testMode } = getNotificationElements();
+        [endSwitch, openSwitch, testMode].forEach(element => {
+            if (!element) return;
+            if (enabled) {
+                element.removeAttribute('disabled');
+            } else {
+                element.setAttribute('disabled', 'disabled');
+            }
+        });
+    }
+
+    function syncNotificationFormState() {
+        const { toggle, testButton } = getNotificationElements();
+        const enabled = !!toggle?.checked;
+        setNotificationFormState(enabled);
+        const canTest = enabled && hasNotificationCredentials();
+        if (testButton) {
+            if (canTest) {
+                testButton.removeAttribute('disabled');
+            } else {
+                testButton.setAttribute('disabled', 'disabled');
+            }
+        }
+        if (!canTest) {
+            setNotificationTestStatus();
         }
     }
 
@@ -896,6 +1045,109 @@
         }
     }
 
+    async function saveNotificationSettings(event) {
+        event.preventDefault();
+        const { toggle, botInput, chatInput, endSwitch, openSwitch, successAlert, errorAlert } = getNotificationElements();
+        if (successAlert) {
+            successAlert.classList.add('d-none');
+        }
+        if (errorAlert) {
+            errorAlert.classList.add('d-none');
+            errorAlert.textContent = '';
+        }
+
+        const payload = {
+            notifications_enabled: !!toggle?.checked,
+            telegram_bot_token: botInput?.value?.trim() || '',
+            telegram_chat_id: chatInput?.value?.trim() || '',
+            notify_end_of_day: !!endSwitch?.checked,
+            notify_beginning_of_day: !!openSwitch?.checked,
+        };
+
+        showStatus('Saving settings...');
+        try {
+            const response = await fetch('{{ url_for('api_update_config') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const message = Array.isArray(data.errors)
+                    ? data.errors.join(' ')
+                    : (data.error || 'Failed to save notification settings.');
+                throw new Error(message);
+            }
+            if (errorAlert) {
+                errorAlert.classList.add('d-none');
+                errorAlert.textContent = '';
+            }
+            if (successAlert) {
+                successAlert.classList.remove('d-none');
+            }
+        } catch (error) {
+            console.error(error);
+            if (successAlert) {
+                successAlert.classList.add('d-none');
+            }
+            if (errorAlert) {
+                errorAlert.textContent = error.message || 'Unable to save notification settings.';
+                errorAlert.classList.remove('d-none');
+            }
+        } finally {
+            hideStatus(400);
+            syncNotificationFormState();
+        }
+    }
+
+    async function triggerNotificationTest(event) {
+        event.preventDefault();
+        const { toggle, botInput, chatInput, testMode, testButton } = getNotificationElements();
+        setNotificationTestStatus();
+
+        if (!toggle?.checked) {
+            setNotificationTestStatus('Enable notifications before sending a test message.', 'error');
+            return;
+        }
+        if (!hasNotificationCredentials()) {
+            setNotificationTestStatus('Enter both a bot token and chat ID to send a test notification.', 'error');
+            return;
+        }
+
+        const payload = {
+            bot_token: botInput?.value?.trim() || '',
+            chat_id: chatInput?.value?.trim() || '',
+            mode: testMode?.value || 'end_of_day',
+        };
+
+        if (testButton) {
+            testButton.setAttribute('disabled', 'disabled');
+        }
+
+        showStatus('Sending test notification...');
+        try {
+            const response = await fetch('{{ url_for('api_send_test_notification') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const message = Array.isArray(data.errors)
+                    ? data.errors.join(' ')
+                    : (data.error || 'Test notification failed.');
+                throw new Error(message);
+            }
+            setNotificationTestStatus('Test notification sent successfully. Check Telegram for the confirmation message.', 'success');
+        } catch (error) {
+            console.error(error);
+            setNotificationTestStatus(error.message || 'Unable to send a test notification right now.', 'error');
+        } finally {
+            hideStatus(400);
+            syncNotificationFormState();
+        }
+    }
+
     async function saveRiskParameters(event) {
         event.preventDefault();
         const successAlert = document.getElementById('settings-risk-success');
@@ -978,6 +1230,30 @@
             riskForm.addEventListener('submit', saveRiskParameters);
         }
 
+        const notificationsForm = document.getElementById('settings-notifications-form');
+        if (notificationsForm) {
+            notificationsForm.addEventListener('submit', saveNotificationSettings);
+        }
+
+        const notificationsToggle = document.getElementById('settings-notifications-enabled');
+        if (notificationsToggle) {
+            notificationsToggle.addEventListener('change', syncNotificationFormState);
+        }
+
+        const notificationElements = getNotificationElements();
+        if (notificationElements.testButton) {
+            notificationElements.testButton.addEventListener('click', triggerNotificationTest);
+        }
+        if (notificationElements.botInput) {
+            notificationElements.botInput.addEventListener('input', syncNotificationFormState);
+        }
+        if (notificationElements.chatInput) {
+            notificationElements.chatInput.addEventListener('input', syncNotificationFormState);
+        }
+        if (notificationElements.testMode) {
+            notificationElements.testMode.addEventListener('change', () => setNotificationTestStatus());
+        }
+
         const logToggle = document.getElementById('settings-toggle-log');
         const logBox = document.getElementById('settings-log-box');
         if (logToggle && logBox) {
@@ -1017,6 +1293,7 @@
         setupEventListeners();
         updateTargetTotalBadge();
         updateCashBalanceBadge();
+        syncNotificationFormState();
     });
 </script>
 {% endblock %}

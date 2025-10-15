@@ -53,6 +53,11 @@ from services.configuration import (
     load_config,
     save_config,
 )
+from services.notifications import (
+    NotificationError,
+    configure_notification_scheduler,
+    send_test_notification,
+)
 from services.formatting import (
     format_currency_value,
     format_signed_currency_value,
@@ -96,7 +101,9 @@ def inject_global_helpers():
 # ------------------------------
 ensure_default_config_file()
 ensure_default_portfolio_file()
-apply_session_duration(app, load_config())
+_initial_config = load_config()
+apply_session_duration(app, _initial_config)
+configure_notification_scheduler(DATA_STORE, _initial_config)
 
 
 # ------------------------------
@@ -903,11 +910,31 @@ def api_update_config():
         except (TypeError, ValueError):
             errors.append('Session duration must be one of 0, 4, 12, 24, or 48 hours.')
 
+    if 'notifications_enabled' in payload:
+        config['NOTIFICATIONS_ENABLED'] = bool(payload.get('notifications_enabled'))
+
+    if 'notify_end_of_day' in payload:
+        config['NOTIFY_END_OF_DAY'] = bool(payload.get('notify_end_of_day'))
+
+    if 'notify_beginning_of_day' in payload:
+        config['NOTIFY_BEGINNING_OF_DAY'] = bool(payload.get('notify_beginning_of_day'))
+
+    if 'telegram_bot_token' in payload:
+        config['TELEGRAM_BOT_TOKEN'] = str(payload.get('telegram_bot_token', '') or '').strip()
+
+    if 'telegram_chat_id' in payload:
+        config['TELEGRAM_CHAT_ID'] = str(payload.get('telegram_chat_id', '') or '').strip()
+
+    if config.get('NOTIFICATIONS_ENABLED'):
+        if not config.get('TELEGRAM_BOT_TOKEN') or not config.get('TELEGRAM_CHAT_ID'):
+            errors.append('Telegram bot token and chat ID are required when notifications are enabled.')
+
     if errors:
         return jsonify({'status': 'error', 'errors': errors}), 400
 
     save_config(config)
     apply_session_duration(app, config)
+    configure_notification_scheduler(DATA_STORE, config)
     currency_settings = get_currency_context(config)
 
     return jsonify({
@@ -920,9 +947,42 @@ def api_update_config():
             'CURRENCY': config.get('CURRENCY'),
             'AUTO_REFRESH_INTERVAL': config.get('AUTO_REFRESH_INTERVAL'),
             'SESSION_DURATION_HOURS': config.get('SESSION_DURATION_HOURS'),
+            'NOTIFICATIONS_ENABLED': config.get('NOTIFICATIONS_ENABLED'),
+            'TELEGRAM_BOT_TOKEN': config.get('TELEGRAM_BOT_TOKEN'),
+            'TELEGRAM_CHAT_ID': config.get('TELEGRAM_CHAT_ID'),
+            'NOTIFY_END_OF_DAY': config.get('NOTIFY_END_OF_DAY'),
+            'NOTIFY_BEGINNING_OF_DAY': config.get('NOTIFY_BEGINNING_OF_DAY'),
         },
         'currency': currency_settings,
     })
+
+
+@app.route('/api/notifications/test', methods=['POST'])
+def api_send_test_notification():
+    payload = request.get_json(silent=True) or {}
+    bot_token = str(payload.get('bot_token', '') or '').strip()
+    chat_id = str(payload.get('chat_id', '') or '').strip()
+    mode = str(payload.get('mode', 'end_of_day') or 'end_of_day')
+
+    if not bot_token or not chat_id:
+        return jsonify({'status': 'error', 'error': 'Bot token and chat ID are required.'}), 400
+    if mode not in {'end_of_day', 'beginning_of_day'}:
+        return jsonify({'status': 'error', 'error': 'Invalid notification mode requested.'}), 400
+
+    config = load_config()
+    config_override = dict(config)
+    config_override['TELEGRAM_BOT_TOKEN'] = bot_token
+    config_override['TELEGRAM_CHAT_ID'] = chat_id
+
+    try:
+        message = send_test_notification(config_override, bot_token=bot_token, chat_id=chat_id, mode=mode)
+    except NotificationError as exc:
+        return jsonify({'status': 'error', 'error': str(exc)}), 400
+    except Exception as exc:  # pragma: no cover - defensive logging
+        append_log(f'Test notification failed: {exc}')
+        return jsonify({'status': 'error', 'error': 'Unable to send test notification right now.'}), 500
+
+    return jsonify({'status': 'ok', 'mode': mode, 'message': message})
 
 
 @app.route('/api/settings/logos', methods=['POST'])
