@@ -516,12 +516,14 @@ def transactions_page():
     holdings = portfolio_state.get('holdings', [])
     holdings_summary = fetch_holdings_with_market_values(holdings)
     cash_balance = portfolio_state.get('cash_balance', 0.0)
+    cash_adjustments = portfolio_state.get('cash_adjustments', [])
 
     return render_template(
         'transactions.html',
         transactions=transactions,
         holdings_summary=holdings_summary,
         cash_balance=cash_balance,
+        cash_adjustments=cash_adjustments,
         currency_settings=currency_settings,
         active_page='transactions',
         page_title='Transactions',
@@ -561,9 +563,7 @@ def settings():
         'settings.html',
         snapshot=snapshot,
         target_allocations=targets,
-        cash_balance=cash_balance,
         holdings_metadata=portfolio_state.get('metadata', []),
-        cash_adjustments=cash_adjustments,
         config=config,
         currency_settings=currency_settings,
         benchmark_ticker=benchmark_ticker,

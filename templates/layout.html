@@ -63,6 +63,14 @@
                         <div data-i18n="Settings">Settings</div>
                     </a>
                 </li>
+                {% if is_authenticated %}
+                <li class="menu-item logout-menu-item mt-auto">
+                    <a href="{{ url_for('logout') }}" class="menu-link">
+                        <i class="menu-icon bx bx-log-out"></i>
+                        <div>Log out</div>
+                    </a>
+                </li>
+                {% endif %}
             </ul>
         </aside>
         <div class="layout-page">
@@ -101,14 +109,6 @@
                                 </span>
                             </div>
                         </li>
-                        {% if is_authenticated %}
-                        <li class="nav-item">
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('logout') }}">
-                                <i class="bx bx-log-out me-1"></i>
-                                Log out
-                            </a>
-                        </li>
-                        {% endif %}
                     </ul>
                 </div>
             </nav>
