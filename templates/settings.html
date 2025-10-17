@@ -51,13 +51,6 @@
                             <h5 class="mb-1">General settings</h5>
                             <small class="text-muted">Control global preferences that apply across dashboards.</small>
                         </div>
-                        <div class="d-flex flex-column align-items-end text-end">
-                            <span class="form-label mb-2">Display currency</span>
-                            <div class="form-check form-switch mb-0">
-                                <input class="form-check-input" type="checkbox" id="settings-currency-toggle" {% if currency_settings.code == 'BHD' %}checked{% endif %}>
-                                <label class="form-check-label" for="settings-currency-toggle">Show values in Bahraini Dinar (BD)</label>
-                            </div>
-                        </div>
                     </div>
                     <div class="card-body">
                         <form id="settings-general-form" class="row g-4 align-items-end">
@@ -142,7 +135,7 @@
                     <div class="card-body">
                         <form id="settings-risk-form" class="row g-3">
                             <div class="col-md-4">
-                                <label for="settings-num-simulations" class="form-label">Num simulations</label>
+                                <label for="settings-num-simulations" class="form-label">Number of simulations</label>
                                 <input type="number" class="form-control" id="settings-num-simulations" value="{{ config['NUM_SIMULATIONS'] }}" min="1">
                             </div>
                             <div class="col-md-4">
@@ -223,8 +216,10 @@
             <div class="tab-pane fade" id="settings-pane-notifications" role="tabpanel" aria-labelledby="settings-tab-notifications">
                 <div class="card" id="settings-notifications-card">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <i class="bx bx-bell fs-4 text-primary"></i>
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge bg-label-primary rounded-circle p-2 d-inline-flex align-items-center justify-content-center">
+                                <i class="bx bx-bell fs-5 text-primary"></i>
+                            </span>
                             <div>
                                 <h5 class="mb-1 mb-md-0">Notification</h5>
                                 <small class="text-muted">Send Telegram alerts at the open and close of each trading day.</small>
@@ -786,7 +781,6 @@
         event.preventDefault();
         const successAlert = document.getElementById('settings-general-success');
         const errorAlert = document.getElementById('settings-general-error');
-        const currencyToggle = document.getElementById('settings-currency-toggle');
         const autoRefreshInput = document.getElementById('settings-auto-refresh');
         const benchmarkInput = document.getElementById('settings-benchmark');
         const sessionDurationSelect = document.getElementById('settings-session-duration');
@@ -795,7 +789,6 @@
         const sessionDurationValue = parseInt(sessionDurationSelect?.value, 10);
 
         const payload = {
-            currency: currencyToggle?.checked ? 'BHD' : 'USD',
             auto_refresh_interval: Number.isFinite(intervalValue) ? intervalValue : undefined,
             benchmark_ticker: benchmarkValue,
             session_duration_hours: Number.isFinite(sessionDurationValue) ? sessionDurationValue : undefined,

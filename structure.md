@@ -190,6 +190,12 @@ $\lambda = \dfrac{2}{\text{SPAN\_EWMA} + 1}$, and $w_i = (1-\lambda)^i$.
   R_j = \frac{V_{d_j} - V_{d_{j-1}}}{V_{d_{j-1}}}
   ```
 
+- **Performance history cash flows** (`Calculations/snapshot.py`)
+  Deposits and withdrawals recorded via cash adjustments are netted out before
+  calculating `daily_return`. This prevents artificial jumps (or crashes) in the
+  cumulative performance series when new capital arrives or funds are removed,
+  while dividends and interest remain treated as investment gains.
+
 - **Day-over-day profit ("Todays Profit" card)**
   When the U.S. market is open, the snapshot compares the live invested value
   (using the latest quotes) against the prior trading day's invested value so
