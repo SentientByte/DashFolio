@@ -787,6 +787,7 @@
         event.preventDefault();
         const successAlert = document.getElementById('settings-general-success');
         const errorAlert = document.getElementById('settings-general-error');
+        const currencyToggle = document.getElementById('settings-currency-toggle');
         const autoRefreshInput = document.getElementById('settings-auto-refresh');
         const benchmarkInput = document.getElementById('settings-benchmark');
         const sessionDurationSelect = document.getElementById('settings-session-duration');
@@ -795,6 +796,7 @@
         const sessionDurationValue = parseInt(sessionDurationSelect?.value, 10);
 
         const payload = {
+            currency: currencyToggle?.checked ? 'BHD' : 'USD',
             auto_refresh_interval: Number.isFinite(intervalValue) ? intervalValue : undefined,
             benchmark_ticker: benchmarkValue,
             session_duration_hours: Number.isFinite(sessionDurationValue) ? sessionDurationValue : undefined,
