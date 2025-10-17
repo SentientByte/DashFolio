@@ -530,12 +530,22 @@ def _build_daily_performance_history(
             tx_by_day.setdefault(date, []).append(row)
 
     adj_by_day: Dict[pd.Timestamp, float] = {}
+    net_flows_by_day: Dict[pd.Timestamp, float] = {}
     if not adj_df.empty:
         for _, row in adj_df.iterrows():
             date = row.get("date")
             if pd.isna(date):
                 continue
-            adj_by_day[date] = adj_by_day.get(date, 0.0) + safe_float(row.get("signed_amount"))
+            signed_amount = safe_float(row.get("signed_amount"))
+            adj_by_day[date] = adj_by_day.get(date, 0.0) + signed_amount
+
+            flow_raw = row.get("type") if "type" in row else None
+            try:
+                flow_type = _canonical_flow_type(flow_raw)
+            except ValueError:
+                flow_type = "deposit"
+            if flow_type in {"deposit", "withdrawal"}:
+                net_flows_by_day[date] = net_flows_by_day.get(date, 0.0) + signed_amount
 
     holdings: Dict[str, float] = {ticker: 0.0 for ticker in tickers}
     last_trade_price: Dict[str, float] = {ticker: 0.0 for ticker in tickers}
@@ -600,8 +610,13 @@ def _build_daily_performance_history(
         if abs(portfolio_value) < 1e-9:
             portfolio_value = 0.0
 
-        if previous_value is not None and abs(previous_value) > 1e-9:
-            daily_return = (portfolio_value - previous_value) / previous_value
+        net_flow = net_flows_by_day.get(day, 0.0)
+        if previous_value is not None:
+            adjusted_base = previous_value + net_flow
+            if abs(adjusted_base) > 1e-9:
+                daily_return = (portfolio_value - adjusted_base) / adjusted_base
+            else:
+                daily_return = 0.0
         else:
             daily_return = 0.0
 
@@ -622,6 +637,9 @@ def _build_daily_performance_history(
             "daily_return": float(daily_return),
             "cumulative_return": float(cumulative_return),
         }
+
+        if abs(net_flow) > 1e-9:
+            entry["external_flow"] = float(net_flow)
 
         if benchmark_cumulative is not None and benchmark_daily is not None:
             entry["benchmark_daily_return"] = float(benchmark_daily.loc[day])
