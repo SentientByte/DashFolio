@@ -200,6 +200,17 @@ body {
     color: #2d3a53;
 }
 
+/* Layout menu enhancements */
+#layout-menu .menu-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+#layout-menu .logout-menu-item {
+    margin-top: auto;
+}
+
 .authentication-wrapper .form-control {
     border-radius: 0.85rem;
     border: 1px solid rgba(86, 106, 127, 0.25);

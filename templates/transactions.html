@@ -3,117 +3,193 @@
 {% block content %}
 <div class="row g-4">
     <div class="col-12">
-        <div class="card" id="transactions-upload-card">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-3">
-                <div>
-                    <h5 class="mb-1">Upload transaction history</h5>
-                    <small class="text-muted">Import trades from CSV to refresh holdings derived across the application.</small>
-                </div>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <select id="transactions-upload-mode" class="form-select form-select-sm w-auto">
-                        <option value="append" selected>Append to existing</option>
-                        <option value="replace">Replace existing</option>
-                    </select>
-                    <button class="btn btn-primary" type="button" id="transactions-upload-button">
-                        <i class="bx bx-upload me-1"></i>
-                        Upload CSV
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <p class="text-muted mb-0 small">
-                    Supported headers include <strong>Symbol</strong>, <strong>Date/Time</strong>, <strong>Quantity</strong>, <strong>Price</strong>, and <strong>Commission</strong>.
-                    After upload you will review derived holdings before any data is saved.
-                </p>
-            </div>
-        </div>
+        <ul class="nav nav-pills nav-fill flex-column flex-md-row bg-body-tertiary rounded-3 p-2 gap-2" id="transactions-tablist" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active fw-semibold" id="transactions-tab-trades" data-bs-toggle="pill" data-bs-target="#transactions-pane-trades" type="button" role="tab" aria-controls="transactions-pane-trades" aria-selected="true">
+                    <i class="bx bx-transfer me-1"></i>
+                    Trades
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-semibold" id="transactions-tab-cash" data-bs-toggle="pill" data-bs-target="#transactions-pane-cash" type="button" role="tab" aria-controls="transactions-pane-cash" aria-selected="false">
+                    <i class="bx bx-wallet me-1"></i>
+                    Cash transactions
+                </button>
+            </li>
+        </ul>
     </div>
-
     <div class="col-12">
-        <div class="card" id="transactions-table-card">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <div>
-                    <h5 class="mb-1">Transaction ledger</h5>
-                    <small class="text-muted">Edit trades manually or capture new activity. Saving overwrites the current dataset.</small>
-                </div>
-                <div class="d-flex gap-2 flex-wrap">
-                    <button class="btn btn-primary" type="button" id="transactions-save-button">
-                        <i class="bx bx-save me-1"></i>
-                        Save changes
-                    </button>
-                    <button class="btn btn-outline-secondary" type="button" id="transactions-edit-button">
-                        <i class="bx bx-edit me-1"></i>
-                        Edit
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm" type="button" id="transactions-add-row">
-                        <i class="bx bx-plus me-1"></i>
-                        Add row
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table align-middle mb-0" id="transactions-table">
-                        <thead>
-                        <tr>
-                            <th>Date &amp; time</th>
-                            <th>Ticker</th>
-                            <th>Quantity</th>
-                            <th>Price</th>
-                            <th>Commission</th>
-                            <th class="text-center" style="width: 80px;">Actions</th>
-                        </tr>
-                        </thead>
-                        <tbody id="transactions-table-body"></tbody>
-                    </table>
-                </div>
-                <small class="text-muted" id="transactions-save-status"></small>
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
-                    <div class="d-flex align-items-center gap-2">
-                        <label class="form-label text-muted small mb-0" for="transactions-page-size">Rows per page</label>
-                        <select id="transactions-page-size" class="form-select form-select-sm w-auto">
-                            <option value="20" selected>20</option>
-                            <option value="50">50</option>
-                            <option value="100">100</option>
-                            <option value="all">All</option>
-                        </select>
+        <div class="tab-content mt-4" id="transactions-tab-content">
+            <div class="tab-pane fade show active" id="transactions-pane-trades" role="tabpanel" aria-labelledby="transactions-tab-trades">
+                <div class="row g-4">
+                    <div class="col-12">
+                        <div class="card" id="transactions-upload-card">
+                            <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-3">
+                                <div>
+                                    <h5 class="mb-1">Upload transaction history</h5>
+                                    <small class="text-muted">Import trades from CSV to refresh holdings derived across the application.</small>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <select id="transactions-upload-mode" class="form-select form-select-sm w-auto">
+                                        <option value="append" selected>Append to existing</option>
+                                        <option value="replace">Replace existing</option>
+                                    </select>
+                                    <button class="btn btn-primary" type="button" id="transactions-upload-button">
+                                        <i class="bx bx-upload me-1"></i>
+                                        Upload CSV
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-0 small">
+                                    Supported headers include <strong>Symbol</strong>, <strong>Date/Time</strong>, <strong>Quantity</strong>, <strong>Price</strong>, and <strong>Commission</strong>.
+                                    After upload you will review derived holdings before any data is saved.
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                    <nav class="transactions-pagination-wrapper" aria-label="Transaction pagination">
-                        <ul class="pagination pagination-sm mb-0" id="transactions-pagination"></ul>
-                    </nav>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <div class="col-12">
-        <div class="card" id="transactions-holdings-card">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <div>
-                    <h5 class="mb-1">Derived holdings</h5>
-                    <small class="text-muted">Quantities and costs calculated from the current transaction history.</small>
-                </div>
-                <div class="text-muted small" id="transactions-holdings-totals">
-                    <div id="transactions-holdings-total"></div>
-                    <div id="transactions-cash-balance"></div>
+                    <div class="col-12">
+                        <div class="card" id="transactions-table-card">
+                            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                                <div>
+                                    <h5 class="mb-1">Transaction ledger</h5>
+                                    <small class="text-muted">Edit trades manually or capture new activity. Saving overwrites the current dataset.</small>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button class="btn btn-primary" type="button" id="transactions-save-button">
+                                        <i class="bx bx-save me-1"></i>
+                                        Save changes
+                                    </button>
+                                    <button class="btn btn-outline-secondary" type="button" id="transactions-edit-button">
+                                        <i class="bx bx-edit me-1"></i>
+                                        Edit
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" id="transactions-add-row">
+                                        <i class="bx bx-plus me-1"></i>
+                                        Add row
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table align-middle mb-0" id="transactions-table">
+                                        <thead>
+                                        <tr>
+                                            <th>Date &amp; time</th>
+                                            <th>Ticker</th>
+                                            <th>Quantity</th>
+                                            <th>Price</th>
+                                            <th>Commission</th>
+                                            <th class="text-center" style="width: 80px;">Actions</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody id="transactions-table-body"></tbody>
+                                    </table>
+                                </div>
+                                <small class="text-muted" id="transactions-save-status"></small>
+                                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <label class="form-label text-muted small mb-0" for="transactions-page-size">Rows per page</label>
+                                        <select id="transactions-page-size" class="form-select form-select-sm w-auto">
+                                            <option value="20" selected>20</option>
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                            <option value="all">All</option>
+                                        </select>
+                                    </div>
+                                    <nav class="transactions-pagination-wrapper" aria-label="Transaction pagination">
+                                        <ul class="pagination pagination-sm mb-0" id="transactions-pagination"></ul>
+                                    </nav>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="card" id="transactions-holdings-card">
+                            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                <div>
+                                    <h5 class="mb-1">Derived holdings</h5>
+                                    <small class="text-muted">Quantities and costs calculated from the current transaction history.</small>
+                                </div>
+                                <div class="text-muted small" id="transactions-holdings-totals">
+                                    <div id="transactions-holdings-total"></div>
+                                    <div id="transactions-cash-balance"></div>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead>
+                                        <tr>
+                                            <th class="text-uppercase text-muted small">Ticker</th>
+                                            <th class="text-uppercase text-muted small">Quantity</th>
+                                            <th class="text-uppercase text-muted small">Average cost</th>
+                                            <th class="text-uppercase text-muted small">Current value</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody id="transactions-holdings-body"></tbody>
+                                    </table>
+                                </div>
+                                <div class="text-muted small mt-3" id="transactions-holdings-empty" {% if holdings_summary %}style="display: none;"{% endif %}>
+                                    No holdings derived yet. Upload transactions or add rows above to populate your portfolio.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                        <tr>
-                            <th class="text-uppercase text-muted small">Ticker</th>
-                            <th class="text-uppercase text-muted small">Quantity</th>
-                            <th class="text-uppercase text-muted small">Average cost</th>
-                            <th class="text-uppercase text-muted small">Current value</th>
-                        </tr>
-                        </thead>
-                        <tbody id="transactions-holdings-body"></tbody>
-                    </table>
-                </div>
-                <div class="text-muted small mt-3" id="transactions-holdings-empty" {% if holdings_summary %}style="display: none;"{% endif %}>
-                    No holdings derived yet. Upload transactions or add rows above to populate your portfolio.
+            <div class="tab-pane fade" id="transactions-pane-cash" role="tabpanel" aria-labelledby="transactions-tab-cash">
+                <div class="card" id="transactions-cash-card">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-3">
+                        <div>
+                            <h5 class="mb-1">Cash transactions</h5>
+                            <small class="text-muted">Track deposits, withdrawals, dividends, and interest to keep the cash balance accurate.</small>
+                        </div>
+                        <span class="badge bg-label-secondary" id="transactions-cash-balance-badge"></span>
+                    </div>
+                    <div class="card-body">
+                        <form id="transactions-cash-form" class="row g-3 align-items-end">
+                            <div class="col-sm-6 col-lg-4">
+                                <label for="transactions-cash-datetime" class="form-label">Date &amp; time</label>
+                                <input type="datetime-local" class="form-control" id="transactions-cash-datetime" required>
+                            </div>
+                            <div class="col-sm-3 col-lg-2">
+                                <label for="transactions-cash-type" class="form-label">Type</label>
+                                <select id="transactions-cash-type" class="form-select" required>
+                                    <option value="deposit" selected>Deposit</option>
+                                    <option value="withdrawal">Withdrawal</option>
+                                    <option value="dividend">Dividend</option>
+                                    <option value="interest">Interest</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 col-lg-3">
+                                <label for="transactions-cash-amount" class="form-label">Amount</label>
+                                <input type="number" class="form-control" id="transactions-cash-amount" min="0" step="0.01" required>
+                            </div>
+                            <div class="col-lg-3 col-12">
+                                <button class="btn btn-primary w-100" type="submit">
+                                    <i class="bx bx-plus me-1"></i>
+                                    Add entry
+                                </button>
+                            </div>
+                        </form>
+                        <div class="table-responsive mt-4">
+                            <table class="table align-middle mb-2" id="transactions-cash-table">
+                                <thead>
+                                <tr>
+                                    <th style="min-width: 180px;">Date &amp; time</th>
+                                    <th style="min-width: 120px;">Type</th>
+                                    <th class="text-end" style="min-width: 140px;">Amount</th>
+                                    <th class="text-end" style="min-width: 120px;">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody id="transactions-cash-body"></tbody>
+                            </table>
+                        </div>
+                        <small class="text-muted" id="transactions-cash-status"></small>
+                    </div>
                 </div>
             </div>
         </div>
@@ -179,6 +255,9 @@
     let transactionData = ({{ transactions|tojson }} || []).map(record => normalizeTransaction(record));
     let holdingsSummary = {{ holdings_summary|tojson }} || [];
     let cashBalance = Number({{ cash_balance|tojson }}) || 0;
+    const cashAdjustmentsEndpoint = {{ url_for('api_add_cash_adjustment_route')|tojson }};
+    const initialCashAdjustments = {{ cash_adjustments|tojson }} || [];
+    let cashAdjustments = Array.isArray(initialCashAdjustments) ? initialCashAdjustments.slice() : [];
     const currencySettings = {{ currency_settings|tojson }};
     const currencyFormatter = new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -243,6 +322,27 @@
         return formatted;
     }
 
+    function formatDateTime(value) {
+        if (!value) {
+            return '—';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return String(value);
+        }
+        return date.toLocaleString();
+    }
+
+    function escapeHtml(value) {
+        return (value || '')
+            .toString()
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function formatNumber(value, digits = 4) {
         const numeric = Number(value);
         return Number.isFinite(numeric) ? numeric.toFixed(digits) : (0).toFixed(digits);
@@ -276,6 +376,140 @@
             return null;
         }
         return date.toISOString();
+    }
+
+    function setCashTransactionStatus(message = '', state = 'muted') {
+        const statusEl = document.getElementById('transactions-cash-status');
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.classList.remove('text-muted', 'text-danger', 'text-success');
+        if (!message) {
+            statusEl.classList.add('text-muted');
+        } else if (state === 'error') {
+            statusEl.classList.add('text-danger');
+        } else {
+            statusEl.classList.add('text-success');
+        }
+    }
+
+    function updateCashTransactionBadge() {
+        const badge = document.getElementById('transactions-cash-balance-badge');
+        if (!badge) return;
+        badge.textContent = `Cash balance: ${formatCurrency(cashBalance)}`;
+    }
+
+    function renderCashTransactions() {
+        const tbody = document.getElementById('transactions-cash-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!Array.isArray(cashAdjustments) || cashAdjustments.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="4" class="text-center text-muted">No cash transactions recorded yet.</td>';
+            tbody.appendChild(row);
+            updateCashTransactionBadge();
+            return;
+        }
+
+        cashAdjustments
+            .slice()
+            .sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')))
+            .forEach(entry => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${escapeHtml(formatDateTime(entry.timestamp))}</td>
+                    <td class="text-capitalize">${escapeHtml(entry.type || 'deposit')}</td>
+                    <td class="text-end">${formatCurrency(entry.amount || 0)}</td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-text text-danger transactions-cash-delete" data-id="${entry.id}">
+                            <i class="bx bx-trash"></i><span class="visually-hidden">Delete</span>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        updateCashTransactionBadge();
+    }
+
+    function resetCashTransactionForm() {
+        const datetimeInput = document.getElementById('transactions-cash-datetime');
+        const amountInput = document.getElementById('transactions-cash-amount');
+        const typeSelect = document.getElementById('transactions-cash-type');
+        if (datetimeInput) datetimeInput.value = '';
+        if (amountInput) amountInput.value = '';
+        if (typeSelect) typeSelect.value = 'deposit';
+    }
+
+    async function submitCashTransaction(event) {
+        event.preventDefault();
+        const datetimeInput = document.getElementById('transactions-cash-datetime');
+        const amountInput = document.getElementById('transactions-cash-amount');
+        const typeSelect = document.getElementById('transactions-cash-type');
+        const timestampValue = datetimeInput?.value;
+        const typeValue = typeSelect?.value || 'deposit';
+        const amountValue = parseFloat(amountInput?.value || '0');
+
+        if (!timestampValue || !Number.isFinite(amountValue) || amountValue <= 0) {
+            setCashTransactionStatus('Enter a valid date and positive amount before adding an entry.', 'error');
+            return;
+        }
+
+        setCashTransactionStatus('');
+        showStatus('Saving cash transaction...');
+        try {
+            const response = await fetch(cashAdjustmentsEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    timestamp: timestampValue,
+                    amount: amountValue,
+                    type: typeValue,
+                }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Unable to save cash transaction.');
+            }
+            cashAdjustments = Array.isArray(data.adjustments) ? data.adjustments : [];
+            cashBalance = Number(data.cash_balance || 0);
+            renderCashTransactions();
+            resetCashTransactionForm();
+            updateHoldingsTotals();
+            updateCashTransactionBadge();
+            setCashTransactionStatus('Cash transaction recorded.', 'success');
+        } catch (error) {
+            console.error(error);
+            setCashTransactionStatus(error.message || 'Unable to save cash transaction.', 'error');
+        } finally {
+            hideStatus(400);
+        }
+    }
+
+    async function deleteCashTransactionById(adjustmentId) {
+        if (!Number.isFinite(adjustmentId)) {
+            return;
+        }
+        setCashTransactionStatus('');
+        showStatus('Removing cash transaction...');
+        try {
+            const response = await fetch(`${cashAdjustmentsEndpoint}/${adjustmentId}`, {
+                method: 'DELETE',
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to remove cash transaction.');
+            }
+            cashAdjustments = Array.isArray(data.adjustments) ? data.adjustments : [];
+            cashBalance = Number(data.cash_balance || 0);
+            renderCashTransactions();
+            updateHoldingsTotals();
+            updateCashTransactionBadge();
+            setCashTransactionStatus('Cash transaction removed.', 'success');
+        } catch (error) {
+            console.error(error);
+            setCashTransactionStatus(error.message || 'Unable to remove cash transaction.', 'error');
+        } finally {
+            hideStatus(400);
+        }
     }
 
     function updateHoldingsTotals() {
@@ -374,6 +608,7 @@
         const numeric = Number(value);
         cashBalance = Number.isFinite(numeric) ? numeric : 0;
         updateHoldingsTotals();
+        updateCashTransactionBadge();
     }
 
     function getPageSizeValue() {
@@ -844,6 +1079,25 @@
                 }
             });
         }
+
+        const cashForm = document.getElementById('transactions-cash-form');
+        if (cashForm) {
+            cashForm.addEventListener('submit', submitCashTransaction);
+        }
+
+        const cashTableBody = document.getElementById('transactions-cash-body');
+        if (cashTableBody) {
+            cashTableBody.addEventListener('click', event => {
+                const deleteButton = event.target.closest('.transactions-cash-delete');
+                if (!deleteButton) {
+                    return;
+                }
+                const adjustmentId = Number(deleteButton.dataset.id);
+                if (Number.isFinite(adjustmentId)) {
+                    deleteCashTransactionById(adjustmentId);
+                }
+            });
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -854,6 +1108,9 @@
         }
         updateEditButtonState();
         renderHoldingsSummary(holdingsSummary);
+        renderCashTransactions();
+        updateCashTransactionBadge();
+        setCashTransactionStatus();
         setupEventListeners();
     });
 
