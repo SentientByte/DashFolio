@@ -195,6 +195,10 @@ $\lambda = \dfrac{2}{\text{SPAN\_EWMA} + 1}$, and $w_i = (1-\lambda)^i$.
   calculating `daily_return`. This prevents artificial jumps (or crashes) in the
   cumulative performance series when new capital arrives or funds are removed,
   while dividends and interest remain treated as investment gains.
+  When cash adjustments are absent, the snapshot engine now infers same-day
+  deposits to offset negative cash balances created by purchases. These
+  inferred flows keep the time-weighted return curve from plunging due to
+  missing funding entries in historical transaction exports.
 
 - **Day-over-day profit ("Todays Profit" card)**
   When the U.S. market is open, the snapshot compares the live invested value

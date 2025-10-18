@@ -343,7 +343,9 @@ def _build_daily_performance_history(
         transactions: Executed trade ledger entries used to infer position
             activity and quantities through time.
         cash_adjustments: Deposits, withdrawals, and other cash flow
-            adjustments aligned with transaction dates.
+            adjustments aligned with transaction dates. When omitted, the
+            function infers same-day deposits to offset negative cash balances
+            created by purchases so returns remain time-weighted.
         database_path: Location of the SQLite cache for equity price data.
         benchmark_history: Optional benchmark price history aligned with the
             requested period.
@@ -572,6 +574,7 @@ def _build_daily_performance_history(
     previous_value: Optional[float] = None
     cumulative_factor = 1.0
     history: List[Dict[str, float]] = []
+    infer_flows_from_transactions = adj_df.empty
 
     for day in date_index:
         had_market_price = not tickers
@@ -625,11 +628,18 @@ def _build_daily_performance_history(
                 price_value = last_trade_price.get(ticker, 0.0)
             equity_value += quantity * price_value
 
+        inferred_flow = 0.0
+        if infer_flows_from_transactions:
+            has_short_position = any(quantity < -1e-6 for quantity in holdings.values())
+            if not has_short_position and cash_balance < -1e-6:
+                inferred_flow = -cash_balance
+                cash_balance += inferred_flow
+
         portfolio_value = equity_value + cash_balance
         if abs(portfolio_value) < 1e-9:
             portfolio_value = 0.0
 
-        net_flow = net_flows_by_day.get(day, 0.0)
+        net_flow = net_flows_by_day.get(day, 0.0) + inferred_flow
         if previous_value is not None:
             adjusted_base = previous_value + net_flow
             if abs(adjusted_base) > 1e-9:
@@ -659,6 +669,8 @@ def _build_daily_performance_history(
 
         if abs(net_flow) > 1e-9:
             entry["external_flow"] = float(net_flow)
+        if inferred_flow > 1e-9:
+            entry["inferred_external_flow"] = float(inferred_flow)
 
         if benchmark_cumulative is not None and benchmark_daily is not None:
             entry["benchmark_daily_return"] = float(benchmark_daily.loc[day])
