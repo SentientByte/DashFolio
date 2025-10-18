@@ -192,7 +192,7 @@ def get_market_status(now: Optional[datetime] = None) -> Dict[str, Optional[str]
     is_open = is_weekday and not is_holiday and is_open_time
 
     if not is_weekday:
-        reason = "Weekend"
+        reason = None
     elif is_holiday:
         reason = "Market holiday"
     elif current.time() < MARKET_OPEN_TIME:

@@ -972,7 +972,7 @@
                 refreshButton.disabled = true;
             }
         }
-        if (!isMarketOpen()) {
+        if (!ignoreMarketHours && !isMarketOpen()) {
             if (showStatusPill) {
                 showStatus('Market closed – updates paused');
                 hideStatus(1200);
