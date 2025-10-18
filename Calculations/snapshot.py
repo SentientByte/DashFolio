@@ -334,8 +334,26 @@ def _build_daily_performance_history(
     cash_adjustments: Sequence[Dict[str, Any]] | None,
     database_path: str | None,
     benchmark_history: pd.Series | None,
+    *,
+    force_price_reload: bool = False,
 ) -> List[Dict[str, float]]:
-    """Construct daily performance metrics for the portfolio."""
+    """Construct daily performance metrics for the portfolio.
+
+    Args:
+        transactions: Executed trade ledger entries used to infer position
+            activity and quantities through time.
+        cash_adjustments: Deposits, withdrawals, and other cash flow
+            adjustments aligned with transaction dates.
+        database_path: Location of the SQLite cache for equity price data.
+        benchmark_history: Optional benchmark price history aligned with the
+            requested period.
+        force_price_reload: When ``True`` discard cached candles and
+            redownload price history for each security.
+
+    Returns:
+        Daily performance records containing portfolio and benchmark metrics
+        consumed by the dashboard performance chart.
+    """
 
     transactions = transactions or []
     cash_adjustments = cash_adjustments or []
@@ -1069,6 +1087,7 @@ def build_portfolio_snapshot(
         cash_adjustments,
         database_path,
         benchmark_history,
+        force_price_reload=force_price_reload,
     )
 
     if performance_history and not is_market_open:
