@@ -964,7 +964,7 @@
         });
     }
 
-    async function fetchSnapshot({ force = false, showStatusPill = false, fullReload = false, ignoreMarketHours = false } = {}) {
+    async function fetchSnapshot({ force = false, showStatusPill = false, fullReload = false } = {}) {
         const refreshButton = document.getElementById('portfolio-refresh-btn');
         if (showStatusPill) {
             showStatus('Refreshing data...');
@@ -1121,7 +1121,7 @@
     const manualRefreshButton = document.getElementById('portfolio-refresh-btn');
     if (manualRefreshButton) {
         manualRefreshButton.addEventListener('click', () => {
-            fetchSnapshot({ force: true, showStatusPill: true, fullReload: true, ignoreMarketHours: true });
+            fetchSnapshot({ force: true, showStatusPill: true, fullReload: true });
         });
     }
 
