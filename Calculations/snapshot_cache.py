@@ -193,6 +193,7 @@ def _refresh_worker(
     transactions: List[Dict[str, Any]] | None,
     cash_adjustments: List[Dict[str, Any]] | None,
     holdings_metadata: List[Dict[str, Any]] | None,
+    force_price_reload: bool = False,
 ) -> None:
     try:
         snapshot = build_portfolio_snapshot(
@@ -204,6 +205,7 @@ def _refresh_worker(
             cash_adjustments=cash_adjustments,
             database_path=db_path,
             holdings_metadata=holdings_metadata,
+            force_price_reload=force_price_reload,
         )
         with connect(db_path) as conn:
             ensure_snapshot_cache_table(conn)
@@ -227,6 +229,8 @@ def _schedule_refresh_if_needed(
     cash_adjustments: List[Dict[str, Any]] | None,
     existing_timestamp: Optional[str],
     holdings_metadata: List[Dict[str, Any]] | None,
+    *,
+    force_price_reload: bool = False,
 ) -> None:
     if not _should_refresh(existing_timestamp):
         return
@@ -247,6 +251,7 @@ def _schedule_refresh_if_needed(
                 transactions,
                 cash_adjustments,
                 holdings_metadata,
+                force_price_reload,
             ),
             daemon=True,
         )
@@ -266,14 +271,20 @@ def get_portfolio_snapshot(
     *,
     refresh_async: bool = True,
     force_recompute: bool = False,
+    force_price_reload: bool = False,
 ) -> Dict[str, Any]:
     """Return a portfolio snapshot using SQLite-backed caching.
 
     When ``force_recompute`` is ``True`` the snapshot is recomputed immediately
     and the cache is updated synchronously. Otherwise the cache is consulted
     first; if data exists it is returned immediately and a background refresh is
-    scheduled when the data is considered stale.
+    scheduled when the data is considered stale. Set ``force_price_reload`` to
+    discard cached price candles and redownload them before recomputing the
+    snapshot.
     """
+
+    if force_price_reload:
+        force_recompute = True
 
     cache_key, fingerprint = _generate_cache_key(
         holdings,
@@ -305,6 +316,7 @@ def get_portfolio_snapshot(
             cash_adjustments=cash_adjustments,
             database_path=db_path,
             holdings_metadata=holdings_metadata,
+            force_price_reload=force_price_reload,
         )
         cached_snapshot = snapshot
         cached_generated_at = snapshot.get("generated_at")
@@ -324,6 +336,7 @@ def get_portfolio_snapshot(
             cash_adjustments,
             cached_generated_at,
             holdings_metadata,
+            force_price_reload=False,
         )
 
     if force_recompute and refresh_async:
@@ -341,6 +354,7 @@ def get_portfolio_snapshot(
             cash_adjustments,
             cached_generated_at,
             holdings_metadata,
+            force_price_reload=False,
         )
 
     return cached_snapshot

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from contextlib import contextmanager
-from typing import Iterator, Optional, Sequence, Tuple
+from typing import Iterable, Iterator, Optional, Sequence, Tuple
 
 import json
 from datetime import datetime, timezone
@@ -135,6 +135,23 @@ def connect(db_path: str) -> Iterator[sqlite3.Connection]:
 
 def ensure_price_table(conn: sqlite3.Connection) -> None:
     conn.execute(PRICE_TABLE_SCHEMA)
+    conn.commit()
+
+
+def delete_price_rows(
+    conn: sqlite3.Connection, tickers: Iterable[str]
+) -> None:
+    """Remove cached price rows for ``tickers`` from ``price_data``."""
+
+    cleaned = [str(ticker).upper().strip() for ticker in tickers if ticker]
+    if not cleaned:
+        return
+
+    placeholders = ",".join("?" for _ in cleaned)
+    conn.execute(
+        f"DELETE FROM price_data WHERE ticker IN ({placeholders})",
+        tuple(cleaned),
+    )
     conn.commit()
 
 
