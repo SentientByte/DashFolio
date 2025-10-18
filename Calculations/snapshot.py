@@ -496,6 +496,7 @@ def _build_daily_performance_history(
                 datetime.combine(start_date.date(), datetime.min.time(), tzinfo=ny_zone),
                 datetime.combine(end_date.date(), datetime.min.time(), tzinfo=ny_zone),
                 database_path,
+                force_download=force_price_reload,
             )
         except Exception as exc:
             print(f"Warning: failed to load price history for performance chart: {exc}")
@@ -689,7 +690,27 @@ def build_portfolio_snapshot(
     cash_adjustments: List[Dict[str, Any]] | None = None,
     database_path: str | None = None,
     holdings_metadata: Sequence[Dict[str, Any]] | None = None,
+    *,
+    force_price_reload: bool = False,
 ) -> Dict[str, Any]:
+    """Return a freshly computed portfolio snapshot.
+
+    Args:
+        holdings: Current position quantities and cost basis records.
+        target_allocations: Optional target weights keyed by ticker.
+        benchmark_ticker: Symbol used for comparison analytics.
+        cash_balance: Available cash to include in portfolio value.
+        transactions: Executed trade ledger used for flows and P&L.
+        cash_adjustments: Deposits, withdrawals, and other cash events.
+        database_path: Location of the SQLite cache for market data.
+        holdings_metadata: Optional metadata for holdings presentation.
+        force_price_reload: When ``True`` discard cached candles and
+            redownload full historical price data before computing metrics.
+
+    Returns:
+        Mapping with holdings, KPI aggregates, performance history, and
+        metadata consumed by the dashboard layer.
+    """
     append_log(
         f"Recalculating portfolio snapshot for {len(holdings)} holdings"
     )

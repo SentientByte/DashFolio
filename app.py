@@ -586,9 +586,12 @@ def api_get_portfolio():
     transactions = portfolio_state.get('transactions', [])
     cash_adjustments = portfolio_state.get('cash_adjustments', [])
     force_refresh = str(request.args.get('force', '')).lower() in {'1', 'true', 'yes'}
+    force_price_reload = str(request.args.get('full', '')).lower() in {'1', 'true', 'yes'}
+    if force_price_reload:
+        force_refresh = True
     append_log(
         "Portfolio snapshot API requested "
-        f"(force={'yes' if force_refresh else 'no'})"
+        f"(force={'yes' if force_refresh else 'no'}, full={'yes' if force_price_reload else 'no'})"
     )
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
@@ -601,6 +604,7 @@ def api_get_portfolio():
         refresh_async=not force_refresh,
         force_recompute=force_refresh,
         holdings_metadata=portfolio_state.get('metadata', []),
+        force_price_reload=force_price_reload,
     )
     market_status = get_market_status()
     payload = dict(snapshot) if snapshot else {}

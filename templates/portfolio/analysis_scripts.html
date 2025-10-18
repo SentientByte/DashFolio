@@ -964,7 +964,7 @@
         });
     }
 
-    async function fetchSnapshot({ force = false, showStatusPill = false } = {}) {
+    async function fetchSnapshot({ force = false, showStatusPill = false, fullReload = false, ignoreMarketHours = false } = {}) {
         const refreshButton = document.getElementById('portfolio-refresh-btn');
         if (showStatusPill) {
             showStatus('Refreshing data...');
@@ -972,7 +972,7 @@
                 refreshButton.disabled = true;
             }
         }
-        if (!isMarketOpen()) {
+        if (!ignoreMarketHours && !isMarketOpen()) {
             if (showStatusPill) {
                 showStatus('Market closed – updates paused');
                 hideStatus(1200);
@@ -986,6 +986,9 @@
             const url = new URL('{{ url_for('api_get_portfolio') }}', window.location.origin);
             if (force) {
                 url.searchParams.set('force', '1');
+            }
+            if (fullReload) {
+                url.searchParams.set('full', '1');
             }
             const response = await fetch(url, { cache: 'no-cache' });
             if (!response.ok) throw new Error('Request failed');
@@ -1118,7 +1121,7 @@
     const manualRefreshButton = document.getElementById('portfolio-refresh-btn');
     if (manualRefreshButton) {
         manualRefreshButton.addEventListener('click', () => {
-            fetchSnapshot({ force: true, showStatusPill: true });
+            fetchSnapshot({ force: true, showStatusPill: true, fullReload: true, ignoreMarketHours: true });
         });
     }
 

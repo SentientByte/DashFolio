@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 import pandas as pd
 import yfinance as yf
 
-from .storage import connect, ensure_price_table
+from .storage import connect, delete_price_rows, ensure_price_table
 
 PRICE_COLUMNS = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
 
@@ -173,8 +173,23 @@ def load_price_data(
     start_date: datetime,
     today: datetime,
     database_path: str,
+    *,
+    force_download: bool = False,
 ) -> Dict[str, pd.DataFrame]:
-    """Load or download price data for each ticker into SQLite."""
+    """Load or download price data for each ticker into SQLite.
+
+    Args:
+        tickers: Iterable of ticker symbols to refresh.
+        start_date: Oldest date to keep when filtering the returned frames.
+        today: Upper bound for the requested date range.
+        database_path: SQLite file path storing cached candles.
+        force_download: When ``True``, cached rows are discarded and the full
+            history between ``start_date`` and ``today`` is downloaded again.
+
+    Returns:
+        Mapping of ticker symbol to a ``pandas.DataFrame`` containing OHLCV
+        history with daily returns appended.
+    """
 
     os.makedirs(os.path.dirname(os.path.abspath(database_path)), exist_ok=True)
 
@@ -182,13 +197,27 @@ def load_price_data(
     today_date = today.date()
     today_str = today_date.strftime("%Y-%m-%d")
 
+    normalized_tickers: List[str] = []
+    for raw in tickers:
+        ticker = str(raw or "").upper().strip()
+        if not ticker:
+            continue
+        if ticker not in normalized_tickers:
+            normalized_tickers.append(ticker)
+
     all_data: Dict[str, pd.DataFrame] = {}
 
     with connect(database_path) as conn:
         ensure_price_table(conn)
 
-        for ticker in tickers:
-            ticker_data = _load_local_data(conn, ticker)
+        if force_download and normalized_tickers:
+            delete_price_rows(conn, normalized_tickers)
+
+        for ticker in normalized_tickers:
+            if force_download:
+                ticker_data = pd.DataFrame()
+            else:
+                ticker_data = _load_local_data(conn, ticker)
 
             if not ticker_data.empty:
                 print(
