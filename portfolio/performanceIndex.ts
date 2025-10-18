@@ -11,14 +11,35 @@ export function buildTWRIndex(
   if (!days.length) {
     return out;
   }
-  let base = days[0];
-  out.set(base, start);
+  const hasHoldings = (value: number): boolean => Number.isFinite(value) && value > 0;
+  const getValue = (day: string): number => invested.get(day) ?? 0;
+
+  let base: string | null = null;
   let idx = start;
-  for (let i = 1; i < days.length; i++) {
-    const day = days[i];
-    const baseValue = invested.get(base) ?? 0;
-    const currentValue = invested.get(day) ?? 0;
-    const r = baseValue === 0 ? 0 : (currentValue - baseValue) / baseValue;
+
+  for (const day of days) {
+    const currentValue = getValue(day);
+    if (!hasHoldings(currentValue)) {
+      if (flowDays.has(day)) {
+        base = null;
+      }
+      continue;
+    }
+
+    if (base === null) {
+      base = day;
+      out.set(day, idx);
+      continue;
+    }
+
+    const baseValue = getValue(base);
+    if (!hasHoldings(baseValue)) {
+      base = day;
+      out.set(day, idx);
+      continue;
+    }
+
+    const r = (currentValue - baseValue) / baseValue;
     idx = idx * (1 + r);
     out.set(day, idx);
     if (flowDays.has(day)) {

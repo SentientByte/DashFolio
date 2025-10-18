@@ -35,4 +35,17 @@ describe('performance index', () => {
     expect(index.get('2024-01-01')).toBeCloseTo(100, 6);
     expect(index.get('2024-01-02')).toBeCloseTo(100, 6);
   });
+
+  it('skips dates where holdings are zero', () => {
+    const days = ['2024-01-01', '2024-01-02', '2024-01-03'];
+    const invested = new Map<string, number>([
+      ['2024-01-01', 10_000],
+      ['2024-01-02', 0],
+      ['2024-01-03', 11_000],
+    ]);
+    const index = buildTWRIndex(days, invested, new Set<string>(), 100);
+    expect(index.get('2024-01-01')).toBeCloseTo(100, 6);
+    expect(index.has('2024-01-02')).toBe(false);
+    expect(index.get('2024-01-03')).toBeCloseTo(110, 6);
+  });
 });
