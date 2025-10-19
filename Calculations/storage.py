@@ -78,9 +78,11 @@ CREATE TABLE IF NOT EXISTS transactions (
 PERFORMANCE_HISTORY_TABLE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS performance_history (
     date TEXT PRIMARY KEY,
-    equity REAL NOT NULL,
+    equity_value REAL NOT NULL,
     cash REAL NOT NULL,
-    daily_return REAL NOT NULL
+    daily_return REAL NOT NULL,
+    performance_index REAL NOT NULL,
+    benchmark_index REAL
 )
 """
 
@@ -261,14 +263,53 @@ def ensure_performance_history_table(conn: sqlite3.Connection) -> None:
     conn.execute(PERFORMANCE_HISTORY_TABLE_SCHEMA)
     conn.commit()
 
+    info = conn.execute("PRAGMA table_info(performance_history)").fetchall()
+    columns = {row[1] for row in info}
+
+    if "equity_value" not in columns and "equity" in columns:
+        conn.execute("ALTER TABLE performance_history RENAME COLUMN equity TO equity_value")
+        conn.commit()
+        info = conn.execute("PRAGMA table_info(performance_history)").fetchall()
+        columns = {row[1] for row in info}
+
+    if "cash" not in columns:
+        conn.execute(
+            "ALTER TABLE performance_history ADD COLUMN cash REAL NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+        columns.add("cash")
+
+    if "daily_return" not in columns:
+        conn.execute(
+            "ALTER TABLE performance_history ADD COLUMN daily_return REAL NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+        columns.add("daily_return")
+
+    if "performance_index" not in columns:
+        conn.execute(
+            "ALTER TABLE performance_history ADD COLUMN performance_index REAL NOT NULL DEFAULT 100"
+        )
+        conn.commit()
+        columns.add("performance_index")
+
+    if "benchmark_index" not in columns:
+        conn.execute(
+            "ALTER TABLE performance_history ADD COLUMN benchmark_index REAL"
+        )
+        conn.commit()
+
 
 def replace_performance_history(
-    conn: sqlite3.Connection, rows: Sequence[Tuple[str, float, float, float]]
+    conn: sqlite3.Connection,
+    rows: Sequence[Tuple[str, float, float, float, float, float | None]],
 ) -> None:
     conn.execute("DELETE FROM performance_history")
     if rows:
         conn.executemany(
-            "INSERT INTO performance_history (date, equity, cash, daily_return) VALUES (?, ?, ?, ?)",
+            "INSERT INTO performance_history "
+            "(date, equity_value, cash, daily_return, performance_index, benchmark_index) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             rows,
         )
     conn.commit()
@@ -276,18 +317,27 @@ def replace_performance_history(
 
 def read_performance_history(conn: sqlite3.Connection) -> list[dict]:
     cursor = conn.execute(
-        "SELECT date, equity, cash, daily_return FROM performance_history ORDER BY date"
+        "SELECT date, equity_value, cash, daily_return, performance_index, benchmark_index "
+        "FROM performance_history ORDER BY date"
     )
     rows = []
-    for date, equity, cash, daily_return in cursor.fetchall():
-        rows.append(
-            {
-                "date": str(date),
-                "equity": float(equity or 0.0),
-                "cash": float(cash or 0.0),
-                "daily_return": float(daily_return or 0.0),
-            }
-        )
+    for date, equity_value, cash, daily_return, performance_index, benchmark_index in cursor.fetchall():
+        entry: dict = {
+            "date": str(date),
+            "equity_value": float(equity_value or 0.0),
+            "cash": float(cash or 0.0),
+            "daily_return": float(daily_return or 0.0),
+            "performance_index": float(performance_index or 100.0),
+        }
+        entry["performance_pct"] = entry["performance_index"] / 100.0 - 1.0
+        entry["cumulative_return"] = entry["performance_pct"]
+        entry["equity"] = entry["equity_value"]
+        entry["portfolio_value"] = entry["equity_value"]
+        if benchmark_index is not None:
+            benchmark_value = float(benchmark_index)
+            entry["benchmark_index"] = benchmark_value
+            entry["benchmark_cumulative_return"] = benchmark_value / 100.0 - 1.0
+        rows.append(entry)
     return rows
 
 

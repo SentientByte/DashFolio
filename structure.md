@@ -113,7 +113,7 @@ During price refreshes, the calculation layer writes back `current_price` and
 | `price_data` | Daily OHLCV candles downloaded via Yahoo Finance. | `ticker`, `date`, `Open`, `High`, `Low`, `Close`, `Adj Close`, `Volume` |
 | `risk_analysis_results` | Persisted trailing-stop sweeps and VaR outputs keyed by period. | `data_period`, `ticker`, `trailing_stop_pct`, `likelihood_pct`, `potential_loss`, `ewma_var` |
 | `portfolio_snapshots` | Cached aggregate views (equity, allocations, benchmark) for rapid dashboard loads. | `cache_key`, `generated_at`, `payload` |
-| `performance_history` | Daily portfolio returns and equity for trend charts. | `date`, `equity`, `cash`, `daily_return` |
+| `performance_history` | Daily portfolio returns and equity for trend charts. | `date`, `equity_value`, `cash`, `daily_return`, `performance_index`, `benchmark_index` |
 
 All persistent artifacts (`config.json`, `portfolio.json`, `dashfolio.db`) reside
 in the configurable data root pointed to by the `DASHFOLIO_DATA_DIR` environment
