@@ -964,7 +964,12 @@
         });
     }
 
-    async function fetchSnapshot({ force = false, showStatusPill = false, fullReload = false } = {}) {
+    async function fetchSnapshot({
+        force = false,
+        showStatusPill = false,
+        fullReload = false,
+        bypassMarketHours = false
+    } = {}) {
         const refreshButton = document.getElementById('portfolio-refresh-btn');
         if (showStatusPill) {
             showStatus('Refreshing data...');
@@ -972,7 +977,10 @@
                 refreshButton.disabled = true;
             }
         }
-        if (!ignoreMarketHours && !isMarketOpen()) {
+        const ignoreMarketHours = Boolean(
+            (window.DashFolio && window.DashFolio.ignoreMarketHours) || window.ignoreMarketHours
+        );
+        if (!bypassMarketHours && !ignoreMarketHours && !isMarketOpen()) {
             if (showStatusPill) {
                 showStatus('Market closed – updates paused');
                 hideStatus(1200);
@@ -1121,7 +1129,7 @@
     const manualRefreshButton = document.getElementById('portfolio-refresh-btn');
     if (manualRefreshButton) {
         manualRefreshButton.addEventListener('click', () => {
-            fetchSnapshot({ force: true, showStatusPill: true, fullReload: true });
+            fetchSnapshot({ force: true, showStatusPill: true, fullReload: true, bypassMarketHours: true });
         });
     }
 
