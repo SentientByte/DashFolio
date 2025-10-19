@@ -210,10 +210,11 @@ $\lambda = \dfrac{2}{\text{SPAN\_EWMA} + 1}$, and $w_i = (1-\lambda)^i$.
   missing funding entries in historical transaction exports.
 
 - **Day-over-day profit ("Todays Profit" card)**
-  When the U.S. market is open, the snapshot compares the live invested value
-  (using the latest quotes) against the prior trading day's invested value so
-  the card updates intraday. After the closing bell the metric reverts to the
-  stored performance history, mirroring the daily chart.
+  The snapshot now sums the per-holding day change (current quote versus
+  previous close) so deposits or withdrawals made during the session no longer
+  appear as profit. When the U.S. market is open the card reflects live quote
+  movements; after the closing bell it still reverts to the stored performance
+  history, mirroring the daily chart.
 
 
 ## 5. Data flow details

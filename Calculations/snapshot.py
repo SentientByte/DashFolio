@@ -830,6 +830,9 @@ def build_portfolio_snapshot(
     computed_holdings: List[Dict[str, Any]] = []
     total_cost = 0.0
     total_current_value = 0.0
+    total_daily_change_value = 0.0
+    total_daily_reference_value = 0.0
+    holdings_with_daily_change = 0
     top_mover: Dict[str, Any] | None = None
 
     metadata_lookup = _build_metadata_lookup(holdings, holdings_metadata)
@@ -1040,6 +1043,10 @@ def build_portfolio_snapshot(
         total_current_value += current_value
 
         if todays_gain is not None and todays_gain_pct is not None:
+            if prev_value is not None:
+                total_daily_change_value += todays_gain
+                total_daily_reference_value += prev_value
+                holdings_with_daily_change += 1
             change_value = todays_gain
             change_pct = todays_gain_pct
             mover_metric = abs(change_value)
@@ -1100,6 +1107,15 @@ def build_portfolio_snapshot(
         if previous_invested not in (None, 0)
         else 0.0
     )
+
+    if holdings_with_daily_change > 0:
+        dod_value = total_daily_change_value
+        daily_reference = total_daily_reference_value
+        dod_pct = (
+            (dod_value / daily_reference) * 100
+            if daily_reference not in (None, 0.0)
+            else 0.0
+        )
 
     weekly_change_value = (
         reference_current - weekly_reference_value if weekly_reference_value is not None else 0.0
