@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS cash_adjustments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
     amount REAL NOT NULL CHECK (amount >= 0),
-    type TEXT NOT NULL CHECK (type IN ('deposit', 'withdraw', 'withdrawal', 'dividend', 'interest'))
+    type TEXT NOT NULL CHECK (type IN ('deposit', 'withdraw', 'withdrawal', 'dividend', 'interest', 'fee'))
 )
 """
 
@@ -256,6 +256,25 @@ def ensure_cash_balance_table(conn: sqlite3.Connection) -> None:
 
 def ensure_cash_adjustments_table(conn: sqlite3.Connection) -> None:
     conn.execute(CASH_ADJUSTMENTS_TABLE_SCHEMA)
+    conn.commit()
+
+    sql_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='cash_adjustments'"
+    ).fetchone()
+    table_sql = (sql_row[0] or "") if sql_row else ""
+    if "'fee'" in table_sql:
+        return
+
+    conn.execute("ALTER TABLE cash_adjustments RENAME TO cash_adjustments_old")
+    conn.execute(CASH_ADJUSTMENTS_TABLE_SCHEMA)
+    conn.execute(
+        "INSERT INTO cash_adjustments (id, timestamp, amount, type) "
+        "SELECT id, timestamp, amount, CASE "
+        "WHEN type IN ('fee', 'fees') THEN 'fee' "
+        "WHEN type = 'withdraw' THEN 'withdrawal' "
+        "ELSE type END FROM cash_adjustments_old"
+    )
+    conn.execute("DROP TABLE cash_adjustments_old")
     conn.commit()
 
 

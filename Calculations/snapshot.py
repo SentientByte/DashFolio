@@ -29,7 +29,7 @@ from .risk_metrics import compute_risk_metrics
 from .utils import historical_close, normalize_index, safe_float
 
 
-FlowKind = Literal["deposit", "withdrawal", "dividend", "interest"]
+FlowKind = Literal["deposit", "withdrawal", "dividend", "interest", "fee"]
 
 
 def _canonical_flow_type(raw: Any) -> FlowKind:
@@ -38,7 +38,10 @@ def _canonical_flow_type(raw: Any) -> FlowKind:
     value = str(raw or "deposit").strip().lower()
     if value == "withdraw":
         value = "withdrawal"
-    if value not in {"deposit", "withdrawal", "dividend", "interest"}:
+    if value in {"fees", "commission"}:
+        value = "fee"
+    allowed = {"deposit", "withdrawal", "dividend", "interest", "fee"}
+    if value not in allowed:
         value = "deposit"
     return value  # type: ignore[return-value]
 
@@ -430,7 +433,7 @@ def _build_daily_performance_history(
             return safe_float(row["signed_amount"])
         amount = safe_float(row.get("amount"))
         adj_type = _canonical_flow_type(row.get("type"))
-        if adj_type in {"deposit", "dividend", "interest"}:
+        if adj_type in {"deposit", "dividend"}:
             return amount
         return -amount
 
@@ -496,13 +499,13 @@ def _build_daily_performance_history(
     ]
 
     price_history_raw: Dict[str, pd.Series] = {}
-    price_history_filled: Dict[str, pd.Series] = {}
     price_valid_dates: Dict[str, List[pd.Timestamp]] = {}
     if tickers and database_path:
         try:
+            history_start_date = (start_date - pd.Timedelta(days=5)).date()
             price_frames = load_price_data(
                 tickers,
-                datetime.combine(start_date.date(), datetime.min.time(), tzinfo=ny_zone),
+                datetime.combine(history_start_date, datetime.min.time(), tzinfo=ny_zone),
                 datetime.combine(end_date.date(), datetime.min.time(), tzinfo=ny_zone),
                 database_path,
                 force_download=force_price_reload,
@@ -522,7 +525,6 @@ def _build_daily_performance_history(
                 continue
             aligned = closes.reindex(date_index)
             price_history_raw[ticker] = aligned
-            price_history_filled[ticker] = aligned.ffill()
             price_valid_dates[ticker] = [
                 ts for ts, value in aligned.items() if not pd.isna(value)
             ]
@@ -544,17 +546,9 @@ def _build_daily_performance_history(
                 continue
             signed_amount = safe_float(row.get("signed_amount"))
             adj_by_day[date] = adj_by_day.get(date, 0.0) + signed_amount
-
-            flow_raw = row.get("type") if "type" in row else None
-            try:
-                flow_type = _canonical_flow_type(flow_raw)
-            except ValueError:
-                flow_type = "deposit"
-            if flow_type in {"deposit", "withdrawal"}:
-                net_flows_by_day[date] = net_flows_by_day.get(date, 0.0) + signed_amount
+            net_flows_by_day[date] = net_flows_by_day.get(date, 0.0) + signed_amount
 
     holdings: Dict[str, float] = {ticker: 0.0 for ticker in tickers}
-    last_trade_price: Dict[str, float] = {ticker: 0.0 for ticker in tickers}
     cash_balance = 0.0
     performance_index_value = 100.0
     benchmark_index_value = 100.0 if benchmark_series is not None else None
@@ -574,6 +568,19 @@ def _build_daily_performance_history(
             return None
         try:
             candidate = series.loc[prev_day]
+        except KeyError:
+            return None
+        if candidate is None or pd.isna(candidate):
+            return None
+        value = safe_float(candidate)
+        return value if value > 0 else None
+
+    def _closing_price_for(ticker: str, day: pd.Timestamp) -> float | None:
+        series = price_history_raw.get(ticker)
+        if series is None:
+            return None
+        try:
+            candidate = series.loc[day]
         except KeyError:
             return None
         if candidate is None or pd.isna(candidate):
@@ -601,10 +608,24 @@ def _build_daily_performance_history(
 
     for day in date_index:
         prev_holdings = holdings.copy()
-        had_market_price = False
         benchmark_has_price = False
 
-        cash_balance += adj_by_day.get(day, 0.0)
+        eligible_tickers: Set[str] = set()
+        start_positions_value = 0.0
+        for ticker, quantity in prev_holdings.items():
+            if abs(quantity) < 1e-9:
+                continue
+            prev_close = _previous_close_for(ticker, day)
+            if prev_close is None:
+                continue
+            eligible_tickers.add(ticker)
+            start_positions_value += quantity * prev_close
+
+        start_cash = cash_balance
+        start_nav = start_cash + start_positions_value
+
+        cash_flow = adj_by_day.get(day, 0.0)
+        cash_balance += cash_flow
 
         for row in tx_by_day.get(day, []):
             ticker = row.get("ticker")
@@ -618,8 +639,6 @@ def _build_daily_performance_history(
             if abs(updated_qty) < 1e-9:
                 updated_qty = 0.0
             holdings[ticker] = updated_qty
-            if price > 0:
-                last_trade_price[ticker] = price
             if quantity > 0:
                 cash_balance -= quantity * price + abs(commission)
             else:
@@ -629,37 +648,59 @@ def _build_daily_performance_history(
         if abs(cash_balance) < 1e-9:
             cash_balance = 0.0
 
-        denom = 0.0
-        weighted_return = 0.0
-        for ticker, quantity in prev_holdings.items():
+        inferred_flow = 0.0
+        if infer_flows_from_transactions:
+            has_short_position = any(quantity < -1e-6 for quantity in holdings.values())
+            if not has_short_position and cash_balance < -1e-6:
+                inferred_flow = -cash_balance
+                cash_balance += inferred_flow
+                if abs(cash_balance) < 1e-9:
+                    cash_balance = 0.0
+
+        for ticker, quantity in holdings.items():
             if abs(quantity) < 1e-9:
                 continue
-            series = price_history_raw.get(ticker)
-            if series is None:
-                continue
-            try:
-                price_today = series.loc[day]
-            except KeyError:
-                price_today = None
-            if price_today is None or pd.isna(price_today):
-                continue
-            today_value = safe_float(price_today)
-            if today_value <= 0:
+            if ticker in eligible_tickers:
                 continue
             prev_close = _previous_close_for(ticker, day)
-            if prev_close is None:
+            if prev_close is not None:
+                eligible_tickers.add(ticker)
+
+        end_positions_value = 0.0
+        had_market_price = False
+        for ticker in list(eligible_tickers):
+            price_today = _closing_price_for(ticker, day)
+            if price_today is None:
                 continue
-            position_value = quantity * prev_close
-            if abs(position_value) < 1e-9:
-                continue
-            symbol_return = (today_value / prev_close) - 1.0
-            denom += position_value
-            weighted_return += position_value * symbol_return
             had_market_price = True
+            quantity = holdings.get(ticker, 0.0)
+            if abs(quantity) < 1e-9:
+                continue
+            end_positions_value += quantity * price_today
+
+        if not had_market_price and eligible_tickers:
+            fallback_value = 0.0
+            for ticker in eligible_tickers:
+                prev_close = _previous_close_for(ticker, day)
+                if prev_close is None:
+                    continue
+                quantity = holdings.get(ticker, 0.0)
+                if abs(quantity) < 1e-9:
+                    continue
+                fallback_value += quantity * prev_close
+            end_positions_value = fallback_value
+
+        if abs(end_positions_value) < 1e-9:
+            end_positions_value = 0.0
+        if abs(cash_balance) < 1e-9:
+            cash_balance = 0.0
+
+        net_flow = net_flows_by_day.get(day, 0.0) + inferred_flow
+        end_nav = end_positions_value + cash_balance
 
         daily_return = 0.0
-        if denom > 1e-8:
-            daily_return = weighted_return / denom
+        if abs(start_nav) > 1e-9:
+            daily_return = (end_nav - start_nav - net_flow) / start_nav
 
         performance_index_value *= 1.0 + daily_return
         performance_pct = (performance_index_value / 100.0) - 1.0
@@ -681,53 +722,9 @@ def _build_daily_performance_history(
                         benchmark_index_value *= 1.0 + benchmark_daily_return
                         benchmark_has_price = True
 
-        for ticker in tickers:
-            series = price_history_raw.get(ticker)
-            if series is None:
-                continue
-            try:
-                closing_price = series.loc[day]
-            except KeyError:
-                continue
-            if closing_price is None or pd.isna(closing_price):
-                continue
-            value = safe_float(closing_price)
-            if value > 0:
-                last_trade_price[ticker] = value
-
-        invested_value = 0.0
-        for ticker, quantity in holdings.items():
-            if abs(quantity) < 1e-9:
-                continue
-            series = price_history_filled.get(ticker)
-            price_value = None
-            if series is not None:
-                try:
-                    candidate = series.loc[day]
-                except KeyError:
-                    candidate = None
-                if candidate is not None and not pd.isna(candidate):
-                    price_value = safe_float(candidate)
-            if price_value is None or price_value <= 0:
-                price_value = last_trade_price.get(ticker, 0.0)
-            invested_value += quantity * price_value
-
-        inferred_flow = 0.0
-        if infer_flows_from_transactions:
-            has_short_position = any(quantity < -1e-6 for quantity in holdings.values())
-            if not has_short_position and cash_balance < -1e-6:
-                inferred_flow = -cash_balance
-                cash_balance += inferred_flow
-
-        if abs(invested_value) < 1e-9:
-            invested_value = 0.0
-
-        if abs(cash_balance) < 1e-9:
-            cash_balance = 0.0
+        invested_value = end_positions_value
 
         equity_value = invested_value + cash_balance
-
-        net_flow = net_flows_by_day.get(day, 0.0) + inferred_flow
 
         entry: Dict[str, float] = {
             "date": day.strftime("%Y-%m-%d"),
@@ -757,9 +754,13 @@ def _build_daily_performance_history(
         entry["portfolio_value"] = entry["equity_value"]
         entry["equity"] = entry["equity_value"]
 
-        entry["_had_market_price"] = had_market_price
+        entry["_had_market_price"] = had_market_price or bool(eligible_tickers)
         entry["_had_benchmark_price"] = benchmark_has_price
-        entry["_had_activity"] = bool(tx_by_day.get(day) or adj_by_day.get(day))
+        entry["_had_activity"] = bool(
+            tx_by_day.get(day)
+            or adj_by_day.get(day)
+            or abs(net_flow) > 1e-9
+        )
 
         history.append(entry)
 

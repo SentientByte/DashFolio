@@ -109,7 +109,7 @@ During price refreshes, the calculation layer writes back `current_price` and
 | `transactions` | Normalised trade ledger derived from CSV uploads. | `timestamp`, `ticker`, `quantity`, `price`, `commission` |
 | `derived_holdings` | Aggregated share counts, cost basis, and last activity per ticker. | `ticker`, `quantity`, `average_cost`, `last_transaction_at` |
 | `cash_balances` | Latest reconciled cash total. | `balance` |
-| `cash_adjustments` | Deposits, withdrawals, dividends, and interest entries. | `timestamp`, `amount`, `type` |
+| `cash_adjustments` | Deposits, withdrawals, dividends, interest, and fee entries. | `timestamp`, `amount`, `type` |
 | `price_data` | Daily OHLCV candles downloaded via Yahoo Finance. | `ticker`, `date`, `Open`, `High`, `Low`, `Close`, `Adj Close`, `Volume` |
 | `risk_analysis_results` | Persisted trailing-stop sweeps and VaR outputs keyed by period. | `data_period`, `ticker`, `trailing_stop_pct`, `likelihood_pct`, `potential_loss`, `ewma_var` |
 | `portfolio_snapshots` | Cached aggregate views (equity, allocations, benchmark) for rapid dashboard loads. | `cache_key`, `generated_at`, `payload` |
@@ -126,13 +126,22 @@ The analytics layer relies on exponential weighting to emphasise recent market
 behaviour. Let $r_t$ denote the daily return at time $t$,  
 $\lambda = \dfrac{2}{\text{SPAN\_EWMA} + 1}$, and $w_i = (1-\lambda)^i$.
 
-- **Daily return**
+- **Daily return (IBKR time-weighted)**
 
   ```math
-  r_t = \frac{P_t}{P_{t-1}} - 1
+  R_t =
+  \begin{cases}
+    0, & \text{if } \text{StartNAV}_t = 0 \\
+    \dfrac{\text{EndNAV}_t - \text{StartNAV}_t - \text{NetFlow}_t}{\text{StartNAV}_t}, & \text{otherwise}
+  \end{cases}
   ```
 
-  where $P_t$ is the adjusted close from `Calculations/price_data.py`.
+  $\text{StartNAV}_t$ is the portfolio equity valued at the prior close (cash plus
+  positions with available previous-day closes). $\text{EndNAV}_t$ uses the current
+  day's adjusted closes, excluding symbols without a prior close. $\text{NetFlow}_t$
+  aggregates external cash activity: deposits and dividends add capital while
+  withdrawals, fees, and interest reduce it. The performance index evolves as
+  $Index_t = Index_{t-1}(1 + R_t)$ with $Index_0 = 100$.
 
 - **EWMA mean** (used for drift in simulations)
 

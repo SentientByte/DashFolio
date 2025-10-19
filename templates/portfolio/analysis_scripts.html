@@ -408,16 +408,16 @@
                 if (!point.date) {
                     return null;
                 }
-                let ratio = point.pct;
-                if (!Number.isFinite(ratio) && Number.isFinite(point.indexValue)) {
-                    ratio = (point.indexValue / 100) - 1;
+                let indexValue = point.indexValue;
+                if (!Number.isFinite(indexValue) && Number.isFinite(point.pct)) {
+                    indexValue = (point.pct + 1) * 100;
                 }
-                if (!Number.isFinite(ratio)) {
+                if (!Number.isFinite(indexValue)) {
                     return null;
                 }
                 return {
                     x: point.date,
-                    y: Number((ratio * 100).toFixed(4)),
+                    y: Number(Number(indexValue).toFixed(4)),
                 };
             })
             .filter(Boolean);
@@ -427,16 +427,16 @@
                 if (!point.date) {
                     return null;
                 }
-                let ratio = point.benchmarkPct;
-                if (!Number.isFinite(ratio) && Number.isFinite(point.benchmarkIndex)) {
-                    ratio = (point.benchmarkIndex / 100) - 1;
+                let indexValue = point.benchmarkIndex;
+                if (!Number.isFinite(indexValue) && Number.isFinite(point.benchmarkPct)) {
+                    indexValue = (point.benchmarkPct + 1) * 100;
                 }
-                if (!Number.isFinite(ratio)) {
+                if (!Number.isFinite(indexValue)) {
                     return null;
                 }
                 return {
                     x: point.date,
-                    y: Number((ratio * 100).toFixed(4)),
+                    y: Number(Number(indexValue).toFixed(4)),
                 };
             })
             .filter(Boolean);
@@ -444,24 +444,32 @@
         if (!portfolioPoints.length) {
             destroyIncomeChart();
             chartEl.innerHTML = '<div class="text-muted text-center py-4">Not enough data to display cumulative performance yet.</div>';
-            const latestBenchmark = benchmarkPoints.length ? benchmarkPoints[benchmarkPoints.length - 1].y : null;
-            renderPerformanceGauge(null, latestBenchmark, benchmarkTicker);
+            const latestBenchmarkIndex = benchmarkPoints.length
+                ? benchmarkPoints[benchmarkPoints.length - 1].y
+                : null;
+            const benchmarkGaugeValue = Number.isFinite(latestBenchmarkIndex)
+                ? Number((((Number(latestBenchmarkIndex) / 100) - 1) * 100).toFixed(4))
+                : null;
+            renderPerformanceGauge(null, benchmarkGaugeValue, benchmarkTicker);
             return;
         }
 
         const allPoints = benchmarkPoints.length ? portfolioPoints.concat(benchmarkPoints) : portfolioPoints;
+        const baseline = 100;
         const yValues = allPoints.map(point => point.y);
-        let rawMin = 0;
-        let rawMax = 0;
+        yValues.push(baseline);
+        let rawMin = baseline;
+        let rawMax = baseline;
         if (yValues.length) {
-            rawMin = Math.min(0, ...yValues);
-            rawMax = Math.max(0, ...yValues);
+            rawMin = Math.min(...yValues);
+            rawMax = Math.max(...yValues);
         }
         if (Math.abs(rawMax - rawMin) < 1e-6) {
-            rawMax = rawMin === 0 ? 2 : rawMin + 2;
+            rawMax = rawMin + 1;
         }
 
-        const step = 5;
+        const range = Math.max(1, rawMax - rawMin);
+        const step = Math.max(1, Math.round(range / 10));
         const alignDown = value => Math.floor(value / step) * step;
         const alignUp = value => Math.ceil(value / step) * step;
 
@@ -478,38 +486,38 @@
         const benchmarkColor = '#94a3b8';
 
         const series = [
-            { name: 'Portfolio return', data: portfolioPoints },
+            { name: 'Portfolio index', data: portfolioPoints },
         ];
         if (benchmarkPoints.length) {
-            const label = benchmarkTicker ? `${benchmarkTicker} benchmark` : 'Benchmark';
+            const label = benchmarkTicker ? `${benchmarkTicker} index` : 'Benchmark index';
             series.push({ name: label, data: benchmarkPoints });
         }
 
         const yAxisAnnotations = [];
-        if (yMax > 0) {
+        if (yMax > baseline) {
             yAxisAnnotations.push({
-                y: 0,
+                y: baseline,
                 y2: yMax,
                 fillColor: 'rgba(34, 197, 94, 0.15)',
                 opacity: 1,
                 borderColor: 'transparent',
             });
         }
-        if (yMin < 0) {
+        if (yMin < baseline) {
             yAxisAnnotations.push({
                 y: yMin,
-                y2: 0,
+                y2: baseline,
                 fillColor: 'rgba(239, 68, 68, 0.15)',
                 opacity: 1,
                 borderColor: 'transparent',
             });
         }
         yAxisAnnotations.push({
-            y: 0,
+            y: baseline,
             borderColor: '#0f172a',
             strokeDashArray: 0,
             label: {
-                text: '0%',
+                text: '100',
                 style: {
                     background: '#0f172a',
                     color: '#ffffff',
@@ -538,7 +546,7 @@
             },
             yaxis: {
                 title: {
-                    text: 'Cumulative return',
+                    text: 'Performance index',
                 },
                 tickAmount,
                 min: yMin,
@@ -546,7 +554,7 @@
                 labels: {
                     formatter: value => {
                         const numeric = Number(value);
-                        return Number.isFinite(numeric) ? `${numeric.toFixed(2)}%` : value;
+                        return Number.isFinite(numeric) ? `${numeric.toFixed(2)}` : value;
                     },
                 },
             },
@@ -558,7 +566,7 @@
                 y: {
                     formatter: value => {
                         const numeric = Number(value);
-                        return Number.isFinite(numeric) ? `${numeric.toFixed(2)}%` : value;
+                        return Number.isFinite(numeric) ? `${numeric.toFixed(2)}` : value;
                     },
                 },
             },
@@ -581,9 +589,19 @@
             },
         };
 
-        const latestPortfolio = portfolioPoints.length ? portfolioPoints[portfolioPoints.length - 1].y : null;
-        const latestBenchmark = benchmarkPoints.length ? benchmarkPoints[benchmarkPoints.length - 1].y : null;
-        renderPerformanceGauge(latestPortfolio, latestBenchmark, benchmarkTicker);
+        const latestPortfolioIndex = portfolioPoints.length
+            ? portfolioPoints[portfolioPoints.length - 1].y
+            : null;
+        const latestBenchmarkIndex = benchmarkPoints.length
+            ? benchmarkPoints[benchmarkPoints.length - 1].y
+            : null;
+        const portfolioGaugeValue = Number.isFinite(latestPortfolioIndex)
+            ? Number((((Number(latestPortfolioIndex) / 100) - 1) * 100).toFixed(4))
+            : null;
+        const benchmarkGaugeValue = Number.isFinite(latestBenchmarkIndex)
+            ? Number((((Number(latestBenchmarkIndex) / 100) - 1) * 100).toFixed(4))
+            : null;
+        renderPerformanceGauge(portfolioGaugeValue, benchmarkGaugeValue, benchmarkTicker);
 
         if (!incomeChart) {
             chartEl.innerHTML = '';
