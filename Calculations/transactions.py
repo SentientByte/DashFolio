@@ -26,7 +26,7 @@ from .utils import safe_float
 
 TransactionRecord = Dict[str, Any]
 HoldingRecord = Dict[str, Any]
-FlowKind = Literal["deposit", "withdrawal", "dividend", "interest"]
+FlowKind = Literal["deposit", "withdrawal", "dividend", "interest", "fee"]
 
 
 def _canonical_adjustment_type(raw: Any) -> FlowKind:
@@ -37,10 +37,14 @@ def _canonical_adjustment_type(raw: Any) -> FlowKind:
         "withdrawal": "withdrawal",
         "dividend": "dividend",
         "interest": "interest",
+        "fee": "fee",
+        "fees": "fee",
     }
     canonical = mapping.get(value)
     if canonical is None:
-        raise ValueError("Adjustment type must be deposit, withdrawal, dividend, or interest")
+        raise ValueError(
+            "Adjustment type must be deposit, withdrawal, dividend, interest, or fee"
+        )
     return canonical  # type: ignore[return-value]
 
 
@@ -91,10 +95,10 @@ def _normalize_adjustment(record: Dict[str, Any]) -> Dict[str, Any]:
     if amount <= 0:
         raise ValueError("Adjustment amount must be greater than zero")
     adj_type = _canonical_adjustment_type(record.get("type"))
-    if adj_type == "withdrawal":
-        signed_amount = -amount
-    else:
+    if adj_type in {"deposit", "dividend"}:
         signed_amount = amount
+    else:
+        signed_amount = -amount
     return {
         "timestamp": timestamp,
         "amount": amount,

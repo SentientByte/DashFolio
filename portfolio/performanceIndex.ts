@@ -1,4 +1,4 @@
-export type FlowKind = 'deposit' | 'withdrawal' | 'dividend' | 'interest';
+export type FlowKind = 'deposit' | 'withdrawal' | 'dividend' | 'interest' | 'fee';
 
 /** flowDays = dates with external cash flows (deposits, withdrawals). */
 export function buildTWRIndex(

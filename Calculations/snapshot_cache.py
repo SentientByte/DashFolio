@@ -130,6 +130,8 @@ def _canonical_cash_adjustments(
         "withdrawal": "withdrawal",
         "dividend": "dividend",
         "interest": "interest",
+        "fee": "fee",
+        "fees": "fee",
     }
     for entry in adjustments:
         raw_type = str(entry.get("type", "deposit")).strip().lower()
