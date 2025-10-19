@@ -395,28 +395,22 @@
 
         const rawPoints = Array.isArray(performanceData)
             ? performanceData.map(point => ({
-                date: point.date,
-                cumulative: Number(point.cumulative_return ?? point.cumulative ?? NaN),
-                legacyIndex: Number(point.index ?? point.value ?? point.portfolio ?? NaN),
-                benchmarkCumulative: Number(point.benchmark_cumulative_return ?? point.benchmark_cumulative ?? NaN),
+                date: point?.date,
+                pct: Number(point?.performance_pct ?? point?.cumulative_return ?? point?.cumulative ?? NaN),
+                indexValue: Number(point?.performance_index ?? point?.index ?? point?.value ?? point?.portfolio ?? NaN),
+                benchmarkPct: Number(point?.benchmark_cumulative_return ?? point?.benchmark_cumulative ?? NaN),
+                benchmarkIndex: Number(point?.benchmark_index ?? NaN),
             }))
             : [];
-
-        let baseIndex = 100;
-        const firstLegacy = rawPoints.find(point => Number.isFinite(point.legacyIndex));
-        if (firstLegacy && firstLegacy.legacyIndex !== 0 && !Number.isFinite(firstLegacy.cumulative)) {
-            baseIndex = Number(firstLegacy.legacyIndex);
-        }
 
         const portfolioPoints = rawPoints
             .map(point => {
                 if (!point.date) {
                     return null;
                 }
-                let ratio = point.cumulative;
-                if (!Number.isFinite(ratio) && Number.isFinite(point.legacyIndex)) {
-                    const denominator = baseIndex === 0 ? 100 : baseIndex;
-                    ratio = (point.legacyIndex - denominator) / denominator;
+                let ratio = point.pct;
+                if (!Number.isFinite(ratio) && Number.isFinite(point.indexValue)) {
+                    ratio = (point.indexValue / 100) - 1;
                 }
                 if (!Number.isFinite(ratio)) {
                     return null;
@@ -433,7 +427,10 @@
                 if (!point.date) {
                     return null;
                 }
-                const ratio = point.benchmarkCumulative;
+                let ratio = point.benchmarkPct;
+                if (!Number.isFinite(ratio) && Number.isFinite(point.benchmarkIndex)) {
+                    ratio = (point.benchmarkIndex / 100) - 1;
+                }
                 if (!Number.isFinite(ratio)) {
                     return null;
                 }
