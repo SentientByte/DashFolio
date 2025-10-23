@@ -22,11 +22,11 @@
     <div class="layout-container">
         <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
             <div class="app-brand demo d-flex align-items-center justify-content-between py-3 px-4">
-                <a href="{{ url_for('portfolio_analysis') }}" class="app-brand-link">
+                <a href="{{ url_for('portfolio_analysis') }}" class="app-brand-link d-flex flex-column align-items-center text-center gap-2">
                     <span class="app-brand-logo demo">
                         <img src="{{ url_for('static', filename='logo.png') }}" alt="DashFolio logo" class="app-brand-image">
                     </span>
-                    <span class="app-brand-text demo menu-text fw-bold ms-2">DashFolio</span>
+                    <span class="app-brand-text demo menu-text fw-bold text-center">DashFolio</span>
                 </a>
                 <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto d-xl-none">
                     <i class="bx bx-chevron-left bx-sm align-middle"></i>
