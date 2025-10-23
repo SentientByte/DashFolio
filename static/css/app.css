@@ -898,7 +898,9 @@ tr.holding-detail-trigger:hover {
 }
 
 .app-brand-logo .app-brand-image {
-    max-height: 40px;
+    max-height: 4rem;
+    max-width: 100%;
     width: auto;
+    height: auto;
     display: block;
 }
