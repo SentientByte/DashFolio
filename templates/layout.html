@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Dashboard{% endblock %} | DashFolio</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -23,7 +24,7 @@
             <div class="app-brand demo d-flex align-items-center justify-content-between py-3 px-4">
                 <a href="{{ url_for('portfolio_analysis') }}" class="app-brand-link">
                     <span class="app-brand-logo demo">
-                        <i class="bx bx-pie-chart-alt-2"></i>
+                        <img src="{{ url_for('static', filename='logo.png') }}" alt="DashFolio logo" class="app-brand-image">
                     </span>
                     <span class="app-brand-text demo menu-text fw-bold ms-2">DashFolio</span>
                 </a>

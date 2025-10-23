@@ -94,6 +94,38 @@
                         <div class="alert alert-danger mt-3 d-none" role="alert" id="settings-general-error"></div>
                     </div>
                 </div>
+                <div class="card mt-4" id="settings-maintenance-card">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <h5 class="mb-1">Data maintenance</h5>
+                            <small class="text-muted">Review storage usage and reset the application to factory defaults.</small>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-4 align-items-center">
+                            <div class="col-md-4">
+                                <div class="text-muted small mb-1">Database size (MB)</div>
+                                <div class="fs-5 fw-semibold">{{ '%.2f'|format(database_size_mb|default(0)) }}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="text-muted small mb-1">Number of transactions</div>
+                                <div class="fs-5 fw-semibold">{{ '{:,}'.format(transaction_count|default(0)) }}</div>
+                            </div>
+                            <div class="col-md-4 text-md-end">
+                                <button class="btn btn-outline-danger" type="button" id="settings-reset-defaults">
+                                    <i class="bx bx-revision me-1"></i>
+                                    Reset to defaults
+                                </button>
+                                <div class="form-text mt-2">Removes all data, configuration, and user accounts.</div>
+                            </div>
+                        </div>
+                        <div class="alert alert-success mt-3 d-none" role="alert" id="settings-reset-success">Application reset complete. Redirecting…</div>
+                        <div class="alert alert-danger mt-3 d-none" role="alert" id="settings-reset-error"></div>
+                    </div>
+                    <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <small class="text-muted">Version {{ app_version }}</small>
+                    </div>
+                </div>
             </div>
             <div class="tab-pane fade" id="settings-pane-targets" role="tabpanel" aria-labelledby="settings-tab-targets">
                 <div class="card" id="settings-target-card">
@@ -840,6 +872,60 @@
         }
     }
 
+    async function resetApplicationToDefaults() {
+        const button = document.getElementById('settings-reset-defaults');
+        const successAlert = document.getElementById('settings-reset-success');
+        const errorAlert = document.getElementById('settings-reset-error');
+        const confirmed = window.confirm('This will remove all data, configuration, and user accounts. Continue?');
+        if (!confirmed) {
+            return;
+        }
+
+        if (successAlert) {
+            successAlert.classList.add('d-none');
+        }
+        if (errorAlert) {
+            errorAlert.classList.add('d-none');
+            errorAlert.textContent = '';
+        }
+        if (button) {
+            button.setAttribute('disabled', 'disabled');
+        }
+
+        let resetSucceeded = false;
+        showStatus('Resetting application...');
+        try {
+            const response = await fetch('{{ url_for('api_reset_application') }}', {
+                method: 'POST',
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const message = data.error || 'Unable to reset the application.';
+                throw new Error(message);
+            }
+            resetSucceeded = true;
+            if (successAlert) {
+                successAlert.classList.remove('d-none');
+            }
+            setTimeout(() => {
+                window.location.href = '{{ url_for('register') }}';
+            }, 1200);
+        } catch (error) {
+            console.error(error);
+            if (errorAlert) {
+                errorAlert.textContent = error.message || 'Unable to reset the application right now.';
+                errorAlert.classList.remove('d-none');
+            } else {
+                alert(error.message || 'Unable to reset the application right now.');
+            }
+        } finally {
+            hideStatus(400);
+            if (button && !resetSucceeded) {
+                button.removeAttribute('disabled');
+            }
+        }
+    }
+
     async function saveNotificationSettings(event) {
         event.preventDefault();
         const { toggle, botInput, chatInput, endSwitch, openSwitch, successAlert, errorAlert } = getNotificationElements();
@@ -1043,6 +1129,10 @@
         }
         if (notificationElements.chatInput) {
             notificationElements.chatInput.addEventListener('input', syncNotificationFormState);
+        }
+        const resetButton = document.getElementById('settings-reset-defaults');
+        if (resetButton) {
+            resetButton.addEventListener('click', resetApplicationToDefaults);
         }
         const logToggle = document.getElementById('settings-toggle-log');
         const logBox = document.getElementById('settings-log-box');
