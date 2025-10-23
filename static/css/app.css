@@ -432,7 +432,7 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.75rem;
+    gap: 1rem;
     text-align: center;
     text-decoration: none;
 }
@@ -448,23 +448,38 @@ body {
     width: 100%;
 }
 
+.app-brand-menu {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    text-align: center;
+}
+
 .layout-menu .app-brand {
-    padding-top: 1.75rem;
-    padding-bottom: 1.5rem;
+    padding-top: 2.5rem;
+    padding-bottom: 2.25rem;
 }
 
 .layout-menu .app-brand-link-stacked {
     width: 100%;
-    align-items: flex-start;
-    text-align: left;
+    align-items: center;
+    text-align: center;
 }
 
 .layout-menu .app-brand-link-stacked .app-brand-logo {
-    justify-content: flex-start;
+    justify-content: center;
 }
 
 .layout-menu .app-brand-link-stacked .app-brand-text {
-    text-align: left;
+    text-align: center;
+}
+
+.layout-menu .app-brand-menu .layout-menu-toggle {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
 }
 
 @media (max-width: 1199.98px) {
