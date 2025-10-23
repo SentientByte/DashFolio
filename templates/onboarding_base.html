@@ -9,11 +9,11 @@
         <div class="d-flex flex-column flex-md-row align-items-md-start align-items-center justify-content-between gap-3 mb-4">
             <div class="text-center text-md-start">
                 <div class="app-brand justify-content-center justify-content-md-start mb-3">
-                    <a href="{{ url_for('register') }}" class="app-brand-link app-brand-link-stacked">
+                    <a href="{{ url_for('register') }}" class="app-brand-link d-flex flex-column align-items-center text-center gap-2">
                         <span class="app-brand-logo demo">
                             <img src="{{ url_for('static', filename='logo.png') }}" alt="DashFolio logo" class="app-brand-image">
                         </span>
-                        <span class="app-brand-text demo text-body fw-bold">DashFolio</span>
+                        <span class="app-brand-text demo text-body fw-bold text-center">DashFolio</span>
                     </a>
                 </div>
                 <h4 class="mb-1">{{ page_title or 'Complete your setup' }}</h4>

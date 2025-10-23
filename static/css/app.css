@@ -953,7 +953,7 @@ tr.holding-detail-trigger:hover {
 }
 
 .app-brand-logo .app-brand-image {
-    max-height: clamp(3rem, 8vw, 3.5rem);
+    max-height: 4rem;
     max-width: 100%;
     width: auto;
     height: auto;
