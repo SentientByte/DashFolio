@@ -427,6 +427,61 @@ body {
     font-size: 1.25rem;
 }
 
+.app-brand-link-stacked {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    text-align: center;
+    text-decoration: none;
+}
+
+.app-brand-link-stacked .app-brand-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.app-brand-link-stacked .app-brand-text {
+    width: 100%;
+}
+
+.layout-menu .app-brand {
+    padding-top: 1.75rem;
+    padding-bottom: 1.5rem;
+}
+
+.layout-menu .app-brand-link-stacked {
+    width: 100%;
+    align-items: flex-start;
+    text-align: left;
+}
+
+.layout-menu .app-brand-link-stacked .app-brand-logo {
+    justify-content: flex-start;
+}
+
+.layout-menu .app-brand-link-stacked .app-brand-text {
+    text-align: left;
+}
+
+@media (max-width: 1199.98px) {
+    .layout-menu .app-brand-link-stacked {
+        align-items: center;
+        text-align: center;
+    }
+
+    .layout-menu .app-brand-link-stacked .app-brand-logo {
+        justify-content: center;
+    }
+
+    .layout-menu .app-brand-link-stacked .app-brand-text {
+        text-align: center;
+    }
+}
+
 .layout-menu.open {
     transform: translateX(0);
 }
