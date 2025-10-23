@@ -42,7 +42,7 @@ from Calculations.transactions import (
     replace_transactions,
 )
 from Calculations.utils import safe_float
-from services.activity_log import append_log, get_log_entries
+from services.activity_log import append_log, clear_log, get_log_entries
 from services.auth import complete_onboarding, load_user_record, login_user_session
 from services.configuration import (
     DEFAULT_SESSION_DURATION,
@@ -71,11 +71,14 @@ from services.portfolio import (
     save_portfolio_file,
     save_portfolio_state,
 )
+from services.maintenance import calculate_database_size_mb, reset_application_state
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dashfolio-secret-key")
+
+APP_VERSION = "1.0.1"
 
 log_output_table: List[Dict[str, Any]] = [] # parsed table (list of dicts) built from database results
 
@@ -443,6 +446,7 @@ def portfolio_analysis():
     cash_balance = portfolio_state.get('cash_balance', 0.0)
     transactions = portfolio_state.get('transactions', [])
     cash_adjustments = portfolio_state.get('cash_adjustments', [])
+
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         holdings,
@@ -481,6 +485,8 @@ def allocation_planner():
     cash_balance = portfolio_state.get('cash_balance', 0.0)
     transactions = portfolio_state.get('transactions', [])
     cash_adjustments = portfolio_state.get('cash_adjustments', [])
+    transaction_count = len(transactions)
+    database_size_mb = calculate_database_size_mb(DATA_STORE)
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         holdings,
@@ -544,6 +550,8 @@ def settings():
     cash_balance = portfolio_state.get('cash_balance', 0.0)
     transactions = portfolio_state.get('transactions', [])
     cash_adjustments = portfolio_state.get('cash_adjustments', [])
+    transaction_count = len(transactions)
+    database_size_mb = calculate_database_size_mb(DATA_STORE)
     snapshot = get_cached_portfolio_snapshot(
         DATA_STORE,
         holdings,
@@ -569,6 +577,9 @@ def settings():
         benchmark_ticker=benchmark_ticker,
         activity_log=get_log_entries(),
         session_durations=SESSION_DURATION_CHOICES,
+        database_size_mb=database_size_mb,
+        transaction_count=transaction_count,
+        app_version=APP_VERSION,
         active_page='settings',
         page_title='Settings',
         page_subtitle='Manage portfolio configuration & preferences',
@@ -959,6 +970,27 @@ def api_update_config():
         },
         'currency': currency_settings,
     })
+
+
+@app.route('/api/settings/reset', methods=['POST'])
+def api_reset_application():
+    try:
+        reset_application_state(DATA_STORE)
+    except Exception as exc:  # noqa: BLE001 - surface unexpected filesystem errors
+        message = str(exc) or 'Unable to reset application state.'
+        append_log(f"Application reset failed: {message}")
+        return jsonify({'status': 'error', 'error': message}), 500
+
+    clear_log()
+    session.clear()
+    global log_output_table
+    log_output_table = []
+
+    config = load_config()
+    apply_session_duration(app, config)
+    configure_notification_scheduler(DATA_STORE, config)
+
+    return jsonify({'status': 'ok'})
 
 
 @app.route('/api/notifications/test', methods=['POST'])

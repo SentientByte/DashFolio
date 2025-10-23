@@ -896,3 +896,9 @@ tr.holding-detail-trigger:hover {
 .btn.btn-link.remove-row:hover {
     text-decoration: underline;
 }
+
+.app-brand-logo .app-brand-image {
+    max-height: 40px;
+    width: auto;
+    display: block;
+}
