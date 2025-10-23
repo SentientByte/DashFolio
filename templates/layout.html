@@ -21,14 +21,14 @@
 <div class="layout-wrapper layout-content-navbar">
     <div class="layout-container">
         <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
-            <div class="app-brand demo d-flex align-items-center justify-content-between py-3 px-4">
-                <a href="{{ url_for('portfolio_analysis') }}" class="app-brand-link d-flex flex-column align-items-center text-center gap-2">
+            <div class="app-brand demo app-brand-menu px-4 position-relative">
+                <a href="{{ url_for('portfolio_analysis') }}" class="app-brand-link app-brand-link-stacked w-100">
                     <span class="app-brand-logo demo">
                         <img src="{{ url_for('static', filename='logo.png') }}" alt="DashFolio logo" class="app-brand-image">
                     </span>
                     <span class="app-brand-text demo menu-text fw-bold text-center">DashFolio</span>
                 </a>
-                <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto d-xl-none">
+                <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large d-xl-none position-absolute top-0 end-0 mt-3 me-3">
                     <i class="bx bx-chevron-left bx-sm align-middle"></i>
                 </a>
             </div>
