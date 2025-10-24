@@ -205,6 +205,11 @@ body {
     padding-top: clamp(1.75rem, 4vw, 3rem);
 }
 
+#layout-menu .app-brand {
+    padding-bottom: clamp(2.5rem, 7vw, 3.75rem);
+    margin-bottom: clamp(0.75rem, 3vw, 1.5rem);
+}
+
 #layout-menu .menu-inner {
     display: flex;
     flex-direction: column;
@@ -436,7 +441,7 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.25rem;
+    gap: clamp(0.05rem, 0.25vw, 0.1rem);
     text-align: center;
     text-decoration: none;
 }
@@ -490,7 +495,7 @@ body {
     .layout-menu .app-brand-link-stacked {
         align-items: center;
         text-align: center;
-        gap: 0.5rem;
+        gap: clamp(0.075rem, 0.35vw, 0.125rem);
     }
 
     .layout-menu .app-brand-link-stacked .app-brand-logo {
