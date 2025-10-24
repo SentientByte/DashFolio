@@ -201,6 +201,10 @@ body {
 }
 
 /* Layout menu enhancements */
+#layout-menu {
+    padding-top: clamp(1.75rem, 4vw, 3rem);
+}
+
 #layout-menu .menu-inner {
     display: flex;
     flex-direction: column;
