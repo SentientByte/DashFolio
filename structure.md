@@ -229,9 +229,12 @@ $\lambda = \dfrac{2}{\text{SPAN\_EWMA} + 1}$, and $w_i = (1-\lambda)^i$.
    last-close metadata.
 3. **Snapshot assembly** – `Calculations/snapshot.py` combines derived holdings,
    cached prices, benchmark series, and configuration preferences into a
-   serialisable dictionary consumed by templates. Results are cached through
-   `Calculations/snapshot_cache.py` keyed by holdings fingerprint plus
-   configuration, dramatically reducing load times on repeated visits.
+   serialisable dictionary consumed by templates. Closed-position summaries
+   track realised trades even when a ticker is repurchased later, ensuring the
+   "Former Holdings" table reflects every completed round-trip. Results are
+   cached through `Calculations/snapshot_cache.py` keyed by holdings
+   fingerprint plus configuration, dramatically reducing load times on
+   repeated visits.
 4. **Front-end presentation** – Template macros feed TypeScript helpers:
    `portfolio/ui.ts` formats the day’s gain/loss badges and tooltips, while
    `portfolio/investedSeries.ts` and `portfolio/performanceIndex.ts` construct
