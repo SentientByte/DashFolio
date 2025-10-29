@@ -879,11 +879,16 @@
                 const quantity = formatQuantity(position.quantity || 0);
                 const avgCost = formatCurrency(position.average_cost || 0);
                 const avgSell = formatCurrency(position.average_sell_price || 0);
+                const totalCostNumeric = Number(position.total_cost || 0);
                 const totalCost = formatCurrency(position.total_cost || 0);
                 const totalSell = formatCurrency(position.total_sell_value || 0);
                 const profitLossValue = Number(position.profit_loss || 0);
                 const profitLoss = formatSignedCurrency(profitLossValue);
                 const profitClass = profitLossValue >= 0 ? 'text-success' : 'text-danger';
+                const profitLossPct = totalCostNumeric ? (profitLossValue / totalCostNumeric) * 100 : null;
+                const profitLossPctMarkup = Number.isFinite(profitLossPct)
+                    ? `<small class="text-muted">${profitLossPct >= 0 ? '+' : '-'}${Math.abs(profitLossPct).toFixed(2)}%</small>`
+                    : '';
                 const row = document.createElement('tr');
                 row.dataset.ticker = position.ticker || '';
                 row.classList.add('holding-detail-trigger');
@@ -897,7 +902,10 @@
                     <td><span class="fw-semibold">${avgSell}</span></td>
                     <td><span class="fw-semibold">${totalCost}</span></td>
                     <td><span class="fw-semibold">${totalSell}</span></td>
-                    <td><span class="fw-semibold ${profitClass}">${profitLoss}</span></td>
+                    <td class="compact-col">
+                        <span class="d-block fw-semibold ${profitClass}">${profitLoss}</span>
+                        ${profitLossPctMarkup}
+                    </td>
                 `;
                 historicalBody.appendChild(row);
             });
@@ -971,7 +979,10 @@
                     <td><span class="fw-semibold">${formatNumber(holding.sharpe_ratio || 0)}</span></td>
                     <td><span class="fw-semibold">${formatPercentPlain(holding.max_drawdown_pct || 0)}</span></td>
                     <td><span class="fw-semibold">${formatNumber(holding.beta_vs_benchmark || 0)}</span></td>
-                    <td><span class="fw-semibold">${formatPercentPlain(holding.ewma_var_pct || 0)}</span></td>
+                    <td>
+                        <span class="fw-semibold d-block">${formatCurrency(holding.ewma_var_value || 0)}</span>
+                        <small class="text-muted">${formatPercentPlain(holding.ewma_var_pct || 0)}</small>
+                    </td>
                     <td><span class="fw-semibold">${formatPercentPlain(holding.yield_on_cost_pct || 0)}</span></td>
                 `;
                 kpiBody.appendChild(kpiRow);
