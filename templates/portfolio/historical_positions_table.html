@@ -14,14 +14,17 @@
                 <th class="text-uppercase text-muted small">Avg. Sell Price</th>
                 <th class="text-uppercase text-muted small">Total Cost</th>
                 <th class="text-uppercase text-muted small">Total Selling Value</th>
-                <th class="text-uppercase text-muted small">Profit / Loss</th>
+                <th class="text-muted small compact-col">
+                    <span class="d-block text-uppercase">Profit / Loss</span>
+                    <span class="th-subtitle">Value / %</span>
+                </th>
             </tr>
             </thead>
             <tbody class="table-border-bottom-0" id="historical-body">
             {% if snapshot.historical_positions %}
                 {% for position in snapshot.historical_positions %}
                 {% set profit_positive = position.profit_loss >= 0 %}
-                {% set profit_ratio = (position.profit_loss / position.total_cost) if position.total_cost else none %}
+                {% set profit_pct = (position.profit_loss / position.total_cost * 100) if position.total_cost else none %}
                 <tr>
                     <td class="logo-cell">
                         {% if position.logo_url %}
@@ -36,10 +39,10 @@
                     <td><span class="fw-semibold">{{ format_currency(position.average_sell_price) }}</span></td>
                     <td><span class="fw-semibold">{{ format_currency(position.total_cost) }}</span></td>
                     <td><span class="fw-semibold">{{ format_currency(position.total_sell_value) }}</span></td>
-                    <td>
-                        <span class="fw-semibold {{ 'text-success' if profit_positive else 'text-danger' }}">{{ format_signed_currency(position.profit_loss) }}</span>
-                        {% if profit_ratio is not none %}
-                        <small class="{{ 'text-success' if profit_positive else 'text-danger' }} ms-1">{{ '%0.2f%%'|format(profit_ratio * 100) }}</small>
+                    <td class="compact-col">
+                        <span class="d-block fw-semibold {{ 'text-success' if profit_positive else 'text-danger' }}">{{ format_signed_currency(position.profit_loss) }}</span>
+                        {% if profit_pct is not none %}
+                        <small class="text-muted">{{ '+' if profit_pct >= 0 else '-' }}{{ '%0.2f'|format(profit_pct|abs) }}%</small>
                         {% endif %}
                     </td>
                 </tr>
