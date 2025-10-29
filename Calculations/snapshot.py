@@ -225,38 +225,61 @@ def _build_closed_positions(
         entry = ledger.setdefault(
             ticker,
             {
-                "net_quantity": 0.0,
-                "buy_quantity": 0.0,
-                "sell_quantity": 0.0,
-                "buy_cost": 0.0,
-                "sell_value": 0.0,
+                "open_quantity": 0.0,
+                "open_cost": 0.0,
+                "realized_quantity": 0.0,
+                "realized_cost": 0.0,
+                "realized_value": 0.0,
             },
         )
 
         if quantity > 0:
-            entry["net_quantity"] += quantity
-            entry["buy_quantity"] += quantity
-            entry["buy_cost"] += quantity * price + commission
+            entry["open_quantity"] += quantity
+            entry["open_cost"] += quantity * price + commission
         elif quantity < 0:
             sell_amount = abs(quantity)
-            entry["net_quantity"] -= sell_amount
-            entry["sell_quantity"] += sell_amount
-            entry["sell_value"] += sell_amount * price - commission
+            open_quantity = entry.get("open_quantity", 0.0)
+
+            if open_quantity <= 0:
+                entry["open_quantity"] -= sell_amount
+                entry["open_cost"] -= sell_amount * price - commission
+                continue
+
+            realized_qty = min(sell_amount, open_quantity)
+            avg_cost = entry["open_cost"] / open_quantity if open_quantity else 0.0
+            realized_cost = avg_cost * realized_qty
+            commission_share = (
+                commission * (realized_qty / sell_amount)
+                if sell_amount > 0
+                else 0.0
+            )
+
+            entry["realized_quantity"] += realized_qty
+            entry["realized_cost"] += realized_cost
+            entry["realized_value"] += realized_qty * price - commission_share
+
+            remaining_open = open_quantity - realized_qty
+            if abs(remaining_open) < 1e-9:
+                remaining_open = 0.0
+            entry["open_quantity"] = remaining_open
+            entry["open_cost"] = remaining_open * avg_cost
+
+            remaining = sell_amount - realized_qty
+            if remaining > 0:
+                remaining_commission = commission - commission_share
+                entry["open_quantity"] -= remaining
+                entry["open_cost"] -= remaining * price - remaining_commission
 
     closed: List[Dict[str, Any]] = []
     for ticker, entry in ledger.items():
-        buy_qty = entry.get("buy_quantity", 0.0)
-        sell_qty = entry.get("sell_quantity", 0.0)
-        net_qty = entry.get("net_quantity", 0.0)
-        if buy_qty <= 0 or sell_qty <= 0:
-            continue
-        if abs(net_qty) > 1e-6:
+        realized_qty = entry.get("realized_quantity", 0.0)
+        if realized_qty <= 0:
             continue
 
-        buy_cost = entry.get("buy_cost", 0.0)
-        sell_value = entry.get("sell_value", 0.0)
-        avg_cost = buy_cost / buy_qty if buy_qty else 0.0
-        avg_sell = sell_value / sell_qty if sell_qty else 0.0
+        realized_cost = entry.get("realized_cost", 0.0)
+        realized_value = entry.get("realized_value", 0.0)
+        avg_cost = realized_cost / realized_qty if realized_qty else 0.0
+        avg_sell = realized_value / realized_qty if realized_qty else 0.0
         meta = (metadata_lookup or {}).get(ticker, {})
 
         closed.append(
@@ -264,12 +287,12 @@ def _build_closed_positions(
                 "ticker": ticker,
                 "logo_url": meta.get("logo_url"),
                 "name": meta.get("name") or ticker,
-                "quantity": sell_qty,
+                "quantity": realized_qty,
                 "average_cost": avg_cost,
                 "average_sell_price": avg_sell,
-                "total_cost": buy_cost,
-                "total_sell_value": sell_value,
-                "profit_loss": sell_value - buy_cost,
+                "total_cost": realized_cost,
+                "total_sell_value": realized_value,
+                "profit_loss": realized_value - realized_cost,
             }
         )
 
