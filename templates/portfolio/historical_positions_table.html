@@ -21,6 +21,7 @@
             {% if snapshot.historical_positions %}
                 {% for position in snapshot.historical_positions %}
                 {% set profit_positive = position.profit_loss >= 0 %}
+                {% set profit_ratio = (position.profit_loss / position.total_cost) if position.total_cost else none %}
                 <tr>
                     <td class="logo-cell">
                         {% if position.logo_url %}
@@ -37,6 +38,9 @@
                     <td><span class="fw-semibold">{{ format_currency(position.total_sell_value) }}</span></td>
                     <td>
                         <span class="fw-semibold {{ 'text-success' if profit_positive else 'text-danger' }}">{{ format_signed_currency(position.profit_loss) }}</span>
+                        {% if profit_ratio is not none %}
+                        <small class="{{ 'text-success' if profit_positive else 'text-danger' }} ms-1">{{ '%0.2f%%'|format(profit_ratio * 100) }}</small>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
