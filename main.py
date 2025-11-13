@@ -1,9 +1,54 @@
 """Entry point for running DashFolio calculations."""
 
 from datetime import datetime
+from importlib.util import find_spec
 from zoneinfo import ZoneInfo
 
-from Calculations import (
+from app_paths import CONFIG_FILE, DATA_STORE, PORTFOLIO_FILE
+from services.configuration import ensure_default_config_file
+from services.portfolio import ensure_default_portfolio_file
+
+
+REQUIRED_RUNTIME_PACKAGES = (
+    "pandas",
+    "numpy",
+    "yfinance",
+)
+
+
+def ensure_runtime_dependencies() -> None:
+    """Exit with actionable guidance when optional dependencies are missing."""
+
+    missing = sorted(
+        package for package in REQUIRED_RUNTIME_PACKAGES if find_spec(package) is None
+    )
+    if not missing:
+        return
+
+    missing_list = ", ".join(missing)
+    message = (
+        "DashFolio requires the following Python packages, but they are not installed: "
+        f"{missing_list}\n\n"
+        "Create and activate the project's virtual environment, then install the "
+        "dependencies:\n"
+        "    python -m venv .venv\n"
+        "    # Windows PowerShell\n"
+        "    .\\.venv\\Scripts\\Activate.ps1\n"
+        "    # Windows Command Prompt\n"
+        "    .\\.venv\\Scripts\\activate.bat\n"
+        "    # macOS/Linux\n"
+        "    source .venv/bin/activate\n"
+        "    pip install -r requirements.txt\n\n"
+        "If you prefer to use the current interpreter, install the same packages "
+        "directly:\n"
+        "    pip install -r requirements.txt\n"
+    )
+    raise SystemExit(message)
+
+
+ensure_runtime_dependencies()
+
+from Calculations import (  # noqa: E402  (import after dependency validation)
     calculate_statistics,
     determine_start_date,
     load_config,
@@ -13,10 +58,6 @@ from Calculations import (
     run_trailing_stop_analysis,
     update_portfolio_prices,
 )
-
-from app_paths import CONFIG_FILE, DATA_STORE, PORTFOLIO_FILE
-from services.configuration import ensure_default_config_file
-from services.portfolio import ensure_default_portfolio_file
 
 
 def main() -> None:
