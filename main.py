@@ -1,7 +1,14 @@
 """Entry point for running DashFolio calculations."""
 
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
 from datetime import datetime
 from importlib.util import find_spec
+from pathlib import Path
+from typing import Iterable
 from zoneinfo import ZoneInfo
 
 from app_paths import CONFIG_FILE, DATA_STORE, PORTFOLIO_FILE
@@ -17,33 +24,108 @@ REQUIRED_RUNTIME_PACKAGES = (
 
 
 def ensure_runtime_dependencies() -> None:
-    """Exit with actionable guidance when optional dependencies are missing."""
+    """Ensure runtime dependencies are installed inside the project virtualenv."""
 
-    missing = sorted(
-        package for package in REQUIRED_RUNTIME_PACKAGES if find_spec(package) is None
-    )
+    missing = _detect_missing_packages(REQUIRED_RUNTIME_PACKAGES)
     if not missing:
         return
 
-    missing_list = ", ".join(missing)
-    message = (
-        "DashFolio requires the following Python packages, but they are not installed: "
-        f"{missing_list}\n\n"
-        "Create and activate the project's virtual environment, then install the "
-        "dependencies:\n"
-        "    python -m venv .venv\n"
-        "    # Windows PowerShell\n"
-        "    .\\.venv\\Scripts\\Activate.ps1\n"
-        "    # Windows Command Prompt\n"
-        "    .\\.venv\\Scripts\\activate.bat\n"
-        "    # macOS/Linux\n"
-        "    source .venv/bin/activate\n"
-        "    pip install -r requirements.txt\n\n"
-        "If you prefer to use the current interpreter, install the same packages "
-        "directly:\n"
-        "    pip install -r requirements.txt\n"
+    project_root = Path(__file__).resolve().parent
+    venv_dir = project_root / ".venv"
+
+    if _running_inside_venv(venv_dir):
+        _install_packages(Path(sys.executable), missing)
+        missing_after_install = _detect_missing_packages(REQUIRED_RUNTIME_PACKAGES)
+        if missing_after_install:
+            missing_list = ", ".join(missing_after_install)
+            raise SystemExit(
+                "DashFolio could not install the required packages: "
+                f"{missing_list}.\n"
+                "Review the pip output above and resolve the issue manually."
+            )
+        return
+
+    try:
+        venv_python = _ensure_project_virtualenv(venv_dir)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(
+            "DashFolio could not create the project virtual environment automatically.\n"
+            "Resolve the venv error above and run the application again."
+        ) from exc
+
+    _install_packages(venv_python, missing)
+    print(
+        "Restarting DashFolio using the project virtual environment after installing "
+        "missing packages..."
     )
-    raise SystemExit(message)
+    os.execv(str(venv_python), [str(venv_python), *sys.argv])
+
+
+def _detect_missing_packages(packages: Iterable[str]) -> list[str]:
+    """Return a sorted list of packages that cannot be imported."""
+
+    return sorted(package for package in packages if find_spec(package) is None)
+
+
+def _ensure_project_virtualenv(venv_dir: Path) -> Path:
+    """Create the project virtual environment if it does not yet exist."""
+
+    if venv_dir.exists():
+        return _venv_python_path(venv_dir)
+
+    print(f"Creating project virtual environment at {venv_dir}...")
+    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+    return _venv_python_path(venv_dir)
+
+
+def _running_inside_venv(venv_dir: Path) -> bool:
+    """Return True when the current interpreter belongs to the project venv."""
+
+    try:
+        return Path(sys.prefix).resolve() == venv_dir.resolve()
+    except FileNotFoundError:
+        return False
+
+
+def _venv_python_path(venv_dir: Path) -> Path:
+    """Determine the Python executable inside the virtual environment."""
+
+    if os.name == "nt":
+        candidate = venv_dir / "Scripts" / "python.exe"
+    else:
+        candidate = venv_dir / "bin" / "python"
+
+    if not candidate.exists():
+        raise SystemExit(
+            "DashFolio could not locate the Python executable in the project "
+            "virtual environment.\n"
+            "Try removing the '.venv' directory and run the application again."
+        )
+
+    return candidate
+
+
+def _install_packages(python_executable: Path, packages: Iterable[str]) -> None:
+    """Install packages using the given Python interpreter."""
+
+    package_list = sorted(set(packages))
+    if not package_list:
+        return
+
+    print(
+        "Installing missing packages via pip: "
+        + ", ".join(package_list)
+    )
+    try:
+        subprocess.run(
+            [str(python_executable), "-m", "pip", "install", *package_list],
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(
+            "DashFolio was unable to install the required dependencies automatically.\n"
+            "Resolve the pip error above and run the application again."
+        ) from exc
 
 
 ensure_runtime_dependencies()
