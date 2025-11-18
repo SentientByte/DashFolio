@@ -163,6 +163,18 @@
                 </div>
             </div>
             <div class="tab-pane fade" id="settings-pane-risk" role="tabpanel" aria-labelledby="settings-tab-risk">
+                {% set current_data_period = config.get('DATA_PERIOD', '1y') %}
+                {% set is_custom_period = current_data_period|lower == 'custom' %}
+                {% set data_period_choices = [
+                    ('YTD', 'Year to date'),
+                    ('6m', 'Last 6 months'),
+                    ('1y', 'Last 1 year'),
+                    ('2y', 'Last 2 years'),
+                    ('3y', 'Last 3 years'),
+                    ('5y', 'Last 5 years'),
+                    ('custom', 'Custom range')
+                ] %}
+                {% set stop_loss_range = config.get('STOP_LOSS_PERCENTAGE_RANGE', [1.0, 2.0]) %}
                 <div class="card" id="settings-risk-card">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <div>
@@ -172,6 +184,35 @@
                     </div>
                     <div class="card-body">
                         <form id="settings-risk-form" class="row g-3">
+                            <div class="col-md-4">
+                                <label for="settings-data-period" class="form-label">Data period</label>
+                                <select id="settings-data-period" class="form-select" required>
+                                    {% for value, label in data_period_choices %}
+                                        <option value="{{ value }}" {% if current_data_period|lower == value|lower %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Matches the range used by <code>main.py</code> when fetching prices.</div>
+                            </div>
+                            <div class="col-md-4 {% if not is_custom_period %}d-none{% endif %}" id="settings-custom-date-group">
+                                <label for="settings-custom-start" class="form-label">Custom start date</label>
+                                <input type="date" class="form-control" id="settings-custom-start" value="{{ config.get('CUSTOM_START_DATE', '') }}" {% if not is_custom_period %}disabled{% endif %}>
+                                <div class="form-text">Required when data period is set to <strong>Custom range</strong>.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="settings-stop-loss-min">Stop loss range (%)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">Min</span>
+                                    <input type="number" class="form-control" id="settings-stop-loss-min" value="{{ '%.1f'|format(stop_loss_range[0]) }}" step="0.1" min="0.1" required>
+                                    <span class="input-group-text">Max</span>
+                                    <input type="number" class="form-control" id="settings-stop-loss-max" value="{{ '%.1f'|format(stop_loss_range[1]) }}" step="0.1" min="0.1" required>
+                                </div>
+                                <div class="form-text">Monte Carlo sweeps iterate from min to max.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="settings-stop-loss-step" class="form-label">Stop loss step (%)</label>
+                                <input type="number" class="form-control" id="settings-stop-loss-step" value="{{ '%.2f'|format(config.get('STOP_LOSS_STEP', 0.2)) }}" step="0.05" min="0.01" required>
+                                <div class="form-text">Increment applied between trailing stop levels.</div>
+                            </div>
                             <div class="col-md-4">
                                 <label for="settings-num-simulations" class="form-label">Number of simulations</label>
                                 <input type="number" class="form-control" id="settings-num-simulations" value="{{ config['NUM_SIMULATIONS'] }}" min="1">
@@ -1032,11 +1073,34 @@
         event.preventDefault();
         const successAlert = document.getElementById('settings-risk-success');
         const errorAlert = document.getElementById('settings-risk-error');
+        const dataPeriodSelect = document.getElementById('settings-data-period');
+        const customStartInput = document.getElementById('settings-custom-start');
+        const stopLossMinInput = document.getElementById('settings-stop-loss-min');
+        const stopLossMaxInput = document.getElementById('settings-stop-loss-max');
+        const stopLossStepInput = document.getElementById('settings-stop-loss-step');
+        const dataPeriodValue = (dataPeriodSelect?.value || '').toString();
+        const isCustomPeriod = dataPeriodValue.toLowerCase() === 'custom';
         const payload = {
             num_simulations: document.getElementById('settings-num-simulations')?.value,
             confidence_level: document.getElementById('settings-confidence-level')?.value,
             span_ewma: document.getElementById('settings-span-ewma')?.value,
         };
+
+        if (dataPeriodValue) {
+            payload.data_period = dataPeriodValue;
+        }
+        if (isCustomPeriod) {
+            payload.custom_start_date = customStartInput?.value;
+        }
+        if (stopLossMinInput) {
+            payload.stop_loss_min = stopLossMinInput.value;
+        }
+        if (stopLossMaxInput) {
+            payload.stop_loss_max = stopLossMaxInput.value;
+        }
+        if (stopLossStepInput) {
+            payload.stop_loss_step = stopLossStepInput.value;
+        }
 
         showStatus('Saving settings...');
         try {
@@ -1074,6 +1138,24 @@
         }
     }
 
+    function syncRiskCustomDateVisibility() {
+        const dataPeriodSelect = document.getElementById('settings-data-period');
+        const customDateGroup = document.getElementById('settings-custom-date-group');
+        const customDateInput = document.getElementById('settings-custom-start');
+        if (!dataPeriodSelect || !customDateGroup || !customDateInput) {
+            return;
+        }
+        const isCustom = (dataPeriodSelect.value || '').toLowerCase() === 'custom';
+        customDateGroup.classList.toggle('d-none', !isCustom);
+        if (isCustom) {
+            customDateInput.removeAttribute('disabled');
+            customDateInput.setAttribute('required', 'required');
+        } else {
+            customDateInput.setAttribute('disabled', 'disabled');
+            customDateInput.removeAttribute('required');
+        }
+    }
+
     function setupEventListeners() {
         const generalForm = document.getElementById('settings-general-form');
         if (generalForm) {
@@ -1108,6 +1190,11 @@
         const riskForm = document.getElementById('settings-risk-form');
         if (riskForm) {
             riskForm.addEventListener('submit', saveRiskParameters);
+        }
+
+        const dataPeriodSelect = document.getElementById('settings-data-period');
+        if (dataPeriodSelect) {
+            dataPeriodSelect.addEventListener('change', syncRiskCustomDateVisibility);
         }
 
         const notificationsForm = document.getElementById('settings-notifications-form');
@@ -1157,6 +1244,7 @@
         setupEventListeners();
         updateTargetTotalBadge();
         syncNotificationFormState();
+        syncRiskCustomDateVisibility();
     });
 </script>
 {% endblock %}

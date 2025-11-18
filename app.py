@@ -865,6 +865,56 @@ def api_update_config():
     config = load_config()
 
     errors: List[str] = []
+    requested_data_period = str(config.get('DATA_PERIOD', '1y') or '1y')
+
+    if 'data_period' in payload:
+        data_period_value = str(payload.get('data_period', '')).strip()
+        if data_period_value:
+            requested_data_period = data_period_value
+            config['DATA_PERIOD'] = data_period_value
+        else:
+            errors.append('Data period must not be empty.')
+
+    if 'custom_start_date' in payload or requested_data_period.lower() == 'custom':
+        raw_custom_date = str(payload.get('custom_start_date', config.get('CUSTOM_START_DATE', '')) or '').strip()
+        if requested_data_period.lower() == 'custom':
+            if not raw_custom_date:
+                errors.append('Custom start date is required when data period is set to custom.')
+            else:
+                try:
+                    datetime.strptime(raw_custom_date, '%Y-%m-%d')
+                except ValueError:
+                    errors.append('Custom start date must follow YYYY-MM-DD format.')
+                else:
+                    config['CUSTOM_START_DATE'] = raw_custom_date
+        elif raw_custom_date:
+            try:
+                datetime.strptime(raw_custom_date, '%Y-%m-%d')
+            except ValueError:
+                errors.append('Custom start date must follow YYYY-MM-DD format.')
+            else:
+                config['CUSTOM_START_DATE'] = raw_custom_date
+
+    if 'stop_loss_min' in payload or 'stop_loss_max' in payload:
+        current_range = config.get('STOP_LOSS_PERCENTAGE_RANGE', [1.0, 2.0])
+        try:
+            stop_min = float(payload.get('stop_loss_min', current_range[0]))
+            stop_max = float(payload.get('stop_loss_max', current_range[1]))
+            if stop_min <= 0 or stop_max <= 0 or stop_min >= stop_max:
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append('Stop loss range must contain positive numbers where max exceeds min.')
+        else:
+            config['STOP_LOSS_PERCENTAGE_RANGE'] = [stop_min, stop_max]
+
+    if 'stop_loss_step' in payload:
+        try:
+            step_value = float(payload.get('stop_loss_step'))
+            if step_value <= 0:
+                raise ValueError
+            config['STOP_LOSS_STEP'] = step_value
+        except (TypeError, ValueError):
+            errors.append('Stop loss step must be a positive number.')
 
     if 'benchmark_ticker' in payload:
         ticker = str(payload.get('benchmark_ticker', '')).upper().strip()
@@ -955,10 +1005,14 @@ def api_update_config():
     return jsonify({
         'status': 'ok',
         'config': {
+            'DATA_PERIOD': config.get('DATA_PERIOD'),
+            'CUSTOM_START_DATE': config.get('CUSTOM_START_DATE'),
             'BENCHMARK_TICKER': config.get('BENCHMARK_TICKER'),
             'NUM_SIMULATIONS': config.get('NUM_SIMULATIONS'),
             'CONFIDENCE_LEVEL': config.get('CONFIDENCE_LEVEL'),
             'SPAN_EWMA': config.get('SPAN_EWMA'),
+            'STOP_LOSS_PERCENTAGE_RANGE': config.get('STOP_LOSS_PERCENTAGE_RANGE'),
+            'STOP_LOSS_STEP': config.get('STOP_LOSS_STEP'),
             'CURRENCY': config.get('CURRENCY'),
             'AUTO_REFRESH_INTERVAL': config.get('AUTO_REFRESH_INTERVAL'),
             'SESSION_DURATION_HOURS': config.get('SESSION_DURATION_HOURS'),
