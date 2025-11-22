@@ -193,10 +193,10 @@
                                 </select>
                                 <div class="form-text">Matches the range used by <code>main.py</code> when fetching prices.</div>
                             </div>
-                            <div class="col-md-4 {% if not is_custom_period %}d-none{% endif %}" id="settings-custom-date-group">
+                            <div class="col-md-4{% if not is_custom_period %} opacity-50{% endif %}" id="settings-custom-date-group">
                                 <label for="settings-custom-start" class="form-label">Custom start date</label>
                                 <input type="date" class="form-control" id="settings-custom-start" value="{{ config.get('CUSTOM_START_DATE', '') }}" {% if not is_custom_period %}disabled{% endif %}>
-                                <div class="form-text">Required when data period is set to <strong>Custom range</strong>.</div>
+                                <div class="form-text">Required when data period is set to <strong>Custom range</strong>. Visible here for reference even when disabled.</div>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label" for="settings-stop-loss-min">Stop loss range (%)</label>
@@ -1146,13 +1146,14 @@
             return;
         }
         const isCustom = (dataPeriodSelect.value || '').toLowerCase() === 'custom';
-        customDateGroup.classList.toggle('d-none', !isCustom);
         if (isCustom) {
             customDateInput.removeAttribute('disabled');
             customDateInput.setAttribute('required', 'required');
+            customDateGroup.classList.remove('opacity-50');
         } else {
             customDateInput.setAttribute('disabled', 'disabled');
             customDateInput.removeAttribute('required');
+            customDateGroup.classList.add('opacity-50');
         }
     }
 
