@@ -1,21 +1,26 @@
 <div class="card mt-4" id="historical-holdings-card">
-    <div class="card-header">
-        <h5 class="mb-1">Former Holdings</h5>
-        <small class="text-muted">Fully closed positions with realised outcomes</small>
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h5 class="mb-0">Former Holdings</h5>
+            <small class="text-muted" style="font-size:0.78rem;">Fully closed positions with realised outcomes</small>
+        </div>
+        {% if snapshot.historical_positions %}
+        <span class="pill" style="font-size:0.7rem;">{{ snapshot.historical_positions|length }} closed</span>
+        {% endif %}
     </div>
     <div class="table-responsive text-nowrap {% if not snapshot.historical_positions %}d-none{% endif %}" id="historical-table-wrapper">
         <table class="table mb-0">
             <thead>
             <tr>
                 <th class="logo-cell"></th>
-                <th class="text-uppercase text-muted small">Ticker</th>
-                <th class="text-uppercase text-muted small">Quantity</th>
-                <th class="text-uppercase text-muted small">Avg. Cost</th>
-                <th class="text-uppercase text-muted small">Avg. Sell Price</th>
-                <th class="text-uppercase text-muted small">Total Cost</th>
-                <th class="text-uppercase text-muted small">Total Selling Value</th>
-                <th class="text-muted small compact-col">
-                    <span class="d-block text-uppercase">Profit / Loss</span>
+                <th class="text-uppercase">Ticker</th>
+                <th class="text-uppercase">Quantity</th>
+                <th class="text-uppercase">Avg. Cost</th>
+                <th class="text-uppercase">Avg. Sell</th>
+                <th class="text-uppercase">Total Cost</th>
+                <th class="text-uppercase">Sell Value</th>
+                <th>
+                    <span class="d-block text-uppercase">P / L</span>
                     <span class="th-subtitle">Value / %</span>
                 </th>
             </tr>
@@ -33,16 +38,16 @@
                             <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
                         {% endif %}
                     </td>
-                    <td class="fw-semibold">{{ position.ticker }}</td>
+                    <td class="fw-bold" style="letter-spacing:0.02em;">{{ position.ticker }}</td>
                     <td><span class="fw-semibold">{{ '%.2f'|format(position.quantity) }}</span></td>
                     <td><span class="fw-semibold">{{ format_currency(position.average_cost) }}</span></td>
                     <td><span class="fw-semibold">{{ format_currency(position.average_sell_price) }}</span></td>
                     <td><span class="fw-semibold">{{ format_currency(position.total_cost) }}</span></td>
                     <td><span class="fw-semibold">{{ format_currency(position.total_sell_value) }}</span></td>
                     <td class="compact-col">
-                        <span class="d-block fw-semibold {{ 'text-success' if profit_positive else 'text-danger' }}">{{ format_signed_currency(position.profit_loss) }}</span>
+                        <span class="d-block fw-bold {{ 'gain-positive' if profit_positive else 'gain-negative' }}">{{ format_signed_currency(position.profit_loss) }}</span>
                         {% if profit_pct is not none %}
-                        <small class="text-muted">{{ '+' if profit_pct >= 0 else '-' }}{{ '%0.2f'|format(profit_pct|abs) }}%</small>
+                        <small class="{{ 'gain-positive' if profit_positive else 'gain-negative' }}" style="opacity:0.8;">{{ '+' if profit_pct >= 0 else '-' }}{{ '%0.2f'|format(profit_pct|abs) }}%</small>
                         {% endif %}
                     </td>
                 </tr>
@@ -52,6 +57,7 @@
         </table>
     </div>
     <div class="card-body text-center py-4 {% if snapshot.historical_positions %}d-none{% endif %}" id="historical-empty-state">
-        <p class="text-muted mb-0">Closed positions will appear here once realised.</p>
+        <div style="font-size:2rem;opacity:0.3;margin-bottom:0.5rem;"><i class="bx bx-history"></i></div>
+        <p class="text-muted mb-0" style="font-size:0.85rem;">Closed positions will appear here once realised.</p>
     </div>
 </div>
