@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="light-style customizer-hide" data-theme="theme-default" data-template="vertical-menu-template-free">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,7 +18,7 @@
     <script src="{{ url_for('theme_assets', filename='js/config.js') }}"></script>
     {% block head_extra %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body>
 <div class="authentication-wrapper container-p-y {% block auth_wrapper_classes %}authentication-basic{% endblock %}">
     <div class="authentication-inner {% block auth_inner_classes %}{% endblock %}">
         {% block content %}{% endblock %}
