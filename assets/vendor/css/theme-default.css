@@ -1,12 +1,12 @@
 :root {
-    --dashfolio-bg: #f5f5f9;
+    --dashfolio-bg: #f8fafc;
     --dashfolio-surface: #ffffff;
-    --dashfolio-border: #e4e6e8;
-    --dashfolio-text: #384551;
-    --dashfolio-muted: #8f9bae;
-    --dashfolio-primary: #696cff;
-    --dashfolio-primary-soft: rgba(105, 108, 255, 0.08);
-    --dashfolio-shadow: 0 10px 30px rgba(86, 106, 127, 0.12);
+    --dashfolio-border: #e2e8f0;
+    --dashfolio-text: #1e293b;
+    --dashfolio-muted: #64748b;
+    --dashfolio-primary: #1e3a5f;
+    --dashfolio-primary-soft: rgba(30, 58, 95, 0.08);
+    --dashfolio-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
     color-scheme: light;
 }
 
@@ -30,7 +30,7 @@ body {
     width: 270px;
     background: var(--dashfolio-surface);
     border-right: 1px solid var(--dashfolio-border);
-    box-shadow: 4px 0 24px rgba(3, 0, 71, 0.05);
+    box-shadow: 1px 0 0 var(--dashfolio-border);
     position: relative;
     z-index: 1020;
     transition: transform 0.3s ease;
@@ -50,12 +50,13 @@ body {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.65rem 0.85rem;
-    border-radius: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: 0.625rem;
     color: var(--dashfolio-muted);
     font-weight: 500;
     text-decoration: none;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    font-size: 0.9rem;
 }
 
 .menu-inner .menu-link:hover,
@@ -89,7 +90,7 @@ body {
 .app-brand-logo .bx {
     background: var(--dashfolio-primary);
     color: #fff;
-    border-radius: 0.75rem;
+    border-radius: 0.625rem;
     padding: 0.35rem;
 }
 
@@ -103,7 +104,7 @@ body {
 .layout-navbar {
     background: var(--dashfolio-surface);
     border-bottom: 1px solid var(--dashfolio-border);
-    box-shadow: 0 4px 12px rgba(15, 20, 34, 0.05);
+    box-shadow: none;
     position: sticky;
     top: 0;
     z-index: 1010;
@@ -141,7 +142,7 @@ body {
 
 .card {
     border: 1px solid var(--dashfolio-border);
-    border-radius: 1rem;
+    border-radius: 0.75rem;
     box-shadow: var(--dashfolio-shadow);
     background: var(--dashfolio-surface);
 }
@@ -155,13 +156,14 @@ body {
 .navbar .btn,
 .card .btn,
 .btn {
-    border-radius: 0.75rem;
+    border-radius: 0.625rem;
 }
 
 .badge {
     border-radius: 999px;
     font-weight: 600;
-    padding: 0.4rem 0.85rem;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.78rem;
 }
 
 .badge.bg-label-primary {
@@ -170,18 +172,19 @@ body {
 }
 
 .badge.bg-label-secondary {
-    background: rgba(143, 155, 174, 0.12);
+    background: rgba(100, 116, 139, 0.1);
     color: var(--dashfolio-muted);
 }
 
 .badge.bg-label-success {
-    background: rgba(31, 186, 154, 0.12);
-    color: #1fba9a;
+    background: rgba(5, 150, 105, 0.1);
+    color: #059669;
 }
 
 .layout-footer {
-    padding: 1.5rem 1.25rem;
+    padding: 1.25rem 1.25rem;
     color: var(--dashfolio-muted);
+    font-size: 0.875rem;
 }
 
 @media (max-width: 1199.98px) {
@@ -190,7 +193,7 @@ body {
         top: 0;
         bottom: 0;
         transform: translateX(-110%);
-        box-shadow: 12px 0 32px rgba(15, 20, 34, 0.15);
+        box-shadow: 8px 0 24px rgba(15, 23, 42, 0.1);
     }
 
     .layout-menu.open {
@@ -203,7 +206,7 @@ body {
 }
 
 .table {
-    --bs-table-striped-bg: rgba(105, 108, 255, 0.04);
+    --bs-table-striped-bg: rgba(30, 58, 95, 0.03);
     color: var(--dashfolio-text);
 }
 
@@ -211,6 +214,7 @@ body {
     border-bottom-width: 1px;
     border-color: var(--dashfolio-border);
     font-weight: 600;
+    color: #94a3b8;
 }
 
 .table tbody td {
@@ -218,46 +222,47 @@ body {
 }
 
 .alert-info {
-    color: #0f5c8a;
-    background-color: rgba(3, 195, 236, 0.12);
-    border-color: rgba(3, 195, 236, 0.2);
+    color: #075985;
+    background-color: rgba(14, 116, 144, 0.08);
+    border-color: rgba(14, 116, 144, 0.15);
 }
 
 .alert-success {
-    color: #23633c;
-    background-color: rgba(31, 186, 154, 0.12);
-    border-color: rgba(31, 186, 154, 0.18);
+    color: #065f46;
+    background-color: rgba(5, 150, 105, 0.08);
+    border-color: rgba(5, 150, 105, 0.15);
 }
 
 .alert-danger {
-    color: #7f1e20;
-    background-color: rgba(255, 91, 92, 0.12);
-    border-color: rgba(255, 91, 92, 0.18);
+    color: #991b1b;
+    background-color: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.15);
 }
 
 .modal-content {
-    border-radius: 1rem;
+    border-radius: 0.875rem;
     border-color: var(--dashfolio-border);
-    box-shadow: var(--dashfolio-shadow);
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
 }
 
 input.form-control,
 select.form-select,
 textarea.form-control {
-    border-radius: 0.75rem;
+    border-radius: 0.625rem;
     border-color: var(--dashfolio-border);
     padding: 0.6rem 0.85rem;
+    color: var(--dashfolio-text);
 }
 
 input.form-control:focus,
 select.form-select:focus,
 textarea.form-control:focus {
     border-color: var(--dashfolio-primary);
-    box-shadow: 0 0 0 0.2rem rgba(105, 108, 255, 0.15);
+    box-shadow: 0 0 0 0.2rem rgba(30, 58, 95, 0.12);
 }
 
 .table-responsive {
-    border-radius: 0.85rem;
+    border-radius: 0.75rem;
     border: 1px solid var(--dashfolio-border);
     overflow: hidden;
 }
