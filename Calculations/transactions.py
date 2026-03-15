@@ -95,7 +95,7 @@ def _normalize_adjustment(record: Dict[str, Any]) -> Dict[str, Any]:
     if amount <= 0:
         raise ValueError("Adjustment amount must be greater than zero")
     adj_type = _canonical_adjustment_type(record.get("type"))
-    if adj_type in {"deposit", "dividend"}:
+    if adj_type in {"deposit", "dividend", "interest"}:
         signed_amount = amount
     else:
         signed_amount = -amount
@@ -205,7 +205,6 @@ def compute_holdings_from_transactions(
             sell_qty = min(entry["quantity"], abs(quantity))
             avg_cost = entry["total_cost"] / entry["quantity"] if entry["quantity"] else 0.0
             entry["total_cost"] -= avg_cost * sell_qty
-            entry["total_cost"] += commission_cost
             entry["quantity"] -= sell_qty
             sale_value = abs(quantity) * price
             cash_balance += sale_value - commission_cost

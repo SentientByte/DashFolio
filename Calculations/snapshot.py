@@ -326,18 +326,33 @@ def _build_twr_index(
     if not days:
         return out
 
-    base_day = days[0]
-    out[base_day] = start
+    base_day: str | None = None
     index_value = start
-    for i in range(1, len(days)):
-        day = days[i]
-        v0 = invested.get(base_day, 0.0)
-        v1 = invested.get(day, 0.0)
-        change = 0.0 if v0 == 0 else (v1 - v0) / v0
-        index_value = index_value * (1 + change)
+
+    for day in days:
+        current_value = invested.get(day, 0.0)
+        if current_value <= 0:
+            if day in flow_days:
+                base_day = None
+            continue
+
+        if base_day is None:
+            base_day = day
+            out[day] = index_value
+            continue
+
+        base_value = invested.get(base_day, 0.0)
+        if base_value <= 0:
+            base_day = day
+            out[day] = index_value
+            continue
+
+        r = (current_value - base_value) / base_value
+        index_value = index_value * (1 + r)
         out[day] = index_value
         if day in flow_days:
             base_day = day
+
     return out
 
 
@@ -1159,11 +1174,11 @@ def build_portfolio_snapshot(
     )
 
     total_portfolio_value = invested_current + cash_balance
-    total_pl_value = total_portfolio_value - total_cost
-    total_pl_pct = (total_pl_value / total_cost * 100) if total_cost else 0.0
     unrealized_pl_value = sum(
         safe_float(record.get("pl_value")) for record in computed_holdings
     )
+    total_pl_value = unrealized_pl_value + realized_pl_value
+    total_pl_pct = (total_pl_value / total_cost * 100) if total_cost else 0.0
     portfolio_beta = 0.0
     if total_current_value > 0:
         beta_numerator = 0.0
