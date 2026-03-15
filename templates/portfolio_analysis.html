@@ -1,23 +1,16 @@
 {% extends 'layout.html' %}
 {% block title %}Portfolio Analysis{% endblock %}
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-    <button class="btn btn-outline-primary d-flex align-items-center ms-auto" type="button" id="portfolio-refresh-btn" style="gap:0.4rem;">
-        <i class="bx bx-refresh" style="font-size:1.1rem;"></i>
-        Refresh
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <button class="btn btn-outline-primary d-flex align-items-center ms-auto" type="button" id="portfolio-refresh-btn">
+        <i class="bx bx-refresh me-2"></i>
+        Refresh data
     </button>
 </div>
 
 {% include 'portfolio/summary_metrics.html' %}
-
-<div class="mb-4">
-    {% include 'portfolio/performance_card.html' %}
-</div>
-
-<div class="mb-4">
-    {% include 'portfolio/holdings_table.html' %}
-</div>
-
+{% include 'portfolio/performance_card.html' %}
+{% include 'portfolio/holdings_table.html' %}
 {% include 'portfolio/kpi_table.html' %}
 {% include 'portfolio/historical_positions_table.html' %}
 

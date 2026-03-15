@@ -1,23 +1,25 @@
 <div class="card mb-4" id="performance-card">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
-            <h5 class="mb-0">Performance</h5>
-            <small class="text-muted" style="font-size:0.78rem;">Time-weighted index for invested assets, excluding cash and external flows.</small>
+            <h5 class="mb-1">Performance</h5>
+            <small class="text-muted">Time-weighted index for invested assets, excluding cash and external flows.</small>
         </div>
     </div>
-    <div class="card-body" style="padding:1.25rem;">
-        <div class="row g-3 align-items-stretch">
+    <div class="card-body">
+        <div class="row g-4 align-items-stretch">
             <div class="col-12 col-xl-8">
-                <div id="incomeChart" style="min-height: 300px; border-radius:var(--radius-md); overflow:hidden;"></div>
+                <div id="incomeChart" style="min-height: 320px;"></div>
             </div>
             <div class="col-12 col-xl-4">
                 <div class="performance-gauge-tile h-100 d-flex flex-column">
+                    <div class="d-flex align-items-start justify-content-between mb-3">
+                    </div>
                     <div class="performance-gauge-chart flex-grow-1 d-flex align-items-center justify-content-center">
                         <div id="performanceGauge"></div>
                     </div>
-                    <div class="text-center mt-2" style="border-top:1px solid var(--border-light);padding-top:0.85rem;">
-                        <div class="fw-bold" id="performance-gauge-summary" style="font-size:0.95rem;color:var(--text-primary);">Portfolio growth unavailable</div>
-                        <div class="text-muted" id="performance-benchmark" style="font-size:0.78rem;">Benchmark performance N/A</div>
+                    <div class="text-center mt-3">
+                        <div class="fw-semibold" id="performance-gauge-summary">Portfolio growth unavailable</div>
+                        <div class="text-muted small" id="performance-benchmark">Benchmark performance N/A</div>
                     </div>
                 </div>
             </div>
