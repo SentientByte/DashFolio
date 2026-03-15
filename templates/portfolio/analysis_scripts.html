@@ -35,10 +35,17 @@
 
     function getThemeColors() {
         const style = getComputedStyle(document.documentElement);
-        const primary = style.getPropertyValue('--bs-primary').trim() || '#696cff';
-        const success = style.getPropertyValue('--bs-success').trim() || '#71dd37';
-        const danger = style.getPropertyValue('--bs-danger').trim() || '#ff3e1d';
-        return { primary, success, danger };
+        const primary = style.getPropertyValue('--ac')?.trim() || style.getPropertyValue('--bs-primary').trim() || '#1b4f6b';
+        const success = style.getPropertyValue('--ok')?.trim() || style.getPropertyValue('--bs-success').trim() || '#166534';
+        const danger = style.getPropertyValue('--er')?.trim() || style.getPropertyValue('--bs-danger').trim() || '#991b1b';
+        const text = style.getPropertyValue('--tx')?.trim() || '#1a1917';
+        const textMuted = style.getPropertyValue('--tx2')?.trim() || '#6b6860';
+        const textLight = style.getPropertyValue('--tx3')?.trim() || '#9e9b94';
+        const border = style.getPropertyValue('--bd')?.trim() || '#e2dfd8';
+        const surface = style.getPropertyValue('--sf2')?.trim() || '#f9f8f5';
+        const successBg = style.getPropertyValue('--okbg')?.trim() || '#f0fdf4';
+        const dangerBg = style.getPropertyValue('--erbg')?.trim() || '#fef2f2';
+        return { primary, success, danger, text, textMuted, textLight, border, surface, successBg, dangerBg };
     }
 
     const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -303,11 +310,11 @@
             return;
         }
 
-        const { primary, danger } = getThemeColors();
+        const theme = getThemeColors();
         const displayValue = Number(portfolioValue);
         const normalizedValue = Math.max(0, Math.min(100, Math.abs(displayValue)));
-        const color = displayValue >= 0 ? primary : danger;
-        const gradientStart = displayValue >= 0 ? '#c6c9ff' : '#ffcbc2';
+        const color = displayValue >= 0 ? theme.success : theme.danger;
+        const gradientStart = displayValue >= 0 ? theme.successBg : theme.dangerBg;
         const gaugeLabel = displayValue >= 0 ? 'Growth' : 'Decline';
 
         if (summaryEl) {
@@ -320,11 +327,11 @@
                 type: 'radialBar',
                 height: 260,
                 sparkline: { enabled: true },
+                fontFamily: "'Helvetica Neue', Arial, sans-serif",
             },
             series: [normalizedValue],
             labels: [gaugeLabel],
-            colors: [gradientStart],
-            strokeDashArray: 6,
+            colors: [color],
             plotOptions: {
                 radialBar: {
                     startAngle: -140,
@@ -333,21 +340,24 @@
                         size: '58%',
                     },
                     track: {
-                        background: 'rgba(105, 108, 255, 0.08)',
+                        background: theme.surface,
                         strokeWidth: '65%',
                         margin: 8,
                     },
                     dataLabels: {
                         name: {
                             offsetY: 20,
-                            color: '#94a3b8',
-                            fontSize: '0.95rem',
+                            color: theme.textLight,
+                            fontSize: '0.85rem',
                             fontWeight: 500,
+                            fontFamily: "'Helvetica Neue', Arial, sans-serif",
                         },
                         value: {
                             offsetY: -18,
-                            fontSize: '2.25rem',
+                            color: theme.text,
+                            fontSize: '2rem',
                             fontWeight: 700,
+                            fontFamily: "'Helvetica Neue', Arial, sans-serif",
                             formatter: () => formatPercentPlain(displayValue),
                         },
                     },
@@ -357,7 +367,7 @@
                 type: 'gradient',
                 gradient: {
                     shade: 'light',
-                    shadeIntensity: 0.25,
+                    shadeIntensity: 0.15,
                     gradientToColors: [color],
                     inverseColors: false,
                     stops: [0, 100],
@@ -377,7 +387,6 @@
                 labels: options.labels,
                 colors: options.colors,
                 plotOptions: options.plotOptions,
-                strokeDashArray: options.strokeDashArray,
                 fill: options.fill,
                 stroke: options.stroke,
             });
@@ -482,8 +491,9 @@
 
         const tickAmount = Math.max(2, Math.min(61, Math.floor((yMax - yMin) / step) + 1));
 
-        const portfolioColor = '#1d4ed8';
-        const benchmarkColor = '#94a3b8';
+        const theme = getThemeColors();
+        const portfolioColor = theme.primary;
+        const benchmarkColor = theme.textLight;
 
         const series = [
             { name: 'Portfolio index', data: portfolioPoints },
@@ -498,8 +508,8 @@
             yAxisAnnotations.push({
                 y: baseline,
                 y2: yMax,
-                fillColor: 'rgba(34, 197, 94, 0.15)',
-                opacity: 1,
+                fillColor: theme.successBg,
+                opacity: 0.6,
                 borderColor: 'transparent',
             });
         }
@@ -507,21 +517,23 @@
             yAxisAnnotations.push({
                 y: yMin,
                 y2: baseline,
-                fillColor: 'rgba(239, 68, 68, 0.15)',
-                opacity: 1,
+                fillColor: theme.dangerBg,
+                opacity: 0.6,
                 borderColor: 'transparent',
             });
         }
         yAxisAnnotations.push({
             y: baseline,
-            borderColor: '#0f172a',
+            borderColor: theme.text,
             strokeDashArray: 0,
             label: {
                 text: '100',
                 style: {
-                    background: '#0f172a',
+                    background: theme.text,
                     color: '#ffffff',
-                    fontSize: '12px',
+                    fontSize: '11px',
+                    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+                    padding: { left: 6, right: 6, top: 2, bottom: 2 },
                 },
             },
         });
@@ -531,30 +543,49 @@
                 type: 'line',
                 height: 320,
                 toolbar: { show: false },
+                fontFamily: "'Helvetica Neue', Arial, sans-serif",
             },
             series,
             colors: series.length > 1 ? [portfolioColor, benchmarkColor] : [portfolioColor],
             dataLabels: { enabled: false },
             stroke: series.length > 1
-                ? { curve: 'smooth', width: [3, 2.5] }
-                : { curve: 'smooth', width: 3 },
+                ? { curve: 'smooth', width: [2.5, 2], dashArray: [0, 5] }
+                : { curve: 'smooth', width: 2.5 },
             xaxis: {
                 type: 'datetime',
                 labels: {
                     format: 'MMM yy',
+                    style: {
+                        colors: theme.textMuted,
+                        fontSize: '11px',
+                        fontFamily: "'Helvetica Neue', Arial, sans-serif",
+                    },
                 },
+                axisBorder: { color: theme.border },
+                axisTicks: { color: theme.border },
             },
             yaxis: {
                 title: {
                     text: 'Performance index',
+                    style: {
+                        color: theme.textMuted,
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        fontFamily: "'Helvetica Neue', Arial, sans-serif",
+                    },
                 },
                 tickAmount,
                 min: yMin,
                 max: yMax,
                 labels: {
+                    style: {
+                        colors: theme.textMuted,
+                        fontSize: '11px',
+                        fontFamily: "'Helvetica Neue', Arial, sans-serif",
+                    },
                     formatter: value => {
                         const numeric = Number(value);
-                        return Number.isFinite(numeric) ? `${numeric.toFixed(2)}` : value;
+                        return Number.isFinite(numeric) ? `${numeric.toFixed(1)}` : value;
                     },
                 },
             },
@@ -569,20 +600,31 @@
                         return Number.isFinite(numeric) ? `${numeric.toFixed(2)}` : value;
                     },
                 },
+                style: {
+                    fontSize: '12px',
+                    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+                },
             },
             legend: {
                 show: series.length > 1,
                 position: 'top',
                 horizontalAlign: 'left',
+                fontSize: '11px',
+                fontFamily: "'Helvetica Neue', Arial, sans-serif",
+                labels: { colors: theme.textMuted },
                 markers: {
-                    width: 12,
-                    height: 12,
+                    width: 10,
+                    height: 10,
                     offsetY: 1,
+                    radius: 2,
                 },
+                itemMargin: { horizontal: 12 },
             },
             grid: {
+                borderColor: theme.border,
+                strokeDashArray: 3,
                 xaxis: { lines: { show: false } },
-                yaxis: { lines: { show: false } },
+                yaxis: { lines: { show: true } },
             },
             annotations: {
                 yaxis: yAxisAnnotations,

@@ -708,25 +708,16 @@ def _build_daily_performance_history(
         had_market_price = False
         for ticker in list(eligible_tickers):
             price_today = _closing_price_for(ticker, day)
-            if price_today is None:
-                continue
-            had_market_price = True
             quantity = holdings.get(ticker, 0.0)
-            if abs(quantity) < 1e-9:
-                continue
-            end_positions_value += quantity * price_today
-
-        if not had_market_price and eligible_tickers:
-            fallback_value = 0.0
-            for ticker in eligible_tickers:
-                prev_close = _previous_close_for(ticker, day)
-                if prev_close is None:
-                    continue
-                quantity = holdings.get(ticker, 0.0)
-                if abs(quantity) < 1e-9:
-                    continue
-                fallback_value += quantity * prev_close
-            end_positions_value = fallback_value
+            if price_today is not None:
+                had_market_price = True
+                if abs(quantity) >= 1e-9:
+                    end_positions_value += quantity * price_today
+            else:
+                if abs(quantity) >= 1e-9:
+                    prev_close = _previous_close_for(ticker, day)
+                    if prev_close is not None:
+                        end_positions_value += quantity * prev_close
 
         if abs(end_positions_value) < 1e-9:
             end_positions_value = 0.0
