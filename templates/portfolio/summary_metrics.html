@@ -1,110 +1,140 @@
-<div class="row g-4 mb-4" id="metrics-row">
-    <div class="col-sm-6 col-xl-3">
+<!-- Hero metrics — two featured cards side by side -->
+<div class="row g-3 mb-3" id="metrics-row">
+    <div class="col-md-6">
         <div class="card metric-card h-100">
-            <div class="card-body">
-                <span class="metric-label">Total Cost</span>
-                <h4 class="metric-value" id="metric-total-cost">{{ format_currency(snapshot.summary.total_cost) }}</h4>
+            <div class="card-body" style="padding:1.5rem;">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="metric-label">Total Cost</span>
+                    <span style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:var(--df-primary-light);color:var(--df-primary);font-size:1rem;"><i class="bx bx-wallet"></i></span>
+                </div>
+                <h4 class="metric-value mb-2" id="metric-total-cost">{{ format_currency(snapshot.summary.total_cost) }}</h4>
+                <div class="d-flex align-items-center gap-2">
+                    <span style="font-size:0.78rem;font-weight:600;color:var(--text-secondary);">Invested value:</span>
+                    <span style="font-size:0.78rem;font-weight:700;color:var(--text-primary);" id="metric-invested-value">{{ format_currency(snapshot.summary.invested_value) }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-1">
+                    <span style="font-size:0.78rem;font-weight:600;color:var(--text-secondary);">Cash balance:</span>
+                    <span style="font-size:0.78rem;font-weight:700;color:var(--text-primary);" id="metric-cash-balance">{{ format_currency(snapshot.summary.cash_balance) }}</span>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-md-6">
         <div class="card metric-card h-100">
-            <div class="card-body">
-                <span class="metric-label">Current Value</span>
-                <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2">
-                    <h4 class="metric-value mb-0" id="metric-current-value">{{ format_currency(snapshot.summary.current_value) }}</h4>
+            <div class="card-body" style="padding:1.5rem;">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="metric-label">Current Value</span>
                     {% set total_pl = snapshot.summary.total_pl_value %}
-                    <span class="pill pill-compact {{ 'pill-positive' if total_pl >= 0 else 'pill-negative' }}" id="metric-total-pl">
+                    <span class="pill {{ 'pill-positive' if total_pl >= 0 else 'pill-negative' }}" id="metric-total-pl">
                         {{ format_signed_currency(total_pl) }}
                     </span>
                 </div>
-                <p class="metric-subvalue mb-1" id="metric-invested-value">Invested value: {{ format_currency(snapshot.summary.invested_value) }}</p>
-                <p class="metric-subvalue mb-0" id="metric-cash-balance">Cash balance: {{ format_currency(snapshot.summary.cash_balance) }}</p>
+                <h4 class="metric-value" id="metric-current-value">{{ format_currency(snapshot.summary.current_value) }}</h4>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+</div>
+
+<!-- Secondary metrics — four compact cards -->
+<div class="row g-3 mb-4" id="risk-metrics-row">
+    <div class="col-6 col-xl-3">
         {% set todays_positive = snapshot.summary.dod_value >= 0 %}
         <div class="card metric-card h-100">
             <div class="card-body">
-                <span class="metric-label" id="metric-today-label">{{ 'Todays Profit' if todays_positive else 'Todays Loss' }}</span>
-                <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2">
-                    <h4 class="metric-value mb-0 {{ 'metric-positive' if todays_positive else 'metric-negative' }}" id="metric-dod-value">
-                        {{ format_signed_currency(snapshot.summary.dod_value) }}
-                    </h4>
-                    <span class="pill {{ 'pill-positive' if todays_positive else 'pill-negative' }}" id="metric-dod-pct">
-                        {{ '+' if todays_positive else '-' }}{{ '%.2f'|format(snapshot.summary.dod_pct|abs) }}%
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="metric-label" id="metric-today-label">{{ 'Todays Gain' if todays_positive else 'Todays Loss' }}</span>
+                    <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;font-size:0.85rem;
+                        background:{{ 'var(--metric-pill-positive)' if todays_positive else 'var(--metric-pill-negative)' }};
+                        color:{{ 'var(--metric-positive)' if todays_positive else 'var(--metric-negative)' }};">
+                        <i class="bx {{ 'bx-trending-up' if todays_positive else 'bx-trending-down' }}"></i>
                     </span>
                 </div>
+                <h5 class="metric-value {{ 'metric-positive' if todays_positive else 'metric-negative' }}" style="font-size:1.35rem;" id="metric-dod-value">
+                    {{ format_signed_currency(snapshot.summary.dod_value) }}
+                </h5>
+                <span class="pill {{ 'pill-positive' if todays_positive else 'pill-negative' }}" style="font-size:0.7rem;" id="metric-dod-pct">
+                    {{ '+' if todays_positive else '-' }}{{ '%.2f'|format(snapshot.summary.dod_pct|abs) }}%
+                </span>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-6 col-xl-3">
         <div class="card metric-card h-100">
             <div class="card-body">
-                <span class="metric-label">Top mover today</span>
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="metric-label">Top Mover</span>
+                    <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;font-size:0.85rem;background:var(--df-accent-light);color:var(--df-accent);"><i class="bx bx-star"></i></span>
+                </div>
                 {% if snapshot.summary.top_mover %}
                     {% set mover = snapshot.summary.top_mover %}
                     {% set mover_positive = mover.change_value >= 0 %}
-                    <h4 class="metric-value metric-trend {{ 'metric-positive' if mover_positive else 'metric-negative' }}" id="metric-top-mover-ticker">{{ mover.ticker }}</h4>
-                    <p class="metric-subvalue metric-trend-group mb-0" id="metric-top-mover-change">
-                        <span class="metric-trend-value {{ 'metric-positive' if mover_positive else 'metric-negative' }}">
+                    <h5 class="metric-value metric-trend {{ 'metric-positive' if mover_positive else 'metric-negative' }}" style="font-size:1.35rem;" id="metric-top-mover-ticker">{{ mover.ticker }}</h5>
+                    <div class="d-flex align-items-center gap-2 flex-wrap" id="metric-top-mover-change">
+                        <span class="metric-trend-value {{ 'metric-positive' if mover_positive else 'metric-negative' }}" style="font-size:0.78rem;font-weight:700;">
                             {{ format_signed_currency(mover.change_value) }}
                         </span>
-                        <span class="metric-trend-pct {{ 'metric-positive' if mover_positive else 'metric-negative' }}">
-                            ({{ '+' if mover_positive else '-' }}{{ '%.2f'|format(mover.change_pct|abs) }}%)
+                        <span class="pill {{ 'pill-positive' if mover_positive else 'pill-negative' }}" style="font-size:0.68rem;">
+                            {{ '+' if mover_positive else '-' }}{{ '%.2f'|format(mover.change_pct|abs) }}%
                         </span>
-                    </p>
+                    </div>
                 {% else %}
-                    <h4 class="metric-value text-muted" id="metric-top-mover-ticker">N/A</h4>
+                    <h5 class="metric-value text-muted" style="font-size:1.35rem;" id="metric-top-mover-ticker">N/A</h5>
                     <p class="metric-subvalue mb-0" id="metric-top-mover-change">No holdings available</p>
                 {% endif %}
             </div>
         </div>
     </div>
-</div>
-<div class="row g-4 mb-4" id="risk-metrics-row">
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-6 col-xl-3">
         {% set realized_value = snapshot.summary.realized_pl_value %}
         <div class="card metric-card h-100">
             <div class="card-body">
                 <span class="metric-label" id="metric-realized-label">{{ 'Realized Profit' if realized_value >= 0 else 'Realized Loss' }}</span>
-                <h5 class="metric-value {{ 'metric-positive' if realized_value >= 0 else 'metric-negative' }}" id="metric-realized-pl">
+                <h5 class="metric-value {{ 'metric-positive' if realized_value >= 0 else 'metric-negative' }}" style="font-size:1.35rem;" id="metric-realized-pl">
                     {{ format_signed_currency(realized_value) }}
                 </h5>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-6 col-xl-3">
         {% set unrealized_value = snapshot.summary.unrealized_pl_value %}
         <div class="card metric-card h-100">
             <div class="card-body">
                 <span class="metric-label" id="metric-unrealized-label">{{ 'Unrealized Profit' if unrealized_value >= 0 else 'Unrealized Loss' }}</span>
-                <h5 class="metric-value {{ 'metric-positive' if unrealized_value >= 0 else 'metric-negative' }}" id="metric-unrealized-pl">
+                <h5 class="metric-value {{ 'metric-positive' if unrealized_value >= 0 else 'metric-negative' }}" style="font-size:1.35rem;" id="metric-unrealized-pl">
                     {{ format_signed_currency(unrealized_value) }}
                 </h5>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+</div>
+
+<!-- Risk metrics row -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6">
         {% set portfolio_beta = snapshot.summary.portfolio_beta %}
         <div class="card metric-card h-100">
-            <div class="card-body">
-                <span class="metric-label">Portfolio Beta</span>
-                <h5 class="metric-value" id="metric-portfolio-beta">{{ '%.2f'|format(portfolio_beta) }}</h5>
+            <div class="card-body d-flex align-items-center gap-3" style="padding:1.15rem 1.35rem;">
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;font-size:1.1rem;background:var(--df-primary-light);color:var(--df-primary);flex-shrink:0;"><i class="bx bx-pulse"></i></span>
+                <div>
+                    <span class="metric-label">Portfolio Beta</span>
+                    <h5 class="metric-value mb-0" style="font-size:1.35rem;" id="metric-portfolio-beta">{{ '%.2f'|format(portfolio_beta) }}</h5>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6">
         {% set portfolio_var_value = snapshot.summary.portfolio_var_value %}
         {% set portfolio_var_pct = snapshot.summary.portfolio_var_pct %}
         <div class="card metric-card h-100">
-            <div class="card-body">
-                <span class="metric-label">Portfolio VaR</span>
-                <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2">
-                    <h5 class="metric-value mb-0" id="metric-portfolio-var-value">{{ format_currency(portfolio_var_value) }}</h5>
+            <div class="card-body d-flex align-items-center gap-3" style="padding:1.15rem 1.35rem;">
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;font-size:1.1rem;background:var(--metric-pill-negative);color:var(--metric-negative);flex-shrink:0;"><i class="bx bx-error-circle"></i></span>
+                <div>
+                    <span class="metric-label">Portfolio VaR (95%)</span>
+                    <div class="d-flex align-items-baseline gap-2">
+                        <h5 class="metric-value mb-0" style="font-size:1.35rem;" id="metric-portfolio-var-value">{{ format_currency(portfolio_var_value) }}</h5>
+                        <span class="pill pill-negative" style="font-size:0.68rem;" id="metric-portfolio-var-pct">{{ '%.2f'|format(portfolio_var_pct) }}%</span>
+                    </div>
                 </div>
-                <p class="metric-subvalue mb-0" id="metric-portfolio-var-pct">VaR (95%): {{ '%.2f'|format(portfolio_var_pct) }}%</p>
             </div>
         </div>
     </div>

@@ -1,9 +1,12 @@
 <div class="card" id="holdings-card">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
-            <h5 class="mb-1">Holdings snapshot</h5>
-            <small class="text-muted">Real-time snapshot pulled from Yahoo Finance</small>
+            <h5 class="mb-0">Holdings</h5>
+            <small class="text-muted" style="font-size:0.78rem;">Live snapshot via Yahoo Finance</small>
         </div>
+        {% if snapshot.holdings %}
+        <span class="pill" style="font-size:0.7rem;">{{ snapshot.holdings|length }} position{{ 's' if snapshot.holdings|length != 1 }}</span>
+        {% endif %}
     </div>
     {% if snapshot.holdings %}
         <div class="table-responsive holdings-table-wrapper">
@@ -11,45 +14,44 @@
                 <thead>
                 <tr>
                     <th class="logo-cell"></th>
-                    <th class="text-muted small ticker-col"><span class="d-block text-uppercase">Ticker</span></th>
-                    <th class="text-muted small numeric-col">
-                        <span class="d-block text-uppercase">Quantity</span>
-                        <span class="th-subtitle">Units</span>
+                    <th class="ticker-col"><span class="d-block text-uppercase">Ticker</span></th>
+                    <th class="numeric-col">
+                        <span class="d-block text-uppercase">Qty</span>
                     </th>
-                    <th class="text-muted small numeric-col">
-                        <span class="d-block text-uppercase">Avg cost</span>
+                    <th class="numeric-col">
+                        <span class="d-block text-uppercase">Avg Cost</span>
                         <span class="th-subtitle">({{ currency_context.code }})</span>
                     </th>
-                    <th class="text-muted small numeric-col">
-                        <span class="d-block text-uppercase">Current price</span>
+                    <th class="numeric-col">
+                        <span class="d-block text-uppercase">Price</span>
                         <span class="th-subtitle">({{ currency_context.code }})</span>
                     </th>
-                    <th class="text-muted small numeric-col">
-                        <span class="d-block text-uppercase">Total cost</span>
+                    <th class="numeric-col">
+                        <span class="d-block text-uppercase">Cost</span>
                         <span class="th-subtitle">({{ currency_context.code }})</span>
                     </th>
-                    <th class="text-muted small numeric-col">
-                        <span class="d-block text-uppercase">Current value</span>
+                    <th class="numeric-col">
+                        <span class="d-block text-uppercase">Value</span>
                         <span class="th-subtitle">({{ currency_context.code }})</span>
                     </th>
-                    <th class="text-muted small compact-col">
+                    <th class="compact-col">
                         <span class="d-block text-uppercase">Today</span>
                         <span class="th-subtitle">Value / %</span>
                     </th>
-                    <th class="text-muted small compact-col">
+                    <th class="compact-col">
                         <span class="d-block text-uppercase">Week</span>
                         <span class="th-subtitle">Value / %</span>
                     </th>
-                    <th class="text-muted small compact-col">
+                    <th class="compact-col">
                         <span class="d-block text-uppercase">Month</span>
                         <span class="th-subtitle">Value / %</span>
                     </th>
-                    <th class="text-muted small compact-col">
+                    <th class="compact-col">
                         <span class="d-block text-uppercase">P/L</span>
                         <span class="th-subtitle">Value / %</span>
                     </th>
-                    <th class="text-muted small compact-col">
-                        <span class="d-block text-uppercase">Allocation</span>
+                    <th class="compact-col">
+                        <span class="d-block text-uppercase">Weight</span>
                         <span class="th-subtitle">% of total</span>
                     </th>
                 </tr>
@@ -86,7 +88,7 @@
                                 <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
                             {% endif %}
                         </td>
-                        <td class="fw-semibold ticker-col">{{ holding.ticker }}</td>
+                        <td class="fw-bold ticker-col" style="letter-spacing:0.02em;">{{ holding.ticker }}</td>
                         <td class="numeric-col"><span class="fw-semibold">{{ '%.2f'|format(holding.quantity) }}</span></td>
                         <td class="numeric-col">
                             <span class="fw-semibold">{{ format_currency(holding.average_cost) }}</span>
@@ -98,23 +100,23 @@
                             <span class="fw-semibold">{{ format_currency(holding.total_cost) }}</span>
                         </td>
                         <td class="current-value numeric-col">
-                            <span class="fw-semibold">{{ format_currency(holding.current_value) }}</span>
+                            <span class="fw-bold">{{ format_currency(holding.current_value) }}</span>
                         </td>
                         <td class="todays-gain compact-col">
-                            <span class="d-block fw-semibold {{ gain_class }}">{{ format_signed_currency(stats.today_value) }}</span>
-                            <small class="text-muted">{{ '+' if stats.today_pct >= 0 else '-' }}{{ '%.2f'|format(stats.today_pct|abs) }}%</small>
+                            <span class="d-block fw-bold {{ gain_class }}">{{ format_signed_currency(stats.today_value) }}</span>
+                            <small class="{{ gain_class }}" style="opacity:0.8;">{{ '+' if stats.today_pct >= 0 else '-' }}{{ '%.2f'|format(stats.today_pct|abs) }}%</small>
                         </td>
                         <td class="compact-col">
-                            <span class="d-block fw-semibold {{ week_class }}">{{ format_signed_currency(holding.weekly_gain) }}</span>
-                            <small class="text-muted">{{ '+' if holding.weekly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.weekly_gain_pct|abs) }}%</small>
+                            <span class="d-block fw-bold {{ week_class }}">{{ format_signed_currency(holding.weekly_gain) }}</span>
+                            <small class="{{ week_class }}" style="opacity:0.8;">{{ '+' if holding.weekly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.weekly_gain_pct|abs) }}%</small>
                         </td>
                         <td class="compact-col">
-                            <span class="d-block fw-semibold {{ month_class }}">{{ format_signed_currency(holding.monthly_gain) }}</span>
-                            <small class="text-muted">{{ '+' if holding.monthly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.monthly_gain_pct|abs) }}%</small>
+                            <span class="d-block fw-bold {{ month_class }}">{{ format_signed_currency(holding.monthly_gain) }}</span>
+                            <small class="{{ month_class }}" style="opacity:0.8;">{{ '+' if holding.monthly_gain_pct >= 0 else '-' }}{{ '%.2f'|format(holding.monthly_gain_pct|abs) }}%</small>
                         </td>
                         <td class="compact-col">
-                            <span class="d-block fw-semibold {{ pl_class }}">{{ format_signed_currency(pl_value) }}</span>
-                            <small class="text-muted">{{ '+' if pl_pct >= 0 else '-' }}{{ '%.2f'|format(pl_pct|abs) }}%</small>
+                            <span class="d-block fw-bold {{ pl_class }}">{{ format_signed_currency(pl_value) }}</span>
+                            <small class="{{ pl_class }}" style="opacity:0.8;">{{ '+' if pl_pct >= 0 else '-' }}{{ '%.2f'|format(pl_pct|abs) }}%</small>
                         </td>
                         <td class="compact-col">
                             <span class="allocation-pill">{{ '%.2f'|format(holding.allocation_pct) }}%</span>
@@ -126,9 +128,10 @@
         </div>
     {% else %}
         <div class="card-body">
-            <div class="empty-state text-center py-5">
-                <h5 class="fw-semibold mb-1">No holdings yet</h5>
-                <p class="text-muted mb-0">Add holdings from the Settings page to begin tracking performance.</p>
+            <div class="empty-state text-center py-5 px-3">
+                <div style="font-size:2.5rem;margin-bottom:0.75rem;opacity:0.4;"><i class="bx bx-package"></i></div>
+                <h5 class="fw-bold mb-1" style="color:var(--text-primary);">No holdings yet</h5>
+                <p class="text-muted mb-0" style="font-size:0.85rem;">Add holdings from the Settings page to begin tracking performance.</p>
             </div>
         </div>
     {% endif %}

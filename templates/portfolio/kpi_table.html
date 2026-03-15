@@ -1,20 +1,22 @@
 <div class="card mt-4" id="portfolio-kpi-card">
-    <div class="card-header">
-        <h5 class="mb-1">Portfolio KPIs</h5>
-        <small class="text-muted">Volatility and risk metrics by holding</small>
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h5 class="mb-0">Risk & Performance KPIs</h5>
+            <small class="text-muted" style="font-size:0.78rem;">Volatility and risk metrics by holding</small>
+        </div>
     </div>
     <div class="table-responsive text-nowrap {% if not snapshot.holdings %}d-none{% endif %}" id="kpi-table-wrapper">
         <table class="table mb-0">
             <thead>
             <tr>
                 <th class="logo-cell"></th>
-                <th class="text-uppercase text-muted small">Ticker</th>
-                <th class="text-uppercase text-muted small">Volatility</th>
-                <th class="text-uppercase text-muted small">Sharpe Ratio</th>
-                <th class="text-uppercase text-muted small">Max Drawdown</th>
-                <th class="text-uppercase text-muted small">Beta vs. Benchmark</th>
-                <th class="text-uppercase text-muted small">EWMA VaR</th>
-                <th class="text-uppercase text-muted small">Yield on Cost</th>
+                <th class="text-uppercase">Ticker</th>
+                <th class="text-uppercase">Volatility</th>
+                <th class="text-uppercase">Sharpe</th>
+                <th class="text-uppercase">Max DD</th>
+                <th class="text-uppercase">Beta</th>
+                <th class="text-uppercase">EWMA VaR</th>
+                <th class="text-uppercase">Yield</th>
             </tr>
             </thead>
             <tbody class="table-border-bottom-0" id="kpi-body">
@@ -28,18 +30,18 @@
                             <img src="https://via.placeholder.com/42?text=%20" alt="No logo">
                         {% endif %}
                     </td>
-                    <td class="fw-semibold">{{ holding.ticker }}</td>
+                    <td class="fw-bold" style="letter-spacing:0.02em;">{{ holding.ticker }}</td>
                     <td><span class="fw-semibold">{{ '%.2f'|format(holding.volatility_pct) }}%</span></td>
                     <td><span class="fw-semibold">{{ '%.2f'|format(holding.sharpe_ratio) }}</span></td>
                     <td>
-                        <span class="fw-semibold d-block">{{ '%.2f'|format(holding.max_drawdown_pct) }}%</span>
+                        <span class="fw-semibold" style="color:var(--metric-negative);">{{ '%.2f'|format(holding.max_drawdown_pct) }}%</span>
                     </td>
                     <td><span class="fw-semibold">{{ '%.2f'|format(holding.beta_vs_benchmark) }}</span></td>
                     <td>
                         <span class="fw-semibold d-block">{{ format_currency(holding.ewma_var_value) }}</span>
-                        <small class="text-muted">{{ '%.2f'|format(holding.ewma_var_pct) }}%</small>
+                        <small class="text-muted" style="font-size:0.72rem;">{{ '%.2f'|format(holding.ewma_var_pct) }}%</small>
                     </td>
-                    <td><span class="fw-semibold">{{ '%.2f'|format(holding.yield_on_cost_pct) }}%</span></td>
+                    <td><span class="fw-semibold" style="color:var(--metric-positive);">{{ '%.2f'|format(holding.yield_on_cost_pct) }}%</span></td>
                 </tr>
                 {% endfor %}
             {% endif %}
@@ -47,6 +49,7 @@
         </table>
     </div>
     <div class="card-body text-center py-4 {% if snapshot.holdings %}d-none{% endif %}" id="kpi-empty-state">
-        <p class="text-muted mb-0">Add holdings to review key performance indicators.</p>
+        <div style="font-size:2rem;opacity:0.3;margin-bottom:0.5rem;"><i class="bx bx-analyse"></i></div>
+        <p class="text-muted mb-0" style="font-size:0.85rem;">Add holdings to review key performance indicators.</p>
     </div>
 </div>
