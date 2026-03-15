@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('theme_assets', filename='vendor/fonts/boxicons.css') }}">
     <link rel="stylesheet" href="{{ url_for('theme_assets', filename='vendor/css/core.css') }}" class="template-customizer-core-css">
     <link rel="stylesheet" href="{{ url_for('theme_assets', filename='vendor/css/theme-default.css') }}" class="template-customizer-theme-css">
@@ -32,17 +32,18 @@
                     <i class="bx bx-chevron-left bx-sm align-middle"></i>
                 </a>
             </div>
+            <div class="menu-inner-shadow"></div>
             <ul class="menu-inner py-1">
                 <li class="menu-item {% if active_page == 'portfolio' %}active{% endif %}">
                     <a href="{{ url_for('portfolio_analysis') }}" class="menu-link">
-                        <i class="menu-icon bx bx-bar-chart-alt-2"></i>
-                        <div data-i18n="Portfolio">Portfolio</div>
+                        <i class="menu-icon bx bx-line-chart"></i>
+                        <div data-i18n="Portfolio">Portfolio Overview</div>
                     </a>
                 </li>
                 <li class="menu-item {% if active_page == 'allocation' %}active{% endif %}">
                     <a href="{{ url_for('allocation_planner') }}" class="menu-link">
-                        <i class="menu-icon bx bx-pie-chart-alt-2"></i>
-                        <div data-i18n="Allocation">Allocation</div>
+                        <i class="menu-icon bx bx-adjust"></i>
+                        <div data-i18n="Allocation">Allocation Planner</div>
                     </a>
                 </li>
                 <li class="menu-item {% if active_page == 'risk' %}active{% endif %}">
@@ -59,7 +60,7 @@
                 </li>
                 <li class="menu-item {% if active_page == 'settings' %}active{% endif %}">
                     <a href="{{ url_for('settings') }}" class="menu-link">
-                        <i class="menu-icon bx bx-slider-alt"></i>
+                        <i class="menu-icon bx bx-cog"></i>
                         <div data-i18n="Settings">Settings</div>
                     </a>
                 </li>
@@ -83,18 +84,17 @@
                 <div class="navbar-nav-right d-flex align-items-center flex-grow-1" id="navbar-collapse">
                     <div class="navbar-nav align-items-center">
                         <div class="nav-item">
-                            <h4 class="mb-0">{{ page_title or 'Dashboard' }}</h4>
-                            {% if page_subtitle %}<small class="text-muted" style="font-size:0.8rem;">{{ page_subtitle }}</small>{% endif %}
+                            <h4 class="mb-0 fw-semibold">{{ page_title or 'Dashboard' }}</h4>
+                            {% if page_subtitle %}<small class="text-muted">{{ page_subtitle }}</small>{% endif %}
                         </div>
                     </div>
                     <ul class="navbar-nav flex-row align-items-center ms-auto">
                         {% set header_market_status = market_status or {} %}
                         <li class="nav-item me-3" id="status-indicators">
-                            <div class="d-flex flex-column align-items-end text-end" style="gap:0.3rem;">
+                            <div class="d-flex flex-column align-items-end text-end">
                                 <span
                                     id="market-status-indicator"
                                     class="badge rounded-pill {% if header_market_status.is_open %}bg-label-success text-success{% else %}bg-label-secondary text-muted{% endif %}"
-                                    style="font-size:0.72rem; font-weight:700; letter-spacing:0.04em;"
                                     title="{% if header_market_status.next_open %}Next open {{ header_market_status.next_open }}{% else %}Market session status{% endif %}"
                                 >
                                     {{ header_market_status.label or 'Market status unavailable' }}
@@ -102,11 +102,10 @@
                                 <small
                                     id="market-status-reason"
                                     class="text-muted small {% if header_market_status.is_open or not header_market_status.reason %}d-none{% endif %}"
-                                    style="font-size:0.7rem;"
                                 >
                                     {{ header_market_status.reason or '' }}
                                 </small>
-                                <span class="text-muted mt-0" id="update-status" style="font-size:0.7rem;">
+                                <span class="text-muted small mt-1" id="update-status">
                                     {{ format_snapshot_update(snapshot.generated_at if snapshot else None) }}
                                 </span>
                             </div>
@@ -119,12 +118,12 @@
                     {% block content %}{% endblock %}
                 </div>
                 <footer class="content-footer footer bg-footer-theme">
-                    <div class="container-xxl d-flex flex-wrap justify-content-between py-3 flex-md-row flex-column">
-                        <div class="mb-2 mb-md-0" style="font-size:0.8rem; color:var(--text-muted);">
-                            &copy; {{ datetime.utcnow().year }} DashFolio
+                    <div class="container-xxl d-flex flex-wrap justify-content-between py-2 flex-md-row flex-column">
+                        <div class="mb-2 mb-md-0">
+                            &copy; {{ datetime.utcnow().year }} DashFolio. Crafted with the Sneat admin theme.
                         </div>
-                        <div style="font-size:0.8rem; color:var(--text-muted);">
-                            Finance analytics made simple.
+                        <div>
+                            <span class="text-muted">Finance analytics made simple.</span>
                         </div>
                     </div>
                 </footer>
